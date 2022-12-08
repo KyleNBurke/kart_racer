@@ -17,3 +17,11 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 cleanup_vulkan :: proc(using vulkan: ^Vulkan) {
 	cleanup_vulkan_context(&vulkan_context);
 }
+
+recreate_swapchain :: proc() {
+	
+}
+
+render :: proc() -> bool {
+	return false;
+}

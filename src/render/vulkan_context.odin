@@ -36,18 +36,34 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
         vk.load_proc_addresses(set_proc_address);
     }
 
-    // #Todo: Ensure required instance extensions are available
+    // Ensure required instance extensions are available
+    when ODIN_DEBUG {
+        available_instance_extensions_count: u32;
+        vk.EnumerateInstanceExtensionProperties(nil, &available_instance_extensions_count, nil);
+        available_instance_extensions := make([]vk.ExtensionProperties, available_instance_extensions_count);
+        defer delete(available_instance_extensions);
+        vk.EnumerateInstanceExtensionProperties(nil, &available_instance_extensions_count, raw_data(available_instance_extensions));
+
+        instance_extension: for required_extension in REQUIRED_DEBUG_INSTANCE_EXTENSIONS {
+            for available_extension in &available_instance_extensions {
+                if required_extension == cstring(&available_extension.extensionName[0]) do continue instance_extension;
+            }
+            
+            fmt.panicf("Required device extension %q not available\n", required_extension);
+        }
+    }
 
     // Ensure required layers are available
     when ODIN_DEBUG {
         available_layers_count: u32;
 		vk.EnumerateInstanceLayerProperties(&available_layers_count, nil);
-		available_layers := make([]vk.LayerProperties, available_layers_count); // Need to clean this up?
+		available_layers := make([]vk.LayerProperties, available_layers_count);
+        defer delete(available_layers);
 		vk.EnumerateInstanceLayerProperties(&available_layers_count, raw_data(available_layers));
 
-        outer: for required_layer in REQUIRED_DEBUG_LAYERS {
+        layer: for required_layer in REQUIRED_DEBUG_LAYERS {
             for available_layer in &available_layers {
-                if required_layer == cstring(&available_layer.layerName[0]) do continue outer;
+                if required_layer == cstring(&available_layer.layerName[0]) do continue layer;
             }
             
             fmt.panicf("Required layer %q not available\n", required_layer);
@@ -93,8 +109,6 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
             create_info.ppEnabledLayerNames = &REQUIRED_DEBUG_LAYERS[0];
             create_info.enabledLayerCount = cast(u32) len(REQUIRED_DEBUG_LAYERS);
             create_info.pNext = &debug_messenger_create_info;
-        } else {
-            create_info.enabledLayerCount = 0; // Should default to 0 already right?
         }
 
         r := vk.CreateInstance(&create_info, nil, &instance);
@@ -116,18 +130,20 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
     {
         devices_count: u32;
         vk.EnumeratePhysicalDevices(instance, &devices_count, nil);
-        devices := make([]vk.PhysicalDevice, devices_count); // Need to clean this up?
+        devices := make([]vk.PhysicalDevice, devices_count);
+        defer delete(devices);
         vk.EnumeratePhysicalDevices(instance, &devices_count, raw_data(devices));
 
         for device in devices {
             available_extensions_count: u32;
             vk.EnumerateDeviceExtensionProperties(device, nil, &available_extensions_count, nil);
-            available_extensions := make([]vk.ExtensionProperties, available_extensions_count); // Need to clean this up?
+            available_extensions := make([]vk.ExtensionProperties, available_extensions_count);
+            defer delete(available_extensions);
             vk.EnumerateDeviceExtensionProperties(device, nil, &available_extensions_count, raw_data(available_extensions));
 
-            outer_2: for required_extension in REQUIRED_DEVICE_EXTENSIONS {
+            device_extension: for required_extension in REQUIRED_DEVICE_EXTENSIONS {
                 for available_extension in &available_extensions {
-                    if required_extension == cstring(&available_extension.extensionName[0]) do continue outer_2;
+                    if required_extension == cstring(&available_extension.extensionName[0]) do continue device_extension;
                 }
                 
                 fmt.panicf("Required device extension %q not available\n", required_extension);
@@ -148,6 +164,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
             queue_family_properties_count: u32;
             vk.GetPhysicalDeviceQueueFamilyProperties(device, &queue_family_properties_count, nil);
             queue_family_properties := make([]vk.QueueFamilyProperties, queue_family_properties_count);
+            defer delete(queue_family_properties);
             vk.GetPhysicalDeviceQueueFamilyProperties(device, &queue_family_properties_count, raw_data(queue_family_properties));
 
             current_graphics_queue_family := -1;

@@ -2,8 +2,18 @@ package main;
 
 import "core:fmt";
 import "core:c";
+import "core:time";
+import "core:runtime";
 import "vendor:glfw";
 import "render";
+
+MAX_FRAME_DURATION := time.Duration(1e9 / 30e9); // 1 / 30 seconds
+MAX_UPDATES := 5;
+
+WindowState :: struct {
+	framebuffer_size_change: bool,
+	minimized: bool,
+}
 
 main :: proc() {
 	fmt.assertf(glfw.Init() == 1, "Failed to initialize GLFW");
@@ -14,29 +24,74 @@ main :: proc() {
 	fmt.assertf(window != nil, "Failed to create window");
 	defer glfw.DestroyWindow(window);
 
-	glfw.SetKeyCallback(window, key_callback);
+	window_state: WindowState;
+	glfw.SetWindowUserPointer(window, &window_state);
+
 	glfw.SetFramebufferSizeCallback(window, framebuffer_size_callback);
+	glfw.SetWindowIconifyCallback(window, iconify_callback);
 	glfw.SetWindowContentScaleCallback(window, content_scale_callback);
+	glfw.SetKeyCallback(window, key_callback);
 
 	vulkan := render.init_vulkan(window);
 	defer render.cleanup_vulkan(&vulkan);
 
+	frame_start := time.now();
+	suboptimal_swapchain := false;
+
 	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents();
+
+		if window_state.minimized {
+			glfw.WaitEvents();
+			continue;
+		}
+
+		if window_state.framebuffer_size_change || suboptimal_swapchain {
+			window_state.framebuffer_size_change = false;
+			width, height := glfw.GetFramebufferSize(window);
+			render.recreate_swapchain();
+		}
+
+		frame_end := time.now();
+		frame_duration := time.diff(frame_start, frame_end);
+		frame_start = frame_end;
+		updates := 0;
+
+		for frame_duration > 0 && updates < MAX_UPDATES {
+			frame_duration_capped := min(frame_duration, MAX_FRAME_DURATION);
+			frame_duration_capped_secs := cast(f32) time.duration_seconds(frame_duration_capped)
+
+			update_game(frame_duration_capped_secs);
+
+			frame_duration -= frame_duration_capped;
+			updates += 1;
+		}
+
+		suboptimal_swapchain = render.render();
 	}
 }
 
-key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: i32) {
+framebuffer_size_callback : glfw.FramebufferSizeProc : proc "c" (window: glfw.WindowHandle, width, height: c.int) {
+	window_state := cast(^WindowState) glfw.GetWindowUserPointer(window);
+	window_state.framebuffer_size_change = true;
+}
+
+iconify_callback : glfw.WindowIconifyProc : proc "c" (window: glfw.WindowHandle, iconified: c.int) {
+	window_state := cast(^WindowState) glfw.GetWindowUserPointer(window);
+	window_state.minimized = iconified == 1 ? true : false;
+}
+
+content_scale_callback : glfw.WindowContentScaleProc : proc "c" (window: glfw.WindowHandle, xscale, yscale: f32) {
+	
+}
+
+key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: c.int) {
 	switch key {
 		case glfw.KEY_ESCAPE:
 			glfw.SetWindowShouldClose(window, true);
 	}
 }
 
-framebuffer_size_callback : glfw.FramebufferSizeProc : proc "c" (window: glfw.WindowHandle, width, height: i32) {
-	
-}
-
-content_scale_callback : glfw.WindowContentScaleProc : proc "c" (window: glfw.WindowHandle, xscale, yscale: f32) {
+update_game :: proc(dt: f32) {
 	
 }
