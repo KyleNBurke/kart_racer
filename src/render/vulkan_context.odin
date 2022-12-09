@@ -13,7 +13,7 @@ REQUIRED_DEVICE_EXTENSIONS := [?]cstring {"VK_KHR_swapchain"};
 VulkanContext :: struct {
 	instance: vk.Instance,
 	debug_messenger_ext: vk.DebugUtilsMessengerEXT,
-	surface: vk.SurfaceKHR,
+	window_surface: vk.SurfaceKHR,
 	physical_device: vk.PhysicalDevice,
 	graphics_queue_family: u32,
 	present_queue_family: u32,
@@ -123,7 +123,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 	}
 
 	// Create surface
-	r :=  glfw.CreateWindowSurface(instance, window, nil, &surface);
+	r :=  glfw.CreateWindowSurface(instance, window, nil, &window_surface);
 	fmt.assertf(r == .SUCCESS, "Failed to create window surface. Result: %v\n", r);
 
 	// Find suitable physical device
@@ -154,11 +154,11 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 			if !features.geometryShader do continue;
 
 			formats_count: u32;
-			vk.GetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formats_count, nil);
+			vk.GetPhysicalDeviceSurfaceFormatsKHR(device, window_surface, &formats_count, nil);
 			if formats_count == 0 do continue;
 
 			present_modes_count: u32;
-			vk.GetPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_modes_count, nil);
+			vk.GetPhysicalDeviceSurfacePresentModesKHR(device, window_surface, &present_modes_count, nil);
 			if present_modes_count == 0 do continue;
 
 			queue_family_properties_count: u32;
@@ -180,7 +180,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 			current_present_queue_family := -1;
 			for queue_family_property, i in queue_family_properties {
 				supported: b32;
-				vk.GetPhysicalDeviceSurfaceSupportKHR(device, u32(i), surface, &supported);
+				vk.GetPhysicalDeviceSurfaceSupportKHR(device, u32(i), window_surface, &supported);
 
 				if supported {
 					current_present_queue_family = i;
@@ -279,7 +279,7 @@ debug_message_callback : vk.ProcDebugUtilsMessengerCallbackEXT : proc "system" (
 
 cleanup_vulkan_context :: proc(using vulkan_context: ^VulkanContext) {
 	vk.DestroyDevice(logical_device, nil);
-	vk.DestroySurfaceKHR(instance, surface, nil);
+	vk.DestroySurfaceKHR(instance, window_surface, nil);
 
 	// Debug messenger
 	when ODIN_DEBUG {
