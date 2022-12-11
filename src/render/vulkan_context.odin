@@ -10,18 +10,6 @@ REQUIRED_DEBUG_INSTANCE_EXTENSIONS := [?]cstring {"VK_EXT_debug_utils"};
 REQUIRED_DEBUG_LAYERS := [?]cstring {"VK_LAYER_KHRONOS_validation"};
 REQUIRED_DEVICE_EXTENSIONS := [?]cstring {"VK_KHR_swapchain"};
 
-VulkanContext :: struct {
-	instance: vk.Instance,
-	debug_messenger_ext: vk.DebugUtilsMessengerEXT,
-	window_surface: vk.SurfaceKHR,
-	physical_device: vk.PhysicalDevice,
-	graphics_queue_family: u32,
-	present_queue_family: u32,
-	logical_device: vk.Device,
-	graphics_queue: vk.Queue,
-	present_queue: vk.Queue,
-}
-
 init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 	vulkan_context: VulkanContext;
 	using vulkan_context;
