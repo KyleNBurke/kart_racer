@@ -181,7 +181,7 @@ create_depth_image :: proc(logical_device: vk.Device, physical_device: vk.Physic
 }
 
 create_swapchain :: proc(
-	using vulkaan_context: ^VulkanContext,
+	using vulkan_context: ^VulkanContext,
 	color_surface_format: vk.SurfaceFormatKHR,
 	extent: vk.Extent2D,
 	render_pass: vk.RenderPass,
@@ -341,4 +341,95 @@ create_command_pool :: proc(logical_device: vk.Device, graphics_queue_family: u3
 	fmt.assertf(r == .SUCCESS, "Failed to create command pool. Result: %v\n", r);
 
 	return command_pool;
+}
+
+create_frame_data_descriptor_set_layout :: proc(logical_device: vk.Device) -> vk.DescriptorSetLayout {
+	layout_binding: vk.DescriptorSetLayoutBinding;
+	layout_binding.binding = 0;
+	layout_binding.descriptorType = .UNIFORM_BUFFER;
+	layout_binding.descriptorCount = 1;
+	layout_binding.stageFlags = {.VERTEX};
+
+	create_info: vk.DescriptorSetLayoutCreateInfo;
+	create_info.sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	create_info.pBindings = &layout_binding;
+	create_info.bindingCount = 1;
+
+	descriptor_set_layout: vk.DescriptorSetLayout;
+	r := vk.CreateDescriptorSetLayout(logical_device, &create_info, nil, &descriptor_set_layout);
+	fmt.assertf(r == .SUCCESS, "Failed to create frame data descriptor set layout. Result: %v\n", r);
+
+	return descriptor_set_layout;
+}
+
+create_instance_data_descriptor_set_layout :: proc(logical_device: vk.Device) -> vk.DescriptorSetLayout {
+	layout_binding: vk.DescriptorSetLayoutBinding;
+	layout_binding.binding = 0;
+	layout_binding.descriptorType = .STORAGE_BUFFER;
+	layout_binding.descriptorCount = 1;
+	layout_binding.stageFlags = {.VERTEX};
+
+	create_info: vk.DescriptorSetLayoutCreateInfo;
+	create_info.sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	create_info.pBindings = &layout_binding;
+	create_info.bindingCount = 1;
+
+	descriptor_set_layout: vk.DescriptorSetLayout;
+	r := vk.CreateDescriptorSetLayout(logical_device, &create_info, nil, &descriptor_set_layout);
+	fmt.assertf(r == .SUCCESS, "Failed to create instance data descriptor set layout. Result: %v\n", r);
+
+	return descriptor_set_layout;
+}
+
+create_logical_frames :: proc(
+	logical_device: vk.Device,
+	// descriptor_set_layouts: ^[]vk.DescriptorSetLayout, think about this one
+	command_pool: vk.CommandPool,
+	descriptor_pool: vk.DescriptorPool,
+) -> [LOGICAL_FRAMES_COUNT]LogicalFrame {
+	semaphore_create_info: vk.SemaphoreCreateInfo;
+	semaphore_create_info.sType = .SEMAPHORE_CREATE_INFO;
+
+	fence_create_info: vk.FenceCreateInfo;
+	fence_create_info.sType = .FENCE_CREATE_INFO;
+	fence_create_info.flags = {.SIGNALED};
+
+	primary_command_buffer_allocate_info: vk.CommandBufferAllocateInfo;
+	primary_command_buffer_allocate_info.sType = .COMMAND_BUFFER_ALLOCATE_INFO;
+	primary_command_buffer_allocate_info.commandPool = command_pool;
+	primary_command_buffer_allocate_info.level = .PRIMARY;
+	primary_command_buffer_allocate_info.commandBufferCount = LOGICAL_FRAMES_COUNT;
+
+	primary_command_buffers: [LOGICAL_FRAMES_COUNT]vk.CommandBuffer;
+	r := vk.AllocateCommandBuffers(logical_device, &primary_command_buffer_allocate_info, &primary_command_buffers[0]);
+	assert(r == .SUCCESS);
+
+	secondary_command_buffer_count :: 1;
+	secondary_command_buffer_allocate_info: vk.CommandBufferAllocateInfo;
+	secondary_command_buffer_allocate_info.sType = .COMMAND_BUFFER_ALLOCATE_INFO;
+	secondary_command_buffer_allocate_info.commandPool = command_pool;
+	secondary_command_buffer_allocate_info.level = .SECONDARY;
+	secondary_command_buffer_allocate_info.commandBufferCount = LOGICAL_FRAMES_COUNT * secondary_command_buffer_count;
+
+	secondary_command_buffers: [LOGICAL_FRAMES_COUNT * secondary_command_buffer_count]vk.CommandBuffer;
+	r = vk.AllocateCommandBuffers(logical_device, &secondary_command_buffer_allocate_info, &secondary_command_buffers[0]);
+	assert(r == .SUCCESS);
+
+	logical_frames: [LOGICAL_FRAMES_COUNT]LogicalFrame;
+
+	for frame, i in &logical_frames {
+		r := vk.CreateSemaphore(logical_device, &semaphore_create_info, nil, &frame.image_available_semaphore);
+		assert(r == .SUCCESS);
+
+		r = vk.CreateSemaphore(logical_device, &semaphore_create_info, nil, &frame.render_finished_semaphore);
+		assert(r == .SUCCESS);
+
+		r = vk.CreateFence(logical_device, &fence_create_info, nil, &frame.fence);
+		assert(r == .SUCCESS);
+
+		frame.primary_command_buffer = primary_command_buffers[i];
+		frame.basic_secondary_command_buffer = secondary_command_buffers[secondary_command_buffer_count * i];
+	}
+	
+	return logical_frames;
 }

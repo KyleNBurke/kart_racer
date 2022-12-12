@@ -226,6 +226,9 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 
 		r := vk.CreateDevice(physical_device, &logical_device_create_info, nil, &logical_device);
 		fmt.assertf(r == .SUCCESS, "Failed to create logical device. Result: %v\n", r);
+
+		vk.GetDeviceQueue(logical_device, graphics_queue_family, 0, &graphics_queue);
+		vk.GetDeviceQueue(logical_device, present_queue_family, 0, &present_queue);
 	}
 
 	return vulkan_context;
