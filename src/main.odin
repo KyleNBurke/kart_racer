@@ -33,7 +33,7 @@ main :: proc() {
 	glfw.SetKeyCallback(window, key_callback);
 
 	content_scale_x, content_scale_y := glfw.GetWindowContentScale(window);
-	init_font("roboto", 20, content_scale_x);
+	font := init_font("roboto", 20, content_scale_x);
 	vulkan := render.init_vulkan(window);
 	defer render.cleanup_vulkan(&vulkan);
 
