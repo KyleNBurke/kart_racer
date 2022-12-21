@@ -3,6 +3,7 @@ package vk2;
 import "core:fmt";
 import "core:os";
 import "core:runtime";
+import "core:strings";
 import "vendor:glfw";
 import vk "vendor:vulkan";
 
@@ -182,6 +183,11 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 			physical_device = device;
 			graphics_queue_family = u32(current_graphics_queue_family);
 			present_queue_family = u32(current_present_queue_family);
+
+			properties: vk.PhysicalDeviceProperties;
+			vk.GetPhysicalDeviceProperties(device, &properties);
+			name := strings.clone_from_bytes(properties.deviceName[:]);
+			fmt.printf("Using %v\n", name);
 			
 			break;
 		}
