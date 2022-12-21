@@ -9,7 +9,7 @@ import "vendor:glfw";
 import "vk2";
 import "entity";
 
-MAX_FRAME_DURATION := time.Duration(1e9 / 30e9); // 1 / 30 seconds
+MAX_FRAME_DURATION := time.Duration(33333333); // 1 / 30 seconds
 MAX_UPDATES := 5;
 
 WindowState :: struct {
@@ -40,7 +40,7 @@ main :: proc() {
 	defer vk2.cleanup_vulkan(&vulkan);
 
 	framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(window);
-	camera := init_camera(f32(framebuffer_width) / f32(framebuffer_height), 75.0);
+	camera := init_camera(f32(framebuffer_width) / f32(framebuffer_height), 75.0, window);
 	entities := entity.init_entites();
 	init_scene(&entities, &camera);
 
@@ -70,7 +70,7 @@ main :: proc() {
 			frame_duration_capped := min(frame_duration, MAX_FRAME_DURATION);
 			frame_duration_capped_secs := cast(f32) time.duration_seconds(frame_duration_capped)
 
-			update_game(frame_duration_capped_secs);
+			update_game(window, &camera, frame_duration_capped_secs);
 
 			frame_duration -= frame_duration_capped;
 			updates += 1;
@@ -109,6 +109,6 @@ init_scene :: proc(entities: ^entity.Entities, camera: ^Camera) {
 	entity.add_entity(entities, geometry_record, e);
 }
 
-update_game :: proc(dt: f32) {
-	
+update_game :: proc(window: glfw.WindowHandle, camera: ^Camera, dt: f32) {
+	move_camera(camera, window, dt);
 }
