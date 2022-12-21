@@ -1,0 +1,5 @@
+Todo
+- Convert all the vulkan struct initialization to use the other struct syntax
+- Use built in assert instead of fmt.assertf()
+- Use built in panic instead of fmt.panicf()
+- Have the application compile the shaders if there are new changes. (When running in debug mode)

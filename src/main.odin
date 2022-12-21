@@ -4,8 +4,10 @@ import "core:fmt";
 import "core:c";
 import "core:time";
 import "core:runtime";
+import "core:math/linalg";
 import "vendor:glfw";
-import "render";
+import "vk2";
+import "entity";
 
 MAX_FRAME_DURATION := time.Duration(1e9 / 30e9); // 1 / 30 seconds
 MAX_UPDATES := 5;
@@ -34,8 +36,13 @@ main :: proc() {
 
 	content_scale_x, content_scale_y := glfw.GetWindowContentScale(window);
 	// font := init_font("roboto", 20, content_scale_x);
-	vulkan := render.init_vulkan(window);
-	defer render.cleanup_vulkan(&vulkan);
+	vulkan := vk2.init_vulkan(window);
+	defer vk2.cleanup_vulkan(&vulkan);
+
+	framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(window);
+	camera := init_camera(f32(framebuffer_width) / f32(framebuffer_height), 75.0);
+	entities := entity.init_entites();
+	init_scene(&entities, &camera);
 
 	frame_start := time.now();
 	suboptimal_swapchain := false;
@@ -51,7 +58,7 @@ main :: proc() {
 		if window_state.framebuffer_size_change || suboptimal_swapchain {
 			window_state.framebuffer_size_change = false;
 			width, height := glfw.GetFramebufferSize(window);
-			render.recreate_swapchain();
+			vk2.recreate_swapchain();
 		}
 
 		frame_end := time.now();
@@ -69,7 +76,7 @@ main :: proc() {
 			updates += 1;
 		}
 
-		suboptimal_swapchain = render.render(&vulkan);
+		suboptimal_swapchain = render(&vulkan, &camera, &entities);
 	}
 }
 
@@ -92,6 +99,14 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 		case glfw.KEY_ESCAPE:
 			glfw.SetWindowShouldClose(window, true);
 	}
+}
+
+init_scene :: proc(entities: ^entity.Entities, camera: ^Camera) {
+	geometry := entity.init_box();
+	geometry_record := entity.add_geometry(entities, geometry);
+
+	e := entity.init_entity(position = linalg.Vector3f32{0.0, 0.0, 5.0});
+	entity.add_entity(entities, geometry_record, e);
 }
 
 update_game :: proc(dt: f32) {

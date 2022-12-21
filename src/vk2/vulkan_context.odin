@@ -1,4 +1,4 @@
-package render;
+package vk2;
 
 import "core:fmt";
 import "core:os";
