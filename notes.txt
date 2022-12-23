@@ -5,6 +5,6 @@ Todo
 - Have the application compile the shaders if there are new changes. (When running in debug mode)
 
 Path forward
-- Lambert pipeline,
+- [done] Lambert pipeline
 - Export scene in custom binary format
 - Read in scene file
