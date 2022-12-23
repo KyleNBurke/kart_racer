@@ -2,7 +2,6 @@ package main;
 
 import "core:math";
 import "core:math/linalg";
-import "core:fmt";
 import "vendor:glfw";
 
 TRANSLATION_SPEED :: 10.0;
@@ -73,27 +72,27 @@ move_camera :: proc(using camera: ^Camera, window: glfw.WindowHandle, dt: f32) {
 
 	if glfw.GetKey(window, glfw.KEY_W) == glfw.PRESS {
 		dir.z += 1.0;
-	};
+	}
 
 	if glfw.GetKey(window, glfw.KEY_S) == glfw.PRESS {
 		dir.z -= 1.0;
-	};
+	}
 
 	if glfw.GetKey(window, glfw.KEY_A) == glfw.PRESS {
 		dir.x += 1.0;
-	};
+	}
 
 	if glfw.GetKey(window, glfw.KEY_D) == glfw.PRESS {
 		dir.x -= 1.0;
-	};
+	}
 
 	if glfw.GetKey(window, glfw.KEY_E) == glfw.PRESS {
 		dir.y += 1.0;
-	};
+	}
 
 	if glfw.GetKey(window, glfw.KEY_Q) == glfw.PRESS {
 		dir.y -= 1.0;
-	};
+	}
 
 	if linalg.length(dir) != 0.0 {
 		dir_norm := linalg.normalize(dir);

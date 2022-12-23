@@ -67,6 +67,7 @@ render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities: ^entity.Ent
 
 	secondary_command_buffers := [?]vk.CommandBuffer {
 		mesh_resources.basic_secondary_command_buffers[logical_frame_index],
+		mesh_resources.lambert_secondary_command_buffers[logical_frame_index],
 	};
 
 	r = vk.BeginCommandBuffer(primary_command_buffers[logical_frame_index], &command_buffer_begin_info);
@@ -171,13 +172,19 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 	};
 
 	basic_secondary_command_buffer := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
+	lambert_secondary_command_buffer := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
 
 	r := vk.BeginCommandBuffer(basic_secondary_command_buffer, &command_buffer_begin_info);
 	assert(r == .SUCCESS);
-
-	vk.CmdBindPipeline(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline);
+	vk.CmdBindPipeline(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.basic_pipeline);
 	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[0], 0, {});
 	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[0], 0, {});
+
+	r = vk.BeginCommandBuffer(lambert_secondary_command_buffer, &command_buffer_begin_info);
+	assert(r == .SUCCESS);
+	vk.CmdBindPipeline(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.lambert_pipeline);
+	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[0], 0, {});
+	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[0], 0, {});
 
 	// Copy mesh data and record draw commands
 	geometry_offset := 0;
@@ -211,15 +218,28 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 		vertex_buffers := [?]vk.Buffer {per_instance_buffer};
 		offsets := [?]vk.DeviceSize {cast(vk.DeviceSize) attribute_array_offset};
 
-		vk.CmdBindIndexBuffer(basic_secondary_command_buffer, per_instance_buffer, cast(vk.DeviceSize) index_array_offset, .UINT16);
-		vk.CmdBindVertexBuffers(basic_secondary_command_buffer, 0, 1, &vertex_buffers[0], &offsets[0]);
-		vk.CmdDrawIndexed(basic_secondary_command_buffer, cast(u32) len(record.geometry.indices), cast(u32) len(record.entities), 0, 0, first_instance);
+		secondary_command_buffer: vk.CommandBuffer;
+		switch record.geometry.pipeline {
+			case .Line:
+
+			case .Basic:
+				secondary_command_buffer = basic_secondary_command_buffer;
+			case .Lambert:
+				secondary_command_buffer = lambert_secondary_command_buffer;
+		}
+
+		vk.CmdBindIndexBuffer(secondary_command_buffer, per_instance_buffer, cast(vk.DeviceSize) index_array_offset, .UINT16);
+		vk.CmdBindVertexBuffers(secondary_command_buffer, 0, 1, &vertex_buffers[0], &offsets[0]);
+		vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(record.geometry.indices), cast(u32) len(record.entities), 0, 0, first_instance);
 
 		instance_offset += len(record.entities);
 	}
 
 	// End secondary command buffers
 	r = vk.EndCommandBuffer(basic_secondary_command_buffer);
+	assert(r == .SUCCESS);
+
+	r = vk.EndCommandBuffer(lambert_secondary_command_buffer);
 	assert(r == .SUCCESS);
 
 	// Flush and unmap per instance buffer

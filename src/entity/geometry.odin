@@ -9,7 +9,10 @@ DEFAULT_COLOR :: linalg.Vector3f32 { 0.3, 0.3, 0.3 };
 Geometry :: struct {
 	indices: [dynamic]u16,
 	attributes: [dynamic]f32,
+	pipeline: Pipeline,
 }
+
+Pipeline :: enum { Line, Basic, Lambert }
 
 init_box :: proc(color: linalg.Vector3f32 = DEFAULT_COLOR) -> Geometry {
 	indices := [?]u16 {
@@ -61,5 +64,5 @@ init_box :: proc(color: linalg.Vector3f32 = DEFAULT_COLOR) -> Geometry {
 	indices_dyn := slice.clone_to_dynamic(indices[:]);
 	attributes_dyn := slice.clone_to_dynamic(attributes[:]);
 
-	return Geometry { indices_dyn, attributes_dyn };
+	return Geometry { indices_dyn, attributes_dyn, .Lambert };
 }
