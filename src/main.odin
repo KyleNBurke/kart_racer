@@ -22,6 +22,7 @@ main :: proc() {
 	defer glfw.Terminate();
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
+	glfw.WindowHint(glfw.MAXIMIZED, 1);
 	window := glfw.CreateWindow(1080, 720, "Kart Guys", nil, nil);
 	fmt.assertf(window != nil, "Failed to create window");
 	defer glfw.DestroyWindow(window);
@@ -39,8 +40,7 @@ main :: proc() {
 	vulkan := vk2.init_vulkan(window);
 	defer vk2.cleanup_vulkan(&vulkan);
 
-	framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(window);
-	camera := init_camera(f32(framebuffer_width) / f32(framebuffer_height), 75.0, window);
+	camera := init_camera(f32(vulkan.extent.width) / f32(vulkan.extent.height), 75.0, window);
 	entities := entity.init_entites();
 	load_level(&entities)
 
@@ -57,8 +57,15 @@ main :: proc() {
 
 		if window_state.framebuffer_size_change || suboptimal_swapchain {
 			window_state.framebuffer_size_change = false;
-			width, height := glfw.GetFramebufferSize(window);
-			vk2.recreate_swapchain();
+
+			width_i32, height_i32 := glfw.GetFramebufferSize(window);
+			width := u32(width_i32);
+			height := u32(height_i32);
+
+			if width != vulkan.extent.width || height != vulkan.extent.height {
+				vk2.recreate_swapchain(&vulkan, width, height);
+				update_aspect_ratio(&camera, f32(vulkan.extent.width) / f32(vulkan.extent.height));
+			}
 		}
 
 		frame_end := time.now();

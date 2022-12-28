@@ -207,8 +207,32 @@ cleanup_vulkan :: proc(using vulkan: ^Vulkan) {
 	cleanup_vulkan_context(&vulkan_context);
 }
 
-recreate_swapchain :: proc() {
-	
+recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer_height: u32) {
+	logical_device := vulkan_context.logical_device;
+
+	vk.DeviceWaitIdle(logical_device);
+	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
+	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
+
+	for frame in swapchain_frames {
+		vk.DestroyFramebuffer(logical_device, frame.framebuffer, nil);
+		vk.DestroyImageView(logical_device, frame.color_image_view, nil);
+	}
+
+	vk.DestroySwapchainKHR(logical_device, swapchain, nil);
+	vk.FreeMemory(logical_device, depth_image.memory, nil);
+	vk.DestroyImageView(logical_device, depth_image.image_view, nil);
+	vk.DestroyImage(logical_device, depth_image.image, nil);
+
+	extent = create_extent(vulkan_context.physical_device, vulkan_context.window_surface, framebuffer_width, framebuffer_height);
+	depth_image = create_depth_image(logical_device, vulkan_context.physical_device, depth_format, extent);
+	swapchain, swapchain_frames = create_swapchain(&vulkan_context, surface_format, extent, render_pass, depth_image.image_view);
+
+	pipelines := create_pipelines(logical_device, render_pass, extent, mesh_resources.pipeline_layout);
+	mesh_resources.basic_pipeline = pipelines[0];
+	mesh_resources.lambert_pipeline = pipelines[1];
+
+	fmt.println("Swapchain recreated");
 }
 
 find_memory_type_index :: proc(physical_device: vk.PhysicalDevice, requirements: vk.MemoryRequirements, property_flags: vk.MemoryPropertyFlags) -> u32 {
