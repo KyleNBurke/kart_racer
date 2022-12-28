@@ -42,7 +42,7 @@ main :: proc() {
 	framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(window);
 	camera := init_camera(f32(framebuffer_width) / f32(framebuffer_height), 75.0, window);
 	entities := entity.init_entites();
-	init_scene(&entities, &camera);
+	load_level(&entities)
 
 	frame_start := time.now();
 	suboptimal_swapchain := false;
@@ -101,13 +101,13 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 	}
 }
 
-init_scene :: proc(entities: ^entity.Entities, camera: ^Camera) {
+/*init_scene :: proc(entities: ^entity.Entities, camera: ^Camera) {
 	geometry := entity.init_box();
 	geometry_record := entity.add_geometry(entities, geometry);
 
 	e := entity.init_entity(position = linalg.Vector3f32{0.0, 0.0, 5.0});
 	entity.add_entity(entities, geometry_record, e);
-}
+}*/
 
 update_game :: proc(window: glfw.WindowHandle, camera: ^Camera, dt: f32) {
 	move_camera(camera, window, dt);

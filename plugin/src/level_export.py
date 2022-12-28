@@ -130,7 +130,7 @@ def export_inanimate_entities(kgl_file, txt_file, instance_objs, mesh_name_to_in
 		txt_file.write("\t\tposition: " + util.vec3_to_string(entity.position) + "\n")
 		txt_file.write("\t\trotation: " + util.quat_to_string(entity.rotation) + "\n")
 		txt_file.write("\t\tscale:    " + util.vec3_to_string(entity.scale) + "\n")
-		txt_file.write("\t\geometry index: " + str(entity.mesh_index) + "\n")
+		txt_file.write("\t\tgeometry index: " + str(entity.mesh_index) + "\n")
 		
 		util.write_vec3(kgl_file, entity.position)
 		util.write_quat(kgl_file, entity.rotation)
@@ -138,7 +138,7 @@ def export_inanimate_entities(kgl_file, txt_file, instance_objs, mesh_name_to_in
 		kgl_file.write(struct.pack("<I", entity.mesh_index))
 
 		txt_file.write("\t\thulls: " + str(len(entity.hulls)) + "\n")
-		kgl_file.write(struct.pack("<I", len(entities)))
+		kgl_file.write(struct.pack("<I", len(entity.hulls)))
 
 		for hull in entity.hulls:
 			txt_file.write("\t\t\t" + hull.name + "\n")

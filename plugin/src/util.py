@@ -38,8 +38,12 @@ def write_quat(kgl_file, q):
 	kgl_file.write(struct.pack("<f", q[3]))
 
 def write_indices_attributes(kgl_file, txt_file, indices, attributes, name):
+	kgl_file.write(struct.pack("<I", len(indices)))
+
 	for index in indices:
 		kgl_file.write(struct.pack("<H", index))
+	
+	kgl_file.write(struct.pack("<I", len(attributes)))
 	
 	for attribute in attributes:
 		kgl_file.write(struct.pack("<f", attribute))

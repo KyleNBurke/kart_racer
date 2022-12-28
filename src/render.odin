@@ -232,7 +232,7 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 		vk.CmdBindVertexBuffers(secondary_command_buffer, 0, 1, &vertex_buffers[0], &offsets[0]);
 		vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(record.geometry.indices), cast(u32) len(record.entities), 0, 0, first_instance);
 
-		instance_offset += len(record.entities);
+		first_instance += cast(u32) len(record.entities);
 	}
 
 	// End secondary command buffers

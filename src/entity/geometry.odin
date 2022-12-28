@@ -4,7 +4,7 @@ import "core:slice";
 import "core:math/linalg";
 import "core:fmt";
 
-DEFAULT_COLOR :: linalg.Vector3f32 { 0.3, 0.3, 0.3 };
+DEFAULT_COLOR :: [?]f32 {0.3, 0.3, 0.3};
 
 Geometry :: struct {
 	indices: [dynamic]u16,
@@ -14,7 +14,11 @@ Geometry :: struct {
 
 Pipeline :: enum { Line, Basic, Lambert }
 
-init_box :: proc(color: linalg.Vector3f32 = DEFAULT_COLOR) -> Geometry {
+init_triangle_geometry :: proc(indices: [dynamic]u16, attributes: [dynamic]f32) -> Geometry {
+	return Geometry { indices, attributes, .Lambert };
+}
+
+init_box :: proc(color: [3]f32 = DEFAULT_COLOR) -> Geometry {
 	indices := [?]u16 {
 		0,  3,  2,  // top
 		0,  2,  1,
