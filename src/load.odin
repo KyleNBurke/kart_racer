@@ -5,10 +5,17 @@ import "core:math/linalg";
 import "core:fmt";
 import "core:mem";
 import "entity";
+import "physics";
 
-load_level :: proc(entities: ^entity.Entities) {
+load_level :: proc(entities: ^entity.Entities, ground_grid: ^physics.GroundGrid) {
 	read_u32 :: proc(bytes: ^[]byte, pos: ^int) -> u32 {
 		v := cast(u32) (cast(^u32le) raw_data(bytes[pos^:]))^;
+		pos^ += 4;
+		return v;
+	}
+
+	read_f32 :: proc(bytes: ^[]byte, pos: ^int) -> f32 {
+		v := cast(f32) (cast(^f32le) raw_data(bytes[pos^:]))^;
 		pos^ += 4;
 		return v;
 	}
@@ -62,6 +69,18 @@ load_level :: proc(entities: ^entity.Entities) {
 	pos := 0;
 	spawn_position := read_vec3(&bytes, &pos);
 	spawn_rotation := read_quat(&bytes, &pos);
+
+	{ // Ground grid
+		size := read_f32(&bytes, &pos);
+		physics.reset_ground_grid(ground_grid, size);
+		
+		meshes_count := read_u32(&bytes, &pos);
+
+		for i in 0..<meshes_count {
+			indices, positions := read_indices_attributes(&bytes, &pos);
+			physics.insert_into_ground_grid(ground_grid, &indices, &positions);
+		}
+	}
 
 	geometries_count := read_u32(&bytes, &pos);
 	

@@ -17,6 +17,7 @@ def export(operator, context):
 	txt_file = open(txt_filepath, 'w')
 
 	export_spawn_point(kgl_file, txt_file, instance_objs)
+	export_ground_collision_meshes(kgl_file, txt_file, instance_objs)
 	mesh_name_to_index_map = export_geometries(kgl_file, txt_file, instance_objs)
 	export_inanimate_entities(kgl_file, txt_file, instance_objs, mesh_name_to_index_map)
 
@@ -51,6 +52,65 @@ def export_spawn_point(kgl_file, txt_file, instance_objs):
 	
 	txt_file.write("\tposition: " + util.vec3_to_string(position_game) + "\n")
 	txt_file.write("\trotation: " + util.quat_to_string(rotation_game) + "\n")
+	txt_file.write("\n")
+
+def export_ground_collision_meshes(kgl_file, txt_file, instance_objs):
+	class Ground:
+		name = None
+		indices = None
+		positions = None
+	
+	size = 0
+	grounds = []
+
+	for instance_obj in instance_objs:
+		if instance_obj.object.kg_type == 'ground_collision_mesh':
+			mesh = instance_obj.object.data
+			mesh.calc_loop_triangles()
+
+			vertex_map = {}
+			next_index = 0
+			indices = []
+
+			for triangle in mesh.loop_triangles:
+				for i in range(3):
+					vertex_index = triangle.vertices[i]
+					vertex = instance_obj.matrix_world @ mesh.vertices[vertex_index].co
+					vertex_game = (vertex[0], vertex[2], -vertex[1])
+
+					size = max(size, abs(vertex_game[0]))
+					size = max(size, abs(vertex_game[2]))
+
+					if vertex_game in vertex_map:
+						index = vertex_map[vertex_game]
+						indices.append(index)
+					else:
+						vertex_map[vertex_game] = next_index
+						indices.append(next_index)
+						next_index += 1
+			
+			positions = []
+
+			for vertex in vertex_map.keys():
+				for coord in vertex:
+					positions.append(coord)
+			
+			ground = Ground()
+			ground.name = util.instance_obj_name(instance_obj);
+			ground.indices = indices
+			ground.positions = positions
+			
+			grounds.append(ground)
+	
+	txt_file.write("Ground grid size: " + str(size) + "\n")
+	txt_file.write("Ground collision meshes: " + str(len(grounds)) + "\n")
+
+	kgl_file.write(struct.pack("<f", size))
+	kgl_file.write(struct.pack("<I", len(grounds)))
+
+	for g in grounds:
+		util.write_indices_attributes(kgl_file, txt_file, g.indices, g.positions, g.name)
+
 	txt_file.write("\n")
 
 def export_geometries(kgl_file, txt_file, instance_objs):

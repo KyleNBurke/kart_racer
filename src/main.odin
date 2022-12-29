@@ -8,6 +8,7 @@ import "core:math/linalg";
 import "vendor:glfw";
 import "vk2";
 import "entity";
+import "physics";
 
 MAX_FRAME_DURATION := time.Duration(33333333); // 1 / 30 seconds
 MAX_UPDATES := 5;
@@ -15,6 +16,12 @@ MAX_UPDATES := 5;
 WindowState :: struct {
 	framebuffer_size_change: bool,
 	minimized: bool,
+}
+
+Game :: struct {
+	camera: Camera,
+	entities: entity.Entities,
+	ground_grid: physics.GroundGrid,
 }
 
 main :: proc() {
@@ -40,9 +47,8 @@ main :: proc() {
 	vulkan := vk2.init_vulkan(window);
 	defer vk2.cleanup_vulkan(&vulkan);
 
-	camera := init_camera(f32(vulkan.extent.width) / f32(vulkan.extent.height), 75.0, window);
-	entities := entity.init_entites();
-	load_level(&entities)
+	camera_aspect := f32(vulkan.extent.width) / f32(vulkan.extent.height);
+	game := init_game(camera_aspect, window);
 
 	frame_start := time.now();
 	suboptimal_swapchain := false;
@@ -64,7 +70,7 @@ main :: proc() {
 
 			if width != vulkan.extent.width || height != vulkan.extent.height {
 				vk2.recreate_swapchain(&vulkan, width, height);
-				update_aspect_ratio(&camera, f32(vulkan.extent.width) / f32(vulkan.extent.height));
+				update_aspect_ratio(&game.camera, f32(vulkan.extent.width) / f32(vulkan.extent.height));
 			}
 		}
 
@@ -77,13 +83,13 @@ main :: proc() {
 			frame_duration_capped := min(frame_duration, MAX_FRAME_DURATION);
 			frame_duration_capped_secs := cast(f32) time.duration_seconds(frame_duration_capped)
 
-			update_game(window, &camera, frame_duration_capped_secs);
+			update_game(window, &game, frame_duration_capped_secs);
 
 			frame_duration -= frame_duration_capped;
 			updates += 1;
 		}
 
-		suboptimal_swapchain = render(&vulkan, &camera, &entities);
+		suboptimal_swapchain = render(&vulkan, &game.camera, &game.entities);
 	}
 }
 
@@ -108,14 +114,20 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 	}
 }
 
-/*init_scene :: proc(entities: ^entity.Entities, camera: ^Camera) {
-	geometry := entity.init_box();
-	geometry_record := entity.add_geometry(entities, geometry);
+init_game :: proc(camera_aspect: f32, window: glfw.WindowHandle) -> Game {
+	camera := init_camera(camera_aspect, 75.0, window);
+	entities := entity.init_entites();
+	ground_grid: physics.GroundGrid;
 
-	e := entity.init_entity(position = linalg.Vector3f32{0.0, 0.0, 5.0});
-	entity.add_entity(entities, geometry_record, e);
-}*/
+	load_level(&entities, &ground_grid);
 
-update_game :: proc(window: glfw.WindowHandle, camera: ^Camera, dt: f32) {
-	move_camera(camera, window, dt);
+	return Game {
+		camera,
+		entities,
+		ground_grid,
+	};
+}
+
+update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
+	move_camera(&game.camera, window, dt);
 }

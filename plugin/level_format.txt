@@ -2,6 +2,13 @@ Spawn point
 	position: vec3
 	rotation: quat
 
+Ground grid size: f32
+Ground collision meshes count: u32
+	indices count: u32
+	indices: [u16]
+	positions count: u32
+	positions [f32]
+
 Geometries count: u32
 	indices count: u32
 	indices: [u16]
@@ -18,7 +25,7 @@ Inanimate entities count:  u32
 		local rotation:    quat
 		local scale:       vec3
 		hull type:         u32
-		index count:       u32  (if hull type is mesh)
+		indices count:     u32  (if hull type is mesh)
 		indices:          [u16] (if hull type is mesh)
 		attributes_count:  u32  (if hull type is mesh)
 		attributes:       [u32] (if hull type is mesh)
