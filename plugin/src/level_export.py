@@ -20,6 +20,7 @@ def export(operator, context):
 	export_ground_collision_meshes(kgl_file, txt_file, instance_objs)
 	mesh_name_to_index_map = export_geometries(kgl_file, txt_file, instance_objs)
 	export_inanimate_entities(kgl_file, txt_file, instance_objs, mesh_name_to_index_map)
+	export_rigid_body_islands(kgl_file, txt_file, instance_objs, mesh_name_to_index_map)
 
 	kgl_file.close()
 	print("Exported", kgl_filepath)
@@ -215,4 +216,96 @@ def export_inanimate_entities(kgl_file, txt_file, instance_objs, mesh_name_to_in
 			util.write_vec3(kgl_file, hull.local_scale)
 			kgl_file.write(struct.pack("<I", hull.hull_type))
 
+	txt_file.write("\n")
+
+def export_rigid_body_islands(kgl_file, txt_file, instance_objs, mesh_name_to_index_map):
+	class Island:
+		bodies = None
+	
+	class RigidBody:
+		name = None
+		position = None
+		rotation = None
+		scale = None
+		mesh_index = None
+		hulls = None
+		mass = None
+		dimensions = None
+		collision_exclude = None
+	
+	islands = []
+	
+	for instance_obj in instance_objs:
+		if instance_obj.object.kg_type == 'rigid_body_island':
+			island = Island()
+			island.bodies = []
+
+			for other_instance_obj in instance_objs:
+				if other_instance_obj.object.kg_type == 'rigid_body' and util.is_child(instance_obj, other_instance_obj):
+					body = RigidBody()
+					body.name = util.instance_obj_name(instance_obj)
+
+					position, rotation, scale = util.get_position_rotation_scale(other_instance_obj.matrix_world)
+					body.position = position
+					body.rotation = rotation
+					body.scale = scale
+					
+					body.mesh_index = mesh_name_to_index_map[other_instance_obj.object.data.name_full]
+					body.hulls = util.get_hulls(other_instance_obj, instance_objs)
+					
+					obj = other_instance_obj.object
+					body.mass = obj.kg_rigid_body_mass
+					dimensions = obj.dimensions
+					body.dimensions = [dimensions[0], dimensions[2], dimensions[1]]
+					body.collision_exclude = obj.kg_rigid_body_collision_exclude
+
+					island.bodies.append(body)
+
+			islands.append(island)
+	
+	txt_file.write("Rigid body islands: " + str(len(islands)) + "\n")
+	kgl_file.write(struct.pack("<I", len(islands)))
+
+	for island in islands:
+		txt_file.write("\tBodies: " + str(len(island.bodies)) + "\n")
+		kgl_file.write(struct.pack("<I", len(island.bodies)))
+
+		for body in island.bodies:
+			txt_file.write("\t\t" + body.name + "\n")
+			txt_file.write("\t\t\tposition: " + util.vec3_to_string(body.position) + "\n")
+			txt_file.write("\t\t\trotation: " + util.quat_to_string(body.rotation) + "\n")
+			txt_file.write("\t\t\tscale:    " + util.vec3_to_string(body.scale) + "\n")
+			txt_file.write("\t\t\tgeometry index: " + str(body.mesh_index) + "\n")
+
+			util.write_vec3(kgl_file, body.position)
+			util.write_quat(kgl_file, body.rotation)
+			util.write_vec3(kgl_file, body.scale)
+			kgl_file.write(struct.pack("<I", body.mesh_index))
+
+			txt_file.write("\t\t\thulls: " + str(len(body.hulls)) + "\n")
+			kgl_file.write(struct.pack("<I", len(body.hulls)))
+
+			for hull in body.hulls:
+				txt_file.write("\t\t\t\t" + hull.name + "\n")
+				txt_file.write("\t\t\t\t\tlocal position: " + util.vec3_to_string(hull.local_position) + "\n")
+				txt_file.write("\t\t\t\t\tlocal rotation: " + util.quat_to_string(hull.local_rotation) + "\n")
+				txt_file.write("\t\t\t\t\tlocal scale:    " + util.vec3_to_string(hull.local_scale) + "\n")
+				txt_file.write("\t\t\t\t\ttype: " + str(hull.hull_type) + "\n")
+
+				if hull.hull_type == 2:
+					assert(False)
+
+				util.write_vec3(kgl_file, hull.local_position)
+				util.write_quat(kgl_file, hull.local_rotation)
+				util.write_vec3(kgl_file, hull.local_scale)
+				kgl_file.write(struct.pack("<I", hull.hull_type))
+			
+			txt_file.write("\t\t\tmass: " + str(body.mass) + "\n")
+			txt_file.write("\t\t\tdimensions: " + util.vec3_to_string(body.dimensions) + "\n")
+			txt_file.write("\t\t\tcollision_exclude: " + str(body.collision_exclude) + "\n")
+
+			kgl_file.write(struct.pack("<f", body.mass))
+			util.write_vec3(kgl_file, body.dimensions)
+			kgl_file.write(struct.pack("<?", body.collision_exclude))
+	
 	txt_file.write("\n")

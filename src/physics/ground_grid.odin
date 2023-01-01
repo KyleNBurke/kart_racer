@@ -3,7 +3,9 @@ package physics;
 import "core:math";
 import "core:math/linalg";
 import "core:fmt";
+import "../math2";
 
+@(private="file")
 CELL_SIZE: f32 : 20.0;
 
 GroundGrid :: struct {
@@ -16,8 +18,7 @@ GroundGrid :: struct {
 
 Triangle :: struct {
 	indices: [6]int,
-	bounds_min: linalg.Vector3f32,
-	bounds_max: linalg.Vector3f32,
+	bounds: math2.Box3f32,
 }
 
 reset_ground_grid :: proc(using ground_grid: ^GroundGrid, half_size: f32) {
@@ -62,7 +63,7 @@ insert_into_ground_grid :: proc(using ground_grid: ^GroundGrid, new_indices: ^[d
 	current_indices_count := len(positions) / 3;
 	// append(&positions, ..new_positions^);
 	for new_position in new_positions {
-		append(&positions, new_position);
+		append(&positions, new_position); // Try the _elms version?
 	}
 
 	// Create a mapping from each triangle's edge to it's opposite vertex
@@ -101,12 +102,12 @@ insert_into_ground_grid :: proc(using ground_grid: ^GroundGrid, new_indices: ^[d
 
 		bounds_min := linalg.min_triple(a, b, c);
 		bounds_max := linalg.max_triple(a, b, c);
+		bounds := math2.Box3f32 {bounds_min, bounds_max};
 
 		// Create triangle
 		triangle := Triangle {
-			indices = [?]int {a_index, b_index, c_index, g1_index, g2_index, g3_index},
-			bounds_min = bounds_min,
-			bounds_max = bounds_max,
+			[?]int {a_index, b_index, c_index, g1_index, g2_index, g3_index},
+			bounds,
 		};
 
 		append(&triangles, triangle);
@@ -114,7 +115,7 @@ insert_into_ground_grid :: proc(using ground_grid: ^GroundGrid, new_indices: ^[d
 
 		// Add the triangle index to the cells it spans
 		final_triangle_index := len(triangles) - 1;
-		grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(half_cell_count, bounds_min, bounds_max);
+		grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(half_cell_count, CELL_SIZE, bounds);
 		assert(ok);
 
 		for x in grid_min_x..<grid_max_x {
@@ -123,24 +124,4 @@ insert_into_ground_grid :: proc(using ground_grid: ^GroundGrid, new_indices: ^[d
 			}
 		}
 	}
-}
-
-@(private)
-bounds_to_grid_cells :: proc(half_cell_count: u32, min, max: linalg.Vector3f32) -> (min_x, min_y, max_x, max_y: u32, ok: bool) {
-	half_cell_count_f32 := f32(half_cell_count);
-	cell_count := half_cell_count * 2;
-	cell_count_f32 := f32(cell_count);
-
-	min_x = cast(u32) math.max(math.floor(min.x / CELL_SIZE + half_cell_count_f32), 0.0);
-	min_y = cast(u32) math.max(math.floor(min.z / CELL_SIZE + half_cell_count_f32), 0.0);
-	max_x = cast(u32) math.min(math.ceil(max.x / CELL_SIZE + half_cell_count_f32), cell_count_f32);
-	max_y = cast(u32) math.min(math.ceil(max.z / CELL_SIZE + half_cell_count_f32), cell_count_f32);
-
-	if max_x == 0 || max_y == 0 || min_x == cell_count || min_y == cell_count {
-		ok = false;
-	} else {
-		ok = true;
-	}
-
-	return;
 }

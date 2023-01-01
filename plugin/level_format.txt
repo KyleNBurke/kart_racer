@@ -29,3 +29,23 @@ Inanimate entities count:  u32
 		indices:          [u16] (if hull type is mesh)
 		attributes_count:  u32  (if hull type is mesh)
 		attributes:       [u32] (if hull type is mesh)
+
+Rigid body islands count: u32
+	Entities count: u32
+		position:              vec3
+		rotation:              quat
+		scale:                 vec3
+		geometry index:        u32
+		hull count:            u32
+			local position:    vec3
+			local rotation:    quat
+			local scale:       vec3
+			hull type:         u32
+			indices count:     u32  (if hull type is mesh)
+			indices:          [u16] (if hull type is mesh)
+			attributes_count:  u32  (if hull type is mesh)
+			attributes:       [u32] (if hull type is mesh)
+		mass:                  f32
+		dimensions:            vec3
+		collision exclude      u8
+	...

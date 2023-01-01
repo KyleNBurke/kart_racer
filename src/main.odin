@@ -22,6 +22,9 @@ Game :: struct {
 	camera: Camera,
 	entities: entity.Entities,
 	ground_grid: physics.GroundGrid,
+	collision_hull_grid: physics.CollisionHullGrid,
+	awake_rigid_body_entity_indices: [dynamic]u32,
+	islands: physics.Islands,
 }
 
 main :: proc() {
@@ -115,17 +118,14 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 }
 
 init_game :: proc(camera_aspect: f32, window: glfw.WindowHandle) -> Game {
-	camera := init_camera(camera_aspect, 75.0, window);
-	entities := entity.init_entites();
-	ground_grid: physics.GroundGrid;
-
-	load_level(&entities, &ground_grid);
-
-	return Game {
-		camera,
-		entities,
-		ground_grid,
+	game := Game {
+		camera = init_camera(camera_aspect, 75.0, window),
+		entities = entity.init_entites(),
 	};
+
+	load_level(&game);
+
+	return game;
 }
 
 update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
