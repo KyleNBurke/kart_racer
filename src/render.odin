@@ -201,7 +201,7 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 
 		when ODIN_DEBUG {
 			assert(geometry_offset <= instance_offset);
-			assert(int(first_instance) + len(record.entities) <= vk2.MAX_ENTITIES);
+			assert(int(first_instance) + len(record.entity_lookups) <= vk2.MAX_ENTITIES);
 		}
 
 		// Copy geometry data
@@ -209,8 +209,9 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 		mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, attribute_array_offset), raw_data(record.geometry.attributes), attribute_array_size);
 
 		// Copy matrix data
-		for e in &record.entities {
-			mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, instance_offset), &e.transform, size_of(e.transform));
+		for entity_lookup in &record.entity_lookups {
+			entity := entities.entity_records[entity_lookup.index].entity;
+			mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, instance_offset), &entity.transform, size_of(entity.transform));
 			instance_offset += vk2.MESH_INSTANCE_ELEMENT_SIZE;
 		}
 
@@ -230,9 +231,9 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 
 		vk.CmdBindIndexBuffer(secondary_command_buffer, per_instance_buffer, cast(vk.DeviceSize) index_array_offset, .UINT16);
 		vk.CmdBindVertexBuffers(secondary_command_buffer, 0, 1, &vertex_buffers[0], &offsets[0]);
-		vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(record.geometry.indices), cast(u32) len(record.entities), 0, 0, first_instance);
+		vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(record.geometry.indices), cast(u32) len(record.entity_lookups), 0, 0, first_instance);
 
-		first_instance += cast(u32) len(record.entities);
+		first_instance += cast(u32) len(record.entity_lookups);
 	}
 
 	// End secondary command buffers

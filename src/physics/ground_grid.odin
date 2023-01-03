@@ -11,12 +11,12 @@ CELL_SIZE: f32 : 20.0;
 GroundGrid :: struct {
 	half_cell_count: u32,
 	positions: [dynamic]f32,
-	triangles: [dynamic]Triangle,
+	triangles: [dynamic]GroundGridTriangle,
 	query_flags: [dynamic]u32,
 	grid: [dynamic][dynamic][dynamic]int,
 }
 
-Triangle :: struct {
+GroundGridTriangle :: struct {
 	indices: [6]int,
 	bounds: math2.Box3f32,
 }
@@ -56,7 +56,7 @@ reset_ground_grid :: proc(using ground_grid: ^GroundGrid, half_size: f32) {
 	positions[1] = 0.0;
 	positions[2] = 0.0;
 
-	triangles = make([dynamic]Triangle, 0);
+	triangles = make([dynamic]GroundGridTriangle, 0);
 }
 
 insert_into_ground_grid :: proc(using ground_grid: ^GroundGrid, new_indices: ^[dynamic]u16, new_positions: ^[dynamic]f32) {
@@ -105,7 +105,7 @@ insert_into_ground_grid :: proc(using ground_grid: ^GroundGrid, new_indices: ^[d
 		bounds := math2.Box3f32 {bounds_min, bounds_max};
 
 		// Create triangle
-		triangle := Triangle {
+		triangle := GroundGridTriangle {
 			[?]int {a_index, b_index, c_index, g1_index, g2_index, g3_index},
 			bounds,
 		};

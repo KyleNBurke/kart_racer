@@ -23,7 +23,7 @@ Game :: struct {
 	entities: entity.Entities,
 	ground_grid: physics.GroundGrid,
 	collision_hull_grid: physics.CollisionHullGrid,
-	awake_rigid_body_entity_indices: [dynamic]u32,
+	awake_rigid_body_lookups: [dynamic]entity.Entity_Lookup,
 	islands: physics.Islands,
 }
 
@@ -120,7 +120,6 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 init_game :: proc(camera_aspect: f32, window: glfw.WindowHandle) -> Game {
 	game := Game {
 		camera = init_camera(camera_aspect, 75.0, window),
-		entities = entity.init_entites(),
 	};
 
 	load_level(&game);
@@ -129,5 +128,6 @@ init_game :: proc(camera_aspect: f32, window: glfw.WindowHandle) -> Game {
 }
 
 update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
+	simulate(game, dt);
 	move_camera(&game.camera, window, dt);
 }

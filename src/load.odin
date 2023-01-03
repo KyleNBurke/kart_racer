@@ -90,14 +90,14 @@ load_level :: proc(using game: ^Game) {
 		}
 	}
 
-	{ // Geometries
-		geometries_count := read_u32(&bytes, &pos);
-		
-		for i in 0..<geometries_count {
-			indices, attributes := read_indices_attributes(&bytes, &pos);
-			geometry := entity.init_triangle_geometry(indices, attributes);
-			entity.add_geometry(&entities, geometry);
-		}
+	// Geometries
+	geometries_count := read_u32(&bytes, &pos);
+	geometry_lookups := make([dynamic]entity.Geometry_Lookup, geometries_count);
+
+	for i in 0..<geometries_count {
+		indices, attributes := read_indices_attributes(&bytes, &pos);
+		geometry := entity.init_triangle_geometry(indices, attributes);
+		geometry_lookups[i] = entity.add_geometry(&entities, geometry, true);
 	}
 
 	{ // Inanimate entities
@@ -105,20 +105,20 @@ load_level :: proc(using game: ^Game) {
 
 		for i in 0..<inanimate_entities_count {
 			position := read_vec3(&bytes, &pos);
-			rotation := read_quat(&bytes, &pos);
+			orientation := read_quat(&bytes, &pos);
 			scale := read_vec3(&bytes, &pos);
 			geometry_index := read_u32(&bytes, &pos);
 			hull_count := read_u32(&bytes, &pos);
 
 			for hull_index in 0..<hull_count {
 				local_position := read_vec3(&bytes, &pos);
-				local_rotation := read_quat(&bytes, &pos);
+				local_orientation := read_quat(&bytes, &pos);
 				local_scale := read_vec3(&bytes, &pos);
 				hull_type := read_u32(&bytes, &pos);
 			}
 
-			inanimate_entity := entity.init_entity(position, rotation, scale);
-			entity.add_entity(&entities, int(geometry_index), inanimate_entity);
+			inanimate_entity := entity.new_inanimate_entity(position, orientation, scale);
+			entity.add_entity(&entities, geometry_lookups[geometry_index], inanimate_entity);
 		}
 	}
 
@@ -130,24 +130,27 @@ load_level :: proc(using game: ^Game) {
 			bodies_count := read_u32(&bytes, &pos);
 			for body_index in 0..<bodies_count {
 				position := read_vec3(&bytes, &pos);
-				rotation := read_quat(&bytes, &pos);
+				orientation := read_quat(&bytes, &pos);
 				scale := read_vec3(&bytes, &pos);
 				geometry_index := read_u32(&bytes, &pos);
 				hull_count := read_u32(&bytes, &pos);
 
 				for hull_index in 0..<hull_count {
 					local_position := read_vec3(&bytes, &pos);
-					local_rotation := read_quat(&bytes, &pos);
+					local_orientation := read_quat(&bytes, &pos);
 					local_scale := read_vec3(&bytes, &pos);
 					hull_type := read_u32(&bytes, &pos);
 				}
 
 				mass := read_f32(&bytes, &pos);
 				dimensions := read_vec3(&bytes, &pos);
-				collision_exclude := cast(bool) read_u8(&bytes, &pos);
+				collision_exclude := cast(bool) read_u8(&bytes, &pos); // There is a b8/b8le
 
-				body := entity.init_rigid_body_entity(position, rotation, scale, mass, dimensions);
+				body := entity.new_rigid_body_entity(position, orientation, scale, mass, dimensions);
 				body.collision_exclude = collision_exclude;
+				entity_lookup := entity.add_entity(&entities, geometry_lookups[geometry_index], body);
+
+				append(&awake_rigid_body_lookups, entity_lookup);
 			}
 		}
 	}

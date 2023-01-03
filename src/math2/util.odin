@@ -15,6 +15,10 @@ vector3_tangents :: proc(v: linalg.Vector3f32) -> (t1, t2: linalg.Vector3f32) {
 	return;
 }
 
+quaternion_mul_f32 :: proc(q: linalg.Quaternionf32, f: f32) -> linalg.Quaternionf32 {
+	return quaternion(q.w * f, q.x * f, q.y * f, q.z * f);
+}
+
 matrix3_transform_direction :: proc(m: linalg.Matrix3f32, p: linalg.Vector3f32) -> linalg.Vector3f32 {
 	return linalg.Vector3f32 {
 		m[0][0] * p.x + m[1][0] * p.y + m[2][0] * p.z,

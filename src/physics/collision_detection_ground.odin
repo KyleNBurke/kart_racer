@@ -1,11 +1,10 @@
-package collision;
+package physics;
 
 import "core:math";
 import "core:math/linalg";
 import "core:container/small_array";
 import "core:fmt";
-import "../../physics";
-import "../../math2";
+import "../math2";
 
 Triangle :: struct { a, b, c, normal: linalg.Vector3f32 }
 
@@ -19,9 +18,8 @@ Face :: struct {a, b, c: int, normal: linalg.Vector3f32 }
 
 GroundHull :: small_array.Small_Array(6, linalg.Vector3f32);
 
-// We need to figure if I should be taking in arrays as []f32 or ^[]f32.
-// What do I need to clean up in here? There are a lot of dynamic arrays created.
-evaluate_ground_collision :: proc(triangle_positions: ^[]f32, ground_grid_triangle: ^physics.Triangle, entity_hull: ^physics.CollisionHull) -> Maybe(ContactManifold) {
+// #cleanup What do I need to clean up in here? There are a lot of dynamic arrays created.
+evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangle: ^GroundGridTriangle, entity_hull: ^CollisionHull) -> Maybe(ContactManifold) {
 	if !math2.box_intersects(entity_hull.global_bounds, ground_grid_triangle.bounds) {
 		return nil;
 	}
@@ -61,7 +59,7 @@ evaluate_ground_collision :: proc(triangle_positions: ^[]f32, ground_grid_triang
 // If we moved it out, we wouldn't have to pass in the triangle positions, just a single struct which is the Triangle struct defined in this file.
 // Moving this out would also required moving the AABB - AABB check out too. Since we don't need to go through the trouble of this proc if that check fails.
 // The triangle we form outside should also incude the ghost vertex positions.
-form_triangle :: proc(positions: ^[]f32, indices: [6]int) -> Triangle {
+form_triangle :: proc(positions: []f32, indices: [6]int) -> Triangle {
 	a_index := indices[0] * 3;
 	b_index := indices[1] * 3;
 	c_index := indices[2] * 3;
@@ -77,7 +75,7 @@ form_triangle :: proc(positions: ^[]f32, indices: [6]int) -> Triangle {
 	return Triangle { a, b, c, normal };
 }
 
-colliding :: proc(triangle: ^Triangle, entity_hull: ^physics.CollisionHull) -> Maybe(Simplex) {
+colliding :: proc(triangle: ^Triangle, entity_hull: ^CollisionHull) -> Maybe(Simplex) {
 	direction := linalg.Vector3f32 {0.0, 0.0, 1.0};
 	v := support_gjk(triangle, entity_hull, direction);
 	zero := linalg.Vector3f32 {0.0, 0.0, 0.0};
@@ -111,7 +109,7 @@ colliding :: proc(triangle: ^Triangle, entity_hull: ^physics.CollisionHull) -> M
 	}
 }
 
-support_gjk :: proc(triangle: ^Triangle, hull: ^physics.CollisionHull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
+support_gjk :: proc(triangle: ^Triangle, hull: ^CollisionHull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
 	v1 := furthest_point_triangle(triangle, direction);
 	v2 := furthest_point_hull(hull, -direction);
 
@@ -136,7 +134,7 @@ furthest_point_triangle :: proc(triangle: ^Triangle, direction: linalg.Vector3f3
 	return furthest_vertex;
 }
 
-form_convex_ground_hull :: proc(triangle: ^Triangle, positions: ^[]f32, indices: ^[6]int) -> GroundHull {
+form_convex_ground_hull :: proc(triangle: ^Triangle, positions: []f32, indices: ^[6]int) -> GroundHull {
 	hull: GroundHull;
 	small_array.append(&hull, triangle.a, triangle.b, triangle.c);
 
@@ -209,7 +207,7 @@ form_convex_ground_hull :: proc(triangle: ^Triangle, positions: ^[]f32, indices:
 	return hull;
 }
 
-find_collision_normal :: proc(simplex: ^Simplex, ground_hull: ^GroundHull, entity_hull: ^physics.CollisionHull) -> Maybe(linalg.Vector3f32) {
+find_collision_normal :: proc(simplex: ^Simplex, ground_hull: ^GroundHull, entity_hull: ^CollisionHull) -> Maybe(linalg.Vector3f32) {
 	a := simplex.vertices[0];
 	b := simplex.vertices[1];
 	c := simplex.vertices[2];
@@ -268,7 +266,7 @@ find_collision_normal :: proc(simplex: ^Simplex, ground_hull: ^GroundHull, entit
 	}
 }
 
-support_epa :: proc(ground_hull: ^GroundHull, entity_hull: ^physics.CollisionHull, direction: linalg.Vector3f32) -> (linalg.Vector3f32, bool) {
+support_epa :: proc(ground_hull: ^GroundHull, entity_hull: ^CollisionHull, direction: linalg.Vector3f32) -> (linalg.Vector3f32, bool) {
 	v1, marker := furthest_point_ground_hull(ground_hull, direction);
 	v2 := furthest_point_hull(entity_hull, -direction);
 

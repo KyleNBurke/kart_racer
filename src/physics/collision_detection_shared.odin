@@ -1,12 +1,10 @@
-package collision;
+package physics;
 
 import "core:container/small_array";
 import "core:math";
 import "core:math/linalg";
 import "core:slice";
-import "../";
-import "../../math2";
-import "core:mem";
+import "../math2";
 
 Contact :: struct {
 	position_a: linalg.Vector3f32,
@@ -23,7 +21,7 @@ Simplex :: struct {
 	overwrite_index: u32,
 }
 
-furthest_point_hull :: proc(hull: ^physics.CollisionHull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
+furthest_point_hull :: proc(hull: ^CollisionHull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
 	d := math2.matrix3_transform_direction(hull.inv_global_transform, direction);
 	point: linalg.Vector3f32;
 
@@ -138,7 +136,7 @@ develop_unique_edges :: proc(edges: ^[dynamic][2]int, a_index, b_index: int) {
 	append(edges, [?]int {a_index, b_index});
 }
 
-find_plane_normal_and_polygon :: proc(hull: ^physics.CollisionHull, collision_normal: linalg.Vector3f32) -> (plane_normal: linalg.Vector3f32, polygon: [dynamic]linalg.Vector3f32) {
+find_plane_normal_and_polygon :: proc(hull: ^CollisionHull, collision_normal: linalg.Vector3f32) -> (plane_normal: linalg.Vector3f32, polygon: [dynamic]linalg.Vector3f32) {
 	d := math2.matrix3_transform_direction(hull.inv_global_transform, collision_normal);
 	
 	switch hull.kind {
@@ -254,7 +252,7 @@ clip :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon, inc_polygon: ^[dy
 			}
 		}
 
-		// I'm not really sure about the best way to do this here
+		// #cleanup I'm not really sure about the best way to do this here
 		clear(points);
 
 		for new_point in new_points {
