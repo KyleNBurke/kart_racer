@@ -1,27 +1,28 @@
-package physics;
+package main;
 
 import "core:math";
 import "core:math/linalg";
 import "core:fmt";
-import "../math2";
+import "core:slice";
+import "math2";
 
 @(private="file")
 CELL_SIZE: f32 : 20.0;
 
-GroundGrid :: struct {
+Ground_Grid :: struct {
 	half_cell_count: u32,
 	positions: [dynamic]f32,
-	triangles: [dynamic]GroundGridTriangle,
+	triangles: [dynamic]Ground_Grid_Triangle,
 	query_flags: [dynamic]u32,
 	grid: [dynamic][dynamic][dynamic]int,
 }
 
-GroundGridTriangle :: struct {
+Ground_Grid_Triangle :: struct {
 	indices: [6]int,
 	bounds: math2.Box3f32,
 }
 
-reset_ground_grid :: proc(using ground_grid: ^GroundGrid, half_size: f32) {
+reset_ground_grid :: proc(using ground_grid: ^Ground_Grid, half_size: f32) {
 	delete(positions);
 	delete(triangles);
 	delete(query_flags);
@@ -56,14 +57,14 @@ reset_ground_grid :: proc(using ground_grid: ^GroundGrid, half_size: f32) {
 	positions[1] = 0.0;
 	positions[2] = 0.0;
 
-	triangles = make([dynamic]GroundGridTriangle, 0);
+	triangles = make([dynamic]Ground_Grid_Triangle, 0);
 }
 
-insert_into_ground_grid :: proc(using ground_grid: ^GroundGrid, new_indices: ^[dynamic]u16, new_positions: ^[dynamic]f32) {
+insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: ^[dynamic]u16, new_positions: ^[dynamic]f32) {
 	current_indices_count := len(positions) / 3;
 	// append(&positions, ..new_positions^);
 	for new_position in new_positions {
-		append(&positions, new_position); // Try the _elms version?
+		append(&positions, new_position); // #nocheckin Try the _elms version?
 	}
 
 	// Create a mapping from each triangle's edge to it's opposite vertex
@@ -105,7 +106,7 @@ insert_into_ground_grid :: proc(using ground_grid: ^GroundGrid, new_indices: ^[d
 		bounds := math2.Box3f32 {bounds_min, bounds_max};
 
 		// Create triangle
-		triangle := GroundGridTriangle {
+		triangle := Ground_Grid_Triangle {
 			[?]int {a_index, b_index, c_index, g1_index, g2_index, g3_index},
 			bounds,
 		};
@@ -124,4 +125,35 @@ insert_into_ground_grid :: proc(using ground_grid: ^GroundGrid, new_indices: ^[d
 			}
 		}
 	}
+}
+
+ground_grid_get_triangle :: proc(using ground_grid: ^Ground_Grid, index: int) -> ^Ground_Grid_Triangle {
+	return &triangles[index];
+}
+
+ground_grid_find_nearby_triangles :: proc(using ground_grid: ^Ground_Grid, bounds: math2.Box3f32) -> [dynamic]int {
+	@(static) query_run: u32 = 0;
+
+	if query_run == max(u32) {
+		slice.fill(query_flags[:], 0);
+	}
+
+	query_run += 1;
+	indices := make([dynamic]int, context.temp_allocator);
+
+	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(half_cell_count, CELL_SIZE, bounds);
+	if !ok do return indices;
+
+	for x in grid_min_x..<grid_max_x {
+		for y in grid_min_y..<grid_max_y {
+			for index in &grid[x][y] {
+				if query_flags[index] != query_run {
+					append(&indices, index);
+					query_flags[index] = query_run;
+				}
+			}
+		}
+	}
+
+	return indices;
 }

@@ -33,7 +33,9 @@ box_contains :: proc(a, b: Box3f32) -> bool {
 }
 
 box_intersects :: proc(a, b: Box3f32) -> bool {
-	return false;
+	return a.min.x < b.max.x && a.max.x > b.min.x &&
+		a.min.y < b.max.y && a.max.y > b.min.y &&
+		a.min.z < b.max.z && a.max.z > b.min.z;
 }
 
 @(test, private)

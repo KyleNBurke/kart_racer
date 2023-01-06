@@ -1,20 +1,20 @@
-package physics;
+package main;
 
 import "core:math/linalg";
-import "../math2";
+import "math2";
 
-CollisionHull :: struct {
+Collision_Hull :: struct {
 	local_transform: linalg.Matrix4f32,
 	global_transform: linalg.Matrix4f32,
 	inv_global_transform: linalg.Matrix3f32,
-	kind: HullKind,
+	kind: Hull_Kind,
 	local_bounds: math2.Box3f32,
 	global_bounds: math2.Box3f32,
 }
 
-HullKind :: enum {Box, Cylinder, Mesh}
+Hull_Kind :: enum {Box, Cylinder, Mesh}
 
-init_collision_hull :: proc(local_transform, global_entity_transform: linalg.Matrix4f32, kind: HullKind) -> CollisionHull {
+init_collision_hull :: proc(local_transform, entity_global_transform: linalg.Matrix4f32, kind: Hull_Kind) -> Collision_Hull {
 	local_bounds: math2.Box3f32;
 
 	switch kind {
@@ -26,7 +26,7 @@ init_collision_hull :: proc(local_transform, global_entity_transform: linalg.Mat
 			unimplemented();
 	}
 
-	hull := CollisionHull {
+	hull := Collision_Hull {
 		local_transform,
 		linalg.MATRIX4F32_IDENTITY,
 		linalg.MATRIX3F32_IDENTITY,
@@ -35,15 +35,15 @@ init_collision_hull :: proc(local_transform, global_entity_transform: linalg.Mat
 		math2.BOX3F32_ZERO,
 	};
 
-	update_collision_hull_global_transform_and_bounds(&hull, global_entity_transform);
+	update_collision_hull_global_transform_and_bounds(&hull, entity_global_transform);
 
 	return hull;
 }
 
 // Be careful about calling this. The collision hull grid relies on the hull bounds to be exactly where it was during the last grid update. If this is called haphazardly, the collision hull grid may
-// not be able to find the correct grid cells to remove the hulls from during update_hull_global_transform_mat_and_bounds(). This can, of course be changed, it's just currently implemented this way.
-update_collision_hull_global_transform_and_bounds :: proc(using hull: ^CollisionHull, global_entity_transform: linalg.Matrix4f32) {
-	global_transform = global_entity_transform * local_transform;
+// not be able to find the correct grid cells to remove the hulls. This can, of course be changed, it's just currently implemented this way.
+update_collision_hull_global_transform_and_bounds :: proc(using hull: ^Collision_Hull, entity_global_transform: linalg.Matrix4f32) {
+	global_transform = entity_global_transform * local_transform;
 	inv_global_transform = linalg.matrix3_inverse(linalg.matrix3_from_matrix4(global_transform));
 
 	// We can ignore the translation components and use a matrix 3 because we're transforming the extent with this which is a direction vector

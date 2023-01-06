@@ -61,6 +61,7 @@ move_camera :: proc(using camera: ^Camera, window: glfw.WindowHandle, dt: f32) {
 
 	orientation_y -= mouse_pos_diff_x * ROTATION_SPEED;
 	orientation_x += mouse_pos_diff_y * ROTATION_SPEED;
+	orientation_x = clamp(orientation_x, -MAX_VERTICAL_ROTATION_ANGLE, MAX_VERTICAL_ROTATION_ANGLE);
 
 	orientation := linalg.quaternion_from_euler_angles(orientation_y, orientation_x, 0.0, .YXZ);
 

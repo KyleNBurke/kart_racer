@@ -243,7 +243,7 @@ def export_rigid_body_islands(kgl_file, txt_file, instance_objs, mesh_name_to_in
 			for other_instance_obj in instance_objs:
 				if other_instance_obj.object.kg_type == 'rigid_body' and util.is_child(instance_obj, other_instance_obj):
 					body = RigidBody()
-					body.name = util.instance_obj_name(instance_obj)
+					body.name = util.instance_obj_name(other_instance_obj)
 
 					position, rotation, scale = util.get_position_rotation_scale(other_instance_obj.matrix_world)
 					body.position = position
@@ -307,5 +307,9 @@ def export_rigid_body_islands(kgl_file, txt_file, instance_objs, mesh_name_to_in
 			kgl_file.write(struct.pack("<f", body.mass))
 			util.write_vec3(kgl_file, body.dimensions)
 			kgl_file.write(struct.pack("<?", body.collision_exclude))
+
+			cursor_check = 0b10101010_10101010_10101010_10101010
+			txt_file.write("\t\t\tcursor check: " + str(cursor_check) + "\n")
+			kgl_file.write(struct.pack("<I", cursor_check))
 	
 	txt_file.write("\n")

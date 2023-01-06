@@ -1,4 +1,4 @@
-package entity;
+package main;
 
 import "core:math/linalg";
 
@@ -7,6 +7,7 @@ Entity :: struct {
 	orientation: linalg.Quaternionf32,
 	size: linalg.Vector3f32,
 	transform: linalg.Matrix4x4f32,
+	collision_hull_record_indices: [dynamic]int,
 	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity},
 }
 

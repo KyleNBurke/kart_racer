@@ -4,8 +4,6 @@ import "core:os";
 import "core:math/linalg";
 import "core:fmt";
 import "core:mem";
-import "entity";
-import "physics";
 
 load_level :: proc(using game: ^Game) {
 	read_u32 :: proc(bytes: ^[]byte, pos: ^int) -> u32 {
@@ -69,7 +67,7 @@ load_level :: proc(using game: ^Game) {
 		return indices, attributes;
 	}
 
-	bytes, success := os.read_entire_file_from_filename("res/all.kgl");
+	bytes, success := os.read_entire_file_from_filename("res/all_copy.kgl");
 	assert(success);
 
 	pos := 0;
@@ -78,26 +76,27 @@ load_level :: proc(using game: ^Game) {
 
 	// Ground grid
 	ground_grid_half_size: f32;
+	
 	{
 		ground_grid_half_size = read_f32(&bytes, &pos);
-		physics.reset_ground_grid(&ground_grid, ground_grid_half_size);
+		reset_ground_grid(&ground_grid, ground_grid_half_size);
 		
 		meshes_count := read_u32(&bytes, &pos);
 
 		for i in 0..<meshes_count {
 			indices, positions := read_indices_attributes(&bytes, &pos);
-			physics.insert_into_ground_grid(&ground_grid, &indices, &positions);
+			insert_into_ground_grid(&ground_grid, &indices, &positions);
 		}
 	}
 
 	// Geometries
 	geometries_count := read_u32(&bytes, &pos);
-	geometry_lookups := make([dynamic]entity.Geometry_Lookup, geometries_count);
+	geometry_lookups := make([dynamic]Geometry_Lookup, geometries_count);
 
 	for i in 0..<geometries_count {
 		indices, attributes := read_indices_attributes(&bytes, &pos);
-		geometry := entity.init_triangle_geometry(indices, attributes);
-		geometry_lookups[i] = entity.add_geometry(&entities, geometry, true);
+		geometry := init_triangle_geometry(indices, attributes);
+		geometry_lookups[i] = add_geometry(&entities, geometry, true);
 	}
 
 	{ // Inanimate entities
@@ -117,15 +116,15 @@ load_level :: proc(using game: ^Game) {
 				hull_type := read_u32(&bytes, &pos);
 			}
 
-			inanimate_entity := entity.new_inanimate_entity(position, orientation, scale);
-			entity.add_entity(&entities, geometry_lookups[geometry_index], inanimate_entity);
+			inanimate_entity := new_inanimate_entity(position, orientation, scale);
+			add_entity(&entities, geometry_lookups[geometry_index], inanimate_entity);
 		}
 	}
 
 	{ // Rigid body islands
-		physics.reset_collision_hull_grid(&collision_hull_grid, ground_grid_half_size);
-
+		reset_collision_hull_grid(&collision_hull_grid, ground_grid_half_size);
 		island_count := read_u32(&bytes, &pos);
+		
 		for island_index in 0..<island_count {
 			bodies_count := read_u32(&bytes, &pos);
 			for body_index in 0..<bodies_count {
@@ -135,22 +134,38 @@ load_level :: proc(using game: ^Game) {
 				geometry_index := read_u32(&bytes, &pos);
 				hull_count := read_u32(&bytes, &pos);
 
+				// #nocheckin TEMP
+				hulls: [dynamic]Collision_Hull;
+
 				for hull_index in 0..<hull_count {
 					local_position := read_vec3(&bytes, &pos);
 					local_orientation := read_quat(&bytes, &pos);
 					local_scale := read_vec3(&bytes, &pos);
-					hull_type := read_u32(&bytes, &pos);
+					kind := cast(Hull_Kind) read_u32(&bytes, &pos);
+
+					// TEMP
+					local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
+					entity_global_transform := linalg.matrix4_from_trs(position, orientation, scale); // get this from the entity?
+					h := init_collision_hull(local_transform, entity_global_transform, kind);
+					append(&hulls, h);
 				}
 
 				mass := read_f32(&bytes, &pos);
 				dimensions := read_vec3(&bytes, &pos);
-				collision_exclude := cast(bool) read_u8(&bytes, &pos); // There is a b8/b8le
+				collision_exclude := cast(bool) read_u8(&bytes, &pos); // #nocheckin There is a b8/b8le
 
-				body := entity.new_rigid_body_entity(position, orientation, scale, mass, dimensions);
+				body := new_rigid_body_entity(position, orientation, scale, mass, dimensions);
 				body.collision_exclude = collision_exclude;
-				entity_lookup := entity.add_entity(&entities, geometry_lookups[geometry_index], body);
+				entity_lookup := add_entity(&entities, geometry_lookups[geometry_index], body);
+
+				for hull in hulls {
+					add_collision_hull_to_entity(&entities, &collision_hull_grid, entity_lookup, hull);
+				}
 
 				append(&awake_rigid_body_lookups, entity_lookup);
+
+				position_check := read_u32(&bytes, &pos);
+				assert(position_check == 0b10101010_10101010_10101010_10101010);
 			}
 		}
 	}

@@ -1,10 +1,10 @@
-package physics;
+package main;
 
 import "core:container/small_array";
 import "core:math";
 import "core:math/linalg";
 import "core:slice";
-import "../math2";
+import "math2";
 
 Contact :: struct {
 	position_a: linalg.Vector3f32,
@@ -21,7 +21,7 @@ Simplex :: struct {
 	overwrite_index: u32,
 }
 
-furthest_point_hull :: proc(hull: ^CollisionHull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
+furthest_point_hull :: proc(hull: ^Collision_Hull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
 	d := math2.matrix3_transform_direction(hull.inv_global_transform, direction);
 	point: linalg.Vector3f32;
 
@@ -136,7 +136,7 @@ develop_unique_edges :: proc(edges: ^[dynamic][2]int, a_index, b_index: int) {
 	append(edges, [?]int {a_index, b_index});
 }
 
-find_plane_normal_and_polygon :: proc(hull: ^CollisionHull, collision_normal: linalg.Vector3f32) -> (plane_normal: linalg.Vector3f32, polygon: [dynamic]linalg.Vector3f32) {
+find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: linalg.Vector3f32) -> (plane_normal: linalg.Vector3f32, polygon: [dynamic]linalg.Vector3f32) {
 	d := math2.matrix3_transform_direction(hull.inv_global_transform, collision_normal);
 	
 	switch hull.kind {
@@ -150,8 +150,7 @@ find_plane_normal_and_polygon :: proc(hull: ^CollisionHull, collision_normal: li
 						linalg.Vector3f32 {1.0, -1.0, -1.0},
 						linalg.Vector3f32 {1.0, 1.0, -1.0},
 					};
-				}
-				else {
+				} else {
 					plane_normal = linalg.Vector3f32 {-1.0, 0.0, 0.0};
 					polygon = [dynamic]linalg.Vector3f32 {
 						linalg.Vector3f32 {-1.0, 1.0, 1.0},
@@ -170,8 +169,7 @@ find_plane_normal_and_polygon :: proc(hull: ^CollisionHull, collision_normal: li
 						linalg.Vector3f32 {-1.0, -1.0, 1.0},
 						linalg.Vector3f32 {1.0, -1.0, 1.0},
 					};
-				}
-				else {
+				} else {
 					plane_normal = linalg.Vector3f32 {0.0, 0.0, -1.0};
 					polygon = [dynamic]linalg.Vector3f32 {
 						linalg.Vector3f32 {1.0, 1.0, -1.0},
@@ -189,8 +187,7 @@ find_plane_normal_and_polygon :: proc(hull: ^CollisionHull, collision_normal: li
 						linalg.Vector3f32 {-1.0, 1.0, -1.0},
 						linalg.Vector3f32 {-1.0, 1.0, 1.0},
 					};
-				}
-				else {
+				} else {
 					plane_normal = linalg.Vector3f32 {0.0, -1.0, 0.0};
 					polygon = [dynamic]linalg.Vector3f32 {
 						linalg.Vector3f32 {1.0, -1.0, 1.0},

@@ -7,8 +7,6 @@ import "core:runtime";
 import "core:math/linalg";
 import "vendor:glfw";
 import "vk2";
-import "entity";
-import "physics";
 
 MAX_FRAME_DURATION := time.Duration(33333333); // 1 / 30 seconds
 MAX_UPDATES := 5;
@@ -20,11 +18,12 @@ WindowState :: struct {
 
 Game :: struct {
 	camera: Camera,
-	entities: entity.Entities,
-	ground_grid: physics.GroundGrid,
-	collision_hull_grid: physics.CollisionHullGrid,
-	awake_rigid_body_lookups: [dynamic]entity.Entity_Lookup,
-	islands: physics.Islands,
+	entities: Entities,
+	ground_grid: Ground_Grid,
+	collision_hull_grid: Collision_Hull_Grid,
+	awake_rigid_body_lookups: [dynamic]Entity_Lookup,
+	islands: Islands,
+	constraints: Constraints,
 }
 
 main :: proc() {
@@ -130,4 +129,8 @@ init_game :: proc(camera_aspect: f32, window: glfw.WindowHandle) -> Game {
 update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	simulate(game, dt);
 	move_camera(&game.camera, window, dt);
+
+	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities);
+
+	free_all(context.temp_allocator);
 }

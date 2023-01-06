@@ -6,9 +6,8 @@ import "core:mem";
 import vk "vendor:vulkan";
 import "core:math/linalg";
 import "vk2";
-import "entity";
 
-render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities: ^entity.Entities) -> bool {
+render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities: ^Entities) -> bool {
 	@(static) logical_frame_index := 0;
 	logical_device := vulkan_context.logical_device;
 
@@ -66,6 +65,7 @@ render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities: ^entity.Ent
 	primary_command_buffer := primary_command_buffers[logical_frame_index];
 
 	secondary_command_buffers := [?]vk.CommandBuffer {
+		mesh_resources.line_secondary_command_buffers[logical_frame_index],
 		mesh_resources.basic_secondary_command_buffers[logical_frame_index],
 		mesh_resources.lambert_secondary_command_buffers[logical_frame_index],
 	};
@@ -121,7 +121,7 @@ render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities: ^entity.Ent
 	return suboptimal;
 }
 
-handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, framebuffer: vk.Framebuffer, camera: ^Camera, entities: ^entity.Entities) {
+handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, framebuffer: vk.Framebuffer, camera: ^Camera, entities: ^Entities) {
 	logical_device := vulkan_context.logical_device;
 
 	{ // Copy matrices into per frame buffer
@@ -171,10 +171,17 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 		pInheritanceInfo = &command_buffer_inheritance_info,
 	};
 
+	line_secondary_command_buffer := mesh_resources.line_secondary_command_buffers[logical_frame_index];
 	basic_secondary_command_buffer := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
 	lambert_secondary_command_buffer := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
 
-	r := vk.BeginCommandBuffer(basic_secondary_command_buffer, &command_buffer_begin_info);
+	r := vk.BeginCommandBuffer(line_secondary_command_buffer, &command_buffer_begin_info);
+	assert(r == .SUCCESS);
+	vk.CmdBindPipeline(line_secondary_command_buffer, .GRAPHICS, mesh_resources.line_pipeline);
+	vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[0], 0, {});
+	vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[0], 0, {});
+
+	r = vk.BeginCommandBuffer(basic_secondary_command_buffer, &command_buffer_begin_info);
 	assert(r == .SUCCESS);
 	vk.CmdBindPipeline(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.basic_pipeline);
 	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[0], 0, {});
@@ -222,7 +229,7 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 		secondary_command_buffer: vk.CommandBuffer;
 		switch record.geometry.pipeline {
 			case .Line:
-
+				secondary_command_buffer = line_secondary_command_buffer;
 			case .Basic:
 				secondary_command_buffer = basic_secondary_command_buffer;
 			case .Lambert:
@@ -237,6 +244,9 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 	}
 
 	// End secondary command buffers
+	r = vk.EndCommandBuffer(line_secondary_command_buffer);
+	assert(r == .SUCCESS);
+
 	r = vk.EndCommandBuffer(basic_secondary_command_buffer);
 	assert(r == .SUCCESS);
 

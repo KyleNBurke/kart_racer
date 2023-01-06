@@ -9,8 +9,7 @@ import vk "vendor:vulkan";
 import "vendor:glfw";
 
 IFFC :: 2; // In flight frames count
-PIPELINES_COUNT :: 2;
-SECONDARY_COMMAND_BUFFERS_PER_IN_FLIGHT_FRAME :: 2;
+PIPELINES_COUNT :: 3;
 
 INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE :: 5_000_000;
 
@@ -77,11 +76,13 @@ FrameResources :: struct {
 
 MeshResources :: struct {
 	per_instance_buffer_instance_block_offset: int,
+	line_secondary_command_buffers: [IFFC]vk.CommandBuffer,
 	basic_secondary_command_buffers: [IFFC]vk.CommandBuffer,
 	lambert_secondary_command_buffers: [IFFC]vk.CommandBuffer,
 	instance_descriptor_set_layout: vk.DescriptorSetLayout,
 	instance_descriptor_sets: [IFFC]vk.DescriptorSet,
 	pipeline_layout: vk.PipelineLayout,
+	line_pipeline: vk.Pipeline,
 	basic_pipeline: vk.Pipeline,
 	lambert_pipeline: vk.Pipeline,
 }
@@ -140,13 +141,15 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 
 	mesh_resources := MeshResources {
 		per_instance_buffer_instance_block_offset = per_instance_buffer_instance_block_offset,
+		line_secondary_command_buffers = secondary_command_buffers.line,
 		basic_secondary_command_buffers = secondary_command_buffers.basic,
 		lambert_secondary_command_buffers = secondary_command_buffers.lambert,
 		instance_descriptor_set_layout = mesh_instance_descriptor_set_layout,
 		instance_descriptor_sets = mesh_instance_descriptor_sets,
 		pipeline_layout = mesh_pipeline_layout,
-		basic_pipeline = pipelines[0],
-		lambert_pipeline = pipelines[1],
+		line_pipeline = pipelines[0],
+		basic_pipeline = pipelines[1],
+		lambert_pipeline = pipelines[2],
 	};
 
 	return Vulkan {
@@ -175,6 +178,7 @@ cleanup_vulkan :: proc(using vulkan: ^Vulkan) {
 	
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
+	vk.DestroyPipeline(logical_device, mesh_resources.line_pipeline, nil);
 	vk.DestroyPipelineLayout(logical_device, mesh_resources.pipeline_layout, nil);
 	vk.DestroyDescriptorSetLayout(logical_device, mesh_resources.instance_descriptor_set_layout, nil);
 	vk.DestroyDescriptorSetLayout(logical_device, frame_resources.descriptor_set_layout, nil);
@@ -213,6 +217,7 @@ recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer
 	vk.DeviceWaitIdle(logical_device);
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
+	vk.DestroyPipeline(logical_device, mesh_resources.line_pipeline, nil);
 
 	for frame in swapchain_frames {
 		vk.DestroyFramebuffer(logical_device, frame.framebuffer, nil);
@@ -229,8 +234,9 @@ recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer
 	swapchain, swapchain_frames = create_swapchain(&vulkan_context, surface_format, extent, render_pass, depth_image.image_view);
 
 	pipelines := create_pipelines(logical_device, render_pass, extent, mesh_resources.pipeline_layout);
-	mesh_resources.basic_pipeline = pipelines[0];
-	mesh_resources.lambert_pipeline = pipelines[1];
+	mesh_resources.line_pipeline = pipelines[0];
+	mesh_resources.basic_pipeline = pipelines[1];
+	mesh_resources.lambert_pipeline = pipelines[2];
 
 	fmt.println("Swapchain recreated");
 }
@@ -629,12 +635,13 @@ create_primary_command_buffers :: proc(logical_device: vk.Device, command_pool: 
 }
 
 SecondaryCommandBuffers :: struct {
+	line: [IFFC]vk.CommandBuffer,
 	basic: [IFFC]vk.CommandBuffer,
 	lambert: [IFFC]vk.CommandBuffer,
 }
 
 create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool: vk.CommandPool) -> SecondaryCommandBuffers {
-	COUNT :: IFFC * SECONDARY_COMMAND_BUFFERS_PER_IN_FLIGHT_FRAME;
+	COUNT :: IFFC * PIPELINES_COUNT;
 	
 	allocate_info := vk.CommandBufferAllocateInfo {
 		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
@@ -647,14 +654,16 @@ create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool
 	r := vk.AllocateCommandBuffers(logical_device, &allocate_info, &command_buffers_array[0]);
 	assert(r == .SUCCESS);
 
-	basic, lambert: [IFFC]vk.CommandBuffer;
+	line, basic, lambert: [IFFC]vk.CommandBuffer;
 	
 	for i in 0..<IFFC {
-		basic[i] = command_buffers_array[SECONDARY_COMMAND_BUFFERS_PER_IN_FLIGHT_FRAME * i];
-		lambert[i] = command_buffers_array[SECONDARY_COMMAND_BUFFERS_PER_IN_FLIGHT_FRAME * i + 1];
+		line[i]    = command_buffers_array[PIPELINES_COUNT * i];
+		basic[i]   = command_buffers_array[PIPELINES_COUNT * i + 1];
+		lambert[i] = command_buffers_array[PIPELINES_COUNT * i + 2];
 	}
 
 	return SecondaryCommandBuffers {
+		line,
 		basic,
 		lambert,
 	};
@@ -855,10 +864,11 @@ update_mesh_instance_descriptor_sets :: proc(logical_device: vk.Device, descript
 }
 
 create_mesh_pipeline_layout :: proc(logical_device: vk.Device, descriptor_set_layouts: ^[2]vk.DescriptorSetLayout) -> vk.PipelineLayout {
-	create_info: vk.PipelineLayoutCreateInfo;
-	create_info.sType = .PIPELINE_LAYOUT_CREATE_INFO;
-	create_info.pSetLayouts = &descriptor_set_layouts[0];
-	create_info.setLayoutCount = len(descriptor_set_layouts);
+	create_info := vk.PipelineLayoutCreateInfo {
+		sType = .PIPELINE_LAYOUT_CREATE_INFO,
+		pSetLayouts = &descriptor_set_layouts[0],
+		setLayoutCount = len(descriptor_set_layouts),
+	};
 
 	pipeline_layout: vk.PipelineLayout;
 	r := vk.CreatePipelineLayout(logical_device, &create_info, nil, &pipeline_layout);
@@ -943,38 +953,7 @@ create_pipelines :: proc(
 		attachmentCount = 1,
 	};
 
-	// Mesh
-	mesh_input_assembly_state_create_info := vk.PipelineInputAssemblyStateCreateInfo {
-		sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-		topology = .TRIANGLE_LIST,
-		primitiveRestartEnable = false,
-	};
-
-	mesh_rasterization_state_create_info := vk.PipelineRasterizationStateCreateInfo {
-		sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-		depthClampEnable = false,
-		rasterizerDiscardEnable = false,
-		polygonMode = .FILL,
-		lineWidth = 1.0,
-		cullMode = {.BACK},
-		frontFace = .COUNTER_CLOCKWISE,
-		depthBiasEnable = false,
-	};
-
-	mesh_input_binding_description := vk.VertexInputBindingDescription {
-		binding = 0,
-		stride = 36,
-		inputRate = .VERTEX,
-	};
-
-	mesh_input_attribute_description_position := vk.VertexInputAttributeDescription {
-		binding = 0,
-		location = 0,
-		format = .R32G32B32_SFLOAT,
-		offset = 0,
-	};
-
-	// Basic
+	// Line
 	basic_vert_module := create_shader_module(logical_device, "basic.vert.spv");
 	defer vk.DestroyShaderModule(logical_device, basic_vert_module, nil);
 	basic_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
@@ -995,6 +974,125 @@ create_pipelines :: proc(
 
 	basic_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {basic_vert_stage_create_info, basic_frag_stage_create_info};
 
+	line_input_binding_description := vk.VertexInputBindingDescription {
+		binding = 0,
+		stride = 24,
+		inputRate = .VERTEX,
+	};
+
+	line_input_attribute_description_position := vk.VertexInputAttributeDescription {
+		binding = 0,
+		location = 0,
+		format = .R32G32B32_SFLOAT,
+		offset = 0,
+	};
+
+	line_input_attribute_description_color := vk.VertexInputAttributeDescription {
+		binding = 0,
+		location = 1,
+		format = .R32G32B32_SFLOAT,
+		offset = 12,
+	};
+
+	line_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
+		line_input_attribute_description_position,
+		line_input_attribute_description_color,
+	};
+
+	line_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
+		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		pVertexBindingDescriptions = &line_input_binding_description,
+		vertexBindingDescriptionCount = 1,
+		pVertexAttributeDescriptions = &line_input_attribute_descriptions[0],
+		vertexAttributeDescriptionCount = len(line_input_attribute_descriptions),
+	};
+
+	line_input_assembly_state_create_info := vk.PipelineInputAssemblyStateCreateInfo {
+		sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+		topology = .LINE_LIST,
+		primitiveRestartEnable = false,
+	};
+
+	// #nochechin Let's keep our code clean here and remove the triangle parameters
+	line_rasterization_state_create_info := vk.PipelineRasterizationStateCreateInfo {
+		sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		depthClampEnable = false,
+		rasterizerDiscardEnable = false,
+		polygonMode = .FILL,
+		lineWidth = 1.0,
+		cullMode = {.BACK},
+		frontFace = .COUNTER_CLOCKWISE,
+		depthBiasEnable = false,
+	};
+
+	line_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
+		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
+		pStages = &basic_stage_create_infos[0],
+		stageCount = len(basic_stage_create_infos),
+		pVertexInputState = &line_vertex_input_state_create_info,
+		pInputAssemblyState = &line_input_assembly_state_create_info,
+		pViewportState = &viewport_state_create_info,
+		pRasterizationState = &line_rasterization_state_create_info,
+		pMultisampleState = &multisample_state_create_info,
+		pDepthStencilState = &depth_stencil_state_create_info,
+		pColorBlendState = &color_blend_state_create_info,
+		layout = mesh_pipeline_layout,
+		renderPass = render_pass,
+		subpass = 0,
+	};
+
+	// Triangle mesh
+	tri_mesh_input_assembly_state_create_info := vk.PipelineInputAssemblyStateCreateInfo {
+		sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+		topology = .TRIANGLE_LIST,
+		primitiveRestartEnable = false,
+	};
+
+	tri_mesh_rasterization_state_create_info := vk.PipelineRasterizationStateCreateInfo {
+		sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+		depthClampEnable = false,
+		rasterizerDiscardEnable = false,
+		polygonMode = .FILL,
+		lineWidth = 1.0,
+		cullMode = {.BACK},
+		frontFace = .COUNTER_CLOCKWISE,
+		depthBiasEnable = false,
+	};
+
+	tri_mesh_input_binding_description := vk.VertexInputBindingDescription {
+		binding = 0,
+		stride = 36,
+		inputRate = .VERTEX,
+	};
+
+	tri_mesh_input_attribute_description_position := vk.VertexInputAttributeDescription {
+		binding = 0,
+		location = 0,
+		format = .R32G32B32_SFLOAT,
+		offset = 0,
+	};
+
+	// Basic
+	/*basic_vert_module := create_shader_module(logical_device, "basic.vert.spv");
+	defer vk.DestroyShaderModule(logical_device, basic_vert_module, nil);
+	basic_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
+		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage = {.VERTEX},
+		module = basic_vert_module,
+		pName = shader_entry_point,
+	};
+
+	basic_frag_module := create_shader_module(logical_device, "basic.frag.spv");
+	defer vk.DestroyShaderModule(logical_device, basic_frag_module, nil);
+	basic_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
+		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage = {.FRAGMENT},
+		module = basic_frag_module,
+		pName = shader_entry_point,
+	};
+
+	basic_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {basic_vert_stage_create_info, basic_frag_stage_create_info};*/
+
 	basic_input_attribute_description_color := vk.VertexInputAttributeDescription {
 		binding = 0,
 		location = 1,
@@ -1003,26 +1101,26 @@ create_pipelines :: proc(
 	};
 
 	basic_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
-		mesh_input_attribute_description_position,
+		tri_mesh_input_attribute_description_position,
 		basic_input_attribute_description_color,
 	};
 
 	basic_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
 		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		pVertexBindingDescriptions = &mesh_input_binding_description,
+		pVertexBindingDescriptions = &tri_mesh_input_binding_description,
 		vertexBindingDescriptionCount = 1,
 		pVertexAttributeDescriptions = &basic_input_attribute_descriptions[0],
 		vertexAttributeDescriptionCount = len(basic_input_attribute_descriptions),
-	}
+	};
 
 	basic_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
 		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
 		pStages = &basic_stage_create_infos[0],
 		stageCount = len(basic_stage_create_infos),
 		pVertexInputState = &basic_vertex_input_state_create_info,
-		pInputAssemblyState = &mesh_input_assembly_state_create_info,
+		pInputAssemblyState = &tri_mesh_input_assembly_state_create_info,
 		pViewportState = &viewport_state_create_info,
-		pRasterizationState = &mesh_rasterization_state_create_info,
+		pRasterizationState = &tri_mesh_rasterization_state_create_info,
 		pMultisampleState = &multisample_state_create_info,
 		pDepthStencilState = &depth_stencil_state_create_info,
 		pColorBlendState = &color_blend_state_create_info,
@@ -1067,27 +1165,27 @@ create_pipelines :: proc(
 	};
 
 	lambert_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
-		mesh_input_attribute_description_position,
+		tri_mesh_input_attribute_description_position,
 		lambert_input_attribute_description_normal,
 		lambert_input_attribute_description_color,
 	};
 
 	lambert_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
 		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		pVertexBindingDescriptions = &mesh_input_binding_description,
+		pVertexBindingDescriptions = &tri_mesh_input_binding_description,
 		vertexBindingDescriptionCount = 1,
 		pVertexAttributeDescriptions = &lambert_input_attribute_descriptions[0],
 		vertexAttributeDescriptionCount = len(lambert_input_attribute_descriptions),
-	}
+	};
 
 	lambert_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
 		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
 		pStages = &lambert_stage_create_infos[0],
 		stageCount = len(lambert_stage_create_infos),
 		pVertexInputState = &lambert_vertex_input_state_create_info,
-		pInputAssemblyState = &mesh_input_assembly_state_create_info,
+		pInputAssemblyState = &tri_mesh_input_assembly_state_create_info,
 		pViewportState = &viewport_state_create_info,
-		pRasterizationState = &mesh_rasterization_state_create_info,
+		pRasterizationState = &tri_mesh_rasterization_state_create_info,
 		pMultisampleState = &multisample_state_create_info,
 		pDepthStencilState = &depth_stencil_state_create_info,
 		pColorBlendState = &color_blend_state_create_info,
@@ -1098,6 +1196,7 @@ create_pipelines :: proc(
 
 	// Create pipelines
 	pipeline_create_infos := [PIPELINES_COUNT]vk.GraphicsPipelineCreateInfo {
+		line_pipeline_create_info,
 		basic_pipeline_create_info,
 		lambert_pipeline_create_info,
 	};

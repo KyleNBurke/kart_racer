@@ -1,10 +1,11 @@
-package entity;
+package main;
 
 import "core:slice";
 import "core:math/linalg";
 import "core:fmt";
 
-DEFAULT_COLOR :: [?]f32 {0.3, 0.3, 0.3};
+GREY :: [?]f32 {0.3, 0.3, 0.3};
+YELLOW :: [?]f32 {1, 1, 0};
 
 Geometry :: struct {
 	indices: [dynamic]u16,
@@ -18,7 +19,7 @@ init_triangle_geometry :: proc(indices: [dynamic]u16, attributes: [dynamic]f32) 
 	return Geometry { indices, attributes, .Lambert };
 }
 
-init_box :: proc(color: [3]f32 = DEFAULT_COLOR) -> Geometry {
+init_box :: proc(color: [3]f32 = GREY) -> Geometry {
 	indices := [?]u16 {
 		0,  3,  2,  // top
 		0,  2,  1,
@@ -69,4 +70,32 @@ init_box :: proc(color: [3]f32 = DEFAULT_COLOR) -> Geometry {
 	attributes_dyn := slice.clone_to_dynamic(attributes[:]);
 
 	return Geometry { indices_dyn, attributes_dyn, .Lambert };
+}
+
+init_box_helper :: proc(color: [3]f32 = YELLOW) -> Geometry {
+	indices := [?]u16 {
+		0, 1, 0, 2, 3, 1, 3, 2,
+		5, 4, 5, 7, 6, 4, 6, 7,
+		0, 4, 5, 1, 3, 7, 6, 2,
+	};
+
+	r := color[0];
+	g := color[1];
+	b := color[2];
+
+	attributes := [?]f32 {
+		 1.0,  1.0,  1.0, r, g, b,
+		 1.0, -1.0,  1.0, r, g, b,
+		-1.0,  1.0,  1.0, r, g, b,
+		-1.0, -1.0,  1.0, r, g, b,
+		 1.0,  1.0, -1.0, r, g, b,
+		 1.0, -1.0, -1.0, r, g, b,
+		-1.0,  1.0, -1.0, r, g, b,
+		-1.0, -1.0, -1.0, r, g, b,
+	};
+
+	indices_dyn := slice.clone_to_dynamic(indices[:]);
+	attributes_dyn := slice.clone_to_dynamic(attributes[:]);
+
+	return Geometry { indices_dyn, attributes_dyn, .Line };
 }

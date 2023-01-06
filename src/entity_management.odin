@@ -1,4 +1,6 @@
-package entity;
+package main;
+
+import "core:slice";
 
 Entities :: struct {
 	geometry_records: [dynamic]Geometry_Record,
@@ -17,6 +19,7 @@ Geometry_Record :: struct {
 Entity_Record :: struct {
 	generation: u32,
 	entity: ^Entity,
+	geometry_record_index: int,
 }
 
 Lookup :: struct {
@@ -55,11 +58,13 @@ add_entity :: proc(using entities: ^Entities, geometry_lookup: Geometry_Lookup, 
 	if index, ok := pop_safe(&free_entity_records); ok {
 		record := &entity_records[index];
 		record.entity = entity;
+		record.geometry_record_index= geometry_lookup.index;
 
-		entity_lookup = Entity_Lookup { index, record.generation };
+		entity_lookup = Entity_Lookup {index, record.generation };
 	} else {
 		append(&entity_records, Entity_Record {
 			entity = entity,
+			geometry_record_index = geometry_lookup.index,
 		});
 
 		entity_lookup = Entity_Lookup { len(entity_records) - 1, 0 };
@@ -69,9 +74,41 @@ add_entity :: proc(using entities: ^Entities, geometry_lookup: Geometry_Lookup, 
 	return entity_lookup;
 }
 
+add_collision_hull_to_entity :: proc(using entities: ^Entities, collision_hull_grid: ^Collision_Hull_Grid, lookup: Entity_Lookup, hull: Collision_Hull) {
+	record := &entity_records[lookup.index];
+	assert(lookup.generation == record.generation);
+
+	record_index := insert_into_collision_hull_grid(collision_hull_grid, lookup, hull);
+	append(&record.entity.collision_hull_record_indices, record_index);
+}
+
 get_entity :: proc(using entities: ^Entities, $T: typeid, lookup: Entity_Lookup) -> ^T {
 	record := &entity_records[lookup.index];
 	assert(lookup.generation == record.generation);
 
 	return record.entity.variant.(^T);
+}
+
+remove_entity :: proc(using entites: ^Entities, entity_lookup: Entity_Lookup) {
+	entity_record := &entity_records[entity_lookup.index];
+	assert(entity_lookup.generation == entity_record.generation);
+
+	if len(entity_record.entity.collision_hull_record_indices) > 0 {
+		unimplemented();
+	}
+
+	geometry_record := &geometry_records[entity_record.geometry_record_index];
+
+	entity_lookup_index, ok := slice.linear_search(geometry_record.entity_lookups[:], entity_lookup);
+	assert(ok);
+	unordered_remove(&geometry_record.entity_lookups, entity_lookup_index);
+
+	if geometry_record.freeable && len(geometry_record.entity_lookups) == 0 {
+		// #nocheckin what things need to be freed here?
+		geometry_record.generation += 1;
+		append(&free_geometry_records, entity_record.geometry_record_index);
+	}
+
+	entity_record.generation += 1;
+	append(&free_entity_records, entity_lookup.index);
 }

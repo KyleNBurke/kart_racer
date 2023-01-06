@@ -1,10 +1,10 @@
-package physics;
+package main;
 
 import "core:math";
 import "core:math/linalg";
 import "core:container/small_array";
 import "core:fmt";
-import "../math2";
+import "math2";
 
 Triangle :: struct { a, b, c, normal: linalg.Vector3f32 }
 
@@ -19,7 +19,7 @@ Face :: struct {a, b, c: int, normal: linalg.Vector3f32 }
 GroundHull :: small_array.Small_Array(6, linalg.Vector3f32);
 
 // #cleanup What do I need to clean up in here? There are a lot of dynamic arrays created.
-evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangle: ^GroundGridTriangle, entity_hull: ^CollisionHull) -> Maybe(ContactManifold) {
+evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangle: ^Ground_Grid_Triangle, entity_hull: ^Collision_Hull) -> Maybe(ContactManifold) {
 	if !math2.box_intersects(entity_hull.global_bounds, ground_grid_triangle.bounds) {
 		return nil;
 	}
@@ -75,7 +75,7 @@ form_triangle :: proc(positions: []f32, indices: [6]int) -> Triangle {
 	return Triangle { a, b, c, normal };
 }
 
-colliding :: proc(triangle: ^Triangle, entity_hull: ^CollisionHull) -> Maybe(Simplex) {
+colliding :: proc(triangle: ^Triangle, entity_hull: ^Collision_Hull) -> Maybe(Simplex) {
 	direction := linalg.Vector3f32 {0.0, 0.0, 1.0};
 	v := support_gjk(triangle, entity_hull, direction);
 	zero := linalg.Vector3f32 {0.0, 0.0, 0.0};
@@ -109,7 +109,7 @@ colliding :: proc(triangle: ^Triangle, entity_hull: ^CollisionHull) -> Maybe(Sim
 	}
 }
 
-support_gjk :: proc(triangle: ^Triangle, hull: ^CollisionHull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
+support_gjk :: proc(triangle: ^Triangle, hull: ^Collision_Hull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
 	v1 := furthest_point_triangle(triangle, direction);
 	v2 := furthest_point_hull(hull, -direction);
 
@@ -207,7 +207,7 @@ form_convex_ground_hull :: proc(triangle: ^Triangle, positions: []f32, indices: 
 	return hull;
 }
 
-find_collision_normal :: proc(simplex: ^Simplex, ground_hull: ^GroundHull, entity_hull: ^CollisionHull) -> Maybe(linalg.Vector3f32) {
+find_collision_normal :: proc(simplex: ^Simplex, ground_hull: ^GroundHull, entity_hull: ^Collision_Hull) -> Maybe(linalg.Vector3f32) {
 	a := simplex.vertices[0];
 	b := simplex.vertices[1];
 	c := simplex.vertices[2];
@@ -266,7 +266,7 @@ find_collision_normal :: proc(simplex: ^Simplex, ground_hull: ^GroundHull, entit
 	}
 }
 
-support_epa :: proc(ground_hull: ^GroundHull, entity_hull: ^CollisionHull, direction: linalg.Vector3f32) -> (linalg.Vector3f32, bool) {
+support_epa :: proc(ground_hull: ^GroundHull, entity_hull: ^Collision_Hull, direction: linalg.Vector3f32) -> (linalg.Vector3f32, bool) {
 	v1, marker := furthest_point_ground_hull(ground_hull, direction);
 	v2 := furthest_point_hull(entity_hull, -direction);
 

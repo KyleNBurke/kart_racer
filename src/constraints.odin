@@ -1,16 +1,15 @@
-package physics;
+package main;
 
 import "core:math/linalg";
 import "core:container/small_array";
-import "../entity";
-import "../math2";
+import "math2";
 
 import "core:fmt";
 
 SLOP: f32 : 0.001;
 
 Fixed_Constraint_Set :: struct {
-	entity_lookup: entity.Entity_Lookup,
+	entity_lookup: Entity_Lookup,
 	n, t1, t2: linalg.Vector3f32,
 	constraints: small_array.Small_Array(4, Fixed_Constraint),
 }
@@ -37,7 +36,7 @@ clear_constraints :: proc(using constraints: ^Constraints) {
 	clear(&fixed_constraint_sets);
 }
 
-add_fixed_constraint_set :: proc(constraints: ^Constraints, entity_lookup: entity.Entity_Lookup, rigid_body: ^entity.Rigid_Body_Entity, manifold: ^ContactManifold, dt: f32) {
+add_fixed_constraint_set :: proc(constraints: ^Constraints, entity_lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity, manifold: ^ContactManifold, dt: f32) {
 	n := manifold.normal;
 	t1, t2 := math2.vector3_tangents(n);
 
@@ -80,10 +79,10 @@ add_fixed_constraint_set :: proc(constraints: ^Constraints, entity_lookup: entit
 	append(&constraints.fixed_constraint_sets, constraint_set);
 }
 
-solve :: proc(using constraints: ^Constraints, entities: ^entity.Entities) {
+solve_constraints :: proc(using constraints: ^Constraints, entities: ^Entities) {
 	for _ in 0..<10 {
 		for constraint_set in &fixed_constraint_sets {
-			rigid_body := entity.get_entity(entities, entity.Rigid_Body_Entity, constraint_set.entity_lookup);
+			rigid_body := get_entity(entities, Rigid_Body_Entity, constraint_set.entity_lookup);
 
 			for _, constraint_index in small_array.slice(&constraint_set.constraints) {
 				constraint := small_array.get_ptr(&constraint_set.constraints, constraint_index);
