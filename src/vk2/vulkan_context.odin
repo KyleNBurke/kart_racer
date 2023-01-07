@@ -38,7 +38,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 				if required_extension == cstring(&available_extension.extensionName[0]) do continue instance_extension;
 			}
 			
-			panic("Required device extension %q not available\n", required_extension);
+			fmt.panicf("Required device extension %q not available\n", required_extension);
 		}
 	}
 
@@ -55,7 +55,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 				if required_layer == cstring(&available_layer.layerName[0]) do continue layer;
 			}
 			
-			panic("Required layer %q not available\n", required_layer);
+			fmt.panicf("Required layer %q not available\n", required_layer);
 		}
 	}
 
