@@ -105,13 +105,13 @@ main :: proc() {
 	glfw.Terminate();
 
 	when ODIN_DEBUG {
-		for _, leak in track.allocation_map {
-			fmt.printf("%v leaked %v bytes\n", leak.location, leak.size);
-		}
+		// for _, leak in track.allocation_map {
+		// 	fmt.printf("%v leaked %v bytes\n", leak.location, leak.size);
+		// }
 
-		for bad_free in track.bad_free_array {
-			fmt.printf("%v allocation %p was freed badly\n", bad_free.location, bad_free.memory);
-		}
+		// for bad_free in track.bad_free_array {
+		// 	fmt.printf("%v allocation %p was freed badly\n", bad_free.location, bad_free.memory);
+		// }
 	}
 }
 

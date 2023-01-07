@@ -38,7 +38,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 				if required_extension == cstring(&available_extension.extensionName[0]) do continue instance_extension;
 			}
 			
-			fmt.panicf("Required device extension %q not available\n", required_extension);
+			panic("Required device extension %q not available\n", required_extension);
 		}
 	}
 
@@ -55,7 +55,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 				if required_layer == cstring(&available_layer.layerName[0]) do continue layer;
 			}
 			
-			fmt.panicf("Required layer %q not available\n", required_layer);
+			panic("Required layer %q not available\n", required_layer);
 		}
 	}
 
@@ -101,19 +101,19 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 		}
 
 		r := vk.CreateInstance(&create_info, nil, &instance);
-		fmt.assertf(r == .SUCCESS, "Failed to create Vulkan instance. Result: %v\n", r);
+		assert(r == .SUCCESS);
 	}
 
 	// Setup debug messenger
 	when ODIN_DEBUG {
 		proc_: vk.ProcCreateDebugUtilsMessengerEXT = cast(vk.ProcCreateDebugUtilsMessengerEXT) vk.GetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-		fmt.assertf(proc_ != nil, "Failed to get create debug messenger proc address\n");
+		assert(proc_ != nil);
 		proc_(instance, &debug_messenger_create_info, nil, &debug_messenger_ext);
 	}
 
 	// Create surface
 	r :=  glfw.CreateWindowSurface(instance, window, nil, &window_surface);
-	fmt.assertf(r == .SUCCESS, "Failed to create window surface. Result: %v\n", r);
+	assert(r == .SUCCESS);
 
 	// Find suitable physical device
 	{
@@ -192,7 +192,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 			break;
 		}
 
-		fmt.assertf(physical_device != nil, "Failed to find suitable physical device\n");
+		assert(physical_device != nil);
 	}
 
 	// Create logical device
@@ -231,7 +231,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 		}
 
 		r := vk.CreateDevice(physical_device, &logical_device_create_info, nil, &logical_device);
-		fmt.assertf(r == .SUCCESS, "Failed to create logical device. Result: %v\n", r);
+		assert(r == .SUCCESS);
 
 		vk.GetDeviceQueue(logical_device, graphics_queue_family, 0, &graphics_queue);
 		vk.GetDeviceQueue(logical_device, present_queue_family, 0, &present_queue);
@@ -281,7 +281,7 @@ cleanup_vulkan_context :: proc(using vulkan_context: ^VulkanContext) {
 	// Debug messenger
 	when ODIN_DEBUG {
 		proc_: vk.ProcDestroyDebugUtilsMessengerEXT = cast(vk.ProcDestroyDebugUtilsMessengerEXT) vk.GetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-		fmt.assertf(proc_ != nil, "Failed to get destroy debug messenger proc address\n");
+		assert(proc_ != nil);
 		proc_(instance, debug_messenger_ext, nil);
 	}
 

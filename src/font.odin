@@ -66,7 +66,7 @@ generate_and_save :: proc(name: string, scaled_size: u32) -> Font {
 		buffer, success := os.read_entire_file_from_filename(ttf_path);
 
 		if !success {
-			fmt.panicf("Failed to open .ttf file\n");
+			panic("Failed to open .ttf file\n");
 		}
 
 		font_info: tt.fontinfo;

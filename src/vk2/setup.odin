@@ -251,7 +251,7 @@ find_memory_type_index :: proc(physical_device: vk.PhysicalDevice, requirements:
 		}
 	}
 
-	fmt.panicf("Failed to find suitable memory type index\n");
+	panic("Failed to find suitable memory type index\n");
 }
 
 align_forward :: proc(unaligned_offset: int, alignment: int) -> int {
@@ -292,7 +292,7 @@ find_depth_format :: proc(physical_device: vk.PhysicalDevice) -> vk.Format {
 		}
 	}
 
-	fmt.panicf("Failed to find suitable depth format\n");
+	panic("Failed to find suitable depth format\n");
 }
 
 create_render_pass :: proc(logical_device: vk.Device, color_format: vk.Format, depth_format: vk.Format) -> vk.RenderPass {
@@ -345,7 +345,7 @@ create_render_pass :: proc(logical_device: vk.Device, color_format: vk.Format, d
 
 	render_pass: vk.RenderPass;
 	r := vk.CreateRenderPass(logical_device, &create_info, nil, &render_pass);
-	fmt.assertf(r == .SUCCESS, "Failed to create render pass. Result: %v\n", r);
+	assert(r == .SUCCESS);
 
 	return render_pass;
 }
@@ -381,7 +381,7 @@ create_depth_image :: proc(logical_device: vk.Device, physical_device: vk.Physic
 
 	image: vk.Image;
 	r := vk.CreateImage(logical_device, &image_create_info, nil, &image);
-	fmt.assertf(r == .SUCCESS, "Failed to create depth image. Result: %v\n", r);
+	assert(r == .SUCCESS);
 
 	// Allocate image memory
 	memory_requirements: vk.MemoryRequirements;
@@ -395,11 +395,11 @@ create_depth_image :: proc(logical_device: vk.Device, physical_device: vk.Physic
 
 	memory: vk.DeviceMemory;
 	r = vk.AllocateMemory(logical_device, &memory_allocate_info, nil, &memory);
-	fmt.assertf(r == .SUCCESS, "Failed to allocate depth image memory. Result: %v\n", r);
+	assert(r == .SUCCESS);
 
 	// Bind image to image memory
 	r = vk.BindImageMemory(logical_device, image, memory, 0);
-	fmt.assertf(r == .SUCCESS, "Failed to bind depth image to image memory. Result: %v\n", r);
+	assert(r == .SUCCESS);
 
 	// Create image view
 	subresource_range: vk.ImageSubresourceRange;
@@ -418,7 +418,7 @@ create_depth_image :: proc(logical_device: vk.Device, physical_device: vk.Physic
 
 	image_view: vk.ImageView;
 	r = vk.CreateImageView(logical_device, &image_view_create_info, nil, &image_view);
-	fmt.assertf(r == .SUCCESS, "Failed to create depth image view. Result: %v\n", r);
+	assert(r == .SUCCESS);
 
 	return DepthImage {
 		image,
@@ -482,7 +482,7 @@ create_swapchain :: proc(
 
 	swapchain: vk.SwapchainKHR;
 	r := vk.CreateSwapchainKHR(logical_device, &swapchain_create_info, nil, &swapchain);
-	fmt.assertf(r == .SUCCESS, "Failed to create swapchain. Result: %v\n", r);
+	assert(r == .SUCCESS);
 
 	swapchain_images_count: u32;
 	vk.GetSwapchainImagesKHR(logical_device, swapchain, &swapchain_images_count, nil);
@@ -510,7 +510,7 @@ create_swapchain :: proc(
 
 		image_view: vk.ImageView;
 		r = vk.CreateImageView(logical_device, &image_view_create_info, nil, &image_view);
-		fmt.assertf(r == .SUCCESS, "Failed to create swapchain image view. Result: %v\n", r);
+		assert(r == .SUCCESS);
 
 		// Create framebuffer
 		framebuffer_attachments := []vk.ImageView{image_view, depth_image_view};
@@ -526,7 +526,7 @@ create_swapchain :: proc(
 
 		framebuffer: vk.Framebuffer;
 		r = vk.CreateFramebuffer(logical_device, &framebuffer_create_info, nil, &framebuffer);
-		fmt.assertf(r == .SUCCESS, "Failed to create swapchain framebuffer. Result: %v\n", r);
+		assert(r == .SUCCESS);
 
 		swapchain_frames[i] = SwapchainFrame {image_view, framebuffer};
 	}
@@ -572,7 +572,7 @@ create_descriptor_pool :: proc(logical_device: vk.Device, fonts_count: u32) -> v
 
 	descriptor_pool: vk.DescriptorPool;
 	r := vk.CreateDescriptorPool(logical_device, &create_info, nil, &descriptor_pool);
-	fmt.assertf(r == .SUCCESS, "Failed to create descriptor pool. Result: %v\n", r);
+	assert(r == .SUCCESS);
 
 	return descriptor_pool;
 }
@@ -585,7 +585,7 @@ create_command_pool :: proc(logical_device: vk.Device, graphics_queue_family: u3
 
 	command_pool: vk.CommandPool;
 	r := vk.CreateCommandPool(logical_device, &create_info, nil, &command_pool);
-	fmt.assertf(r == .SUCCESS, "Failed to create command pool. Result: %v\n", r);
+	assert(r == .SUCCESS);
 
 	return command_pool;
 }
