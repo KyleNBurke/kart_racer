@@ -49,7 +49,7 @@ add_fixed_constraint_set :: proc(constraints: ^Constraints, entity_lookup: Entit
 
 	inverse_mass := 1.0 / rigid_body.mass;
 
-	for contact in &manifold.contacts.data {
+	for contact in small_array.slice(&manifold.contacts) {
 		r := contact.position_a - rigid_body.new_position;
 		rxn  := linalg.cross(r, n);
 		rxt1 := linalg.cross(r, t1);
@@ -86,7 +86,6 @@ solve_constraints :: proc(using constraints: ^Constraints, entities: ^Entities) 
 
 			for _, constraint_index in small_array.slice(&constraint_set.constraints) {
 				constraint := small_array.get_ptr(&constraint_set.constraints, constraint_index);
-
 				contact_velocity := rigid_body.velocity + linalg.cross(rigid_body.angular_velocity, constraint.r);
 
 				// Normal

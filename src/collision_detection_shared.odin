@@ -138,63 +138,64 @@ develop_unique_edges :: proc(edges: ^[dynamic][2]int, a_index, b_index: int) {
 
 find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: linalg.Vector3f32) -> (plane_normal: linalg.Vector3f32, polygon: [dynamic]linalg.Vector3f32) {
 	d := math2.matrix3_transform_direction(hull.inv_global_transform, collision_normal);
+	polygon = make([dynamic]linalg.Vector3f32, context.temp_allocator);
 	
 	switch hull.kind {
 		case .Box:
 			if abs(d.x) >= abs(d.y) && abs(d.x) >= abs(d.z) {
 				if d.x > 0.0 {
 					plane_normal = linalg.Vector3f32 {1.0, 0.0, 0.0};
-					polygon = [dynamic]linalg.Vector3f32 {
+					append(&polygon,
 						linalg.Vector3f32 {1.0, 1.0, 1.0},
 						linalg.Vector3f32 {1.0, -1.0, 1.0},
 						linalg.Vector3f32 {1.0, -1.0, -1.0},
 						linalg.Vector3f32 {1.0, 1.0, -1.0},
-					};
+					);
 				} else {
 					plane_normal = linalg.Vector3f32 {-1.0, 0.0, 0.0};
-					polygon = [dynamic]linalg.Vector3f32 {
+					append(&polygon,
 						linalg.Vector3f32 {-1.0, 1.0, 1.0},
 						linalg.Vector3f32 {-1.0, 1.0, -1.0},
 						linalg.Vector3f32 {-1.0, -1.0, -1.0},
 						linalg.Vector3f32 {-1.0, -1.0, 1.0},
-					};
+					);
 				}
 
 			} else if abs(d.z) > abs(d.x) && abs(d.z) > abs(d.y) {
 				if d.z > 0.0 {
 					plane_normal = linalg.Vector3f32 {0.0, 0.0, 1.0};
-					polygon = [dynamic]linalg.Vector3f32 {
+					append(&polygon,
 						linalg.Vector3f32 {1.0, 1.0, 1.0},
 						linalg.Vector3f32 {-1.0, 1.0, 1.0},
 						linalg.Vector3f32 {-1.0, -1.0, 1.0},
 						linalg.Vector3f32 {1.0, -1.0, 1.0},
-					};
+					);
 				} else {
 					plane_normal = linalg.Vector3f32 {0.0, 0.0, -1.0};
-					polygon = [dynamic]linalg.Vector3f32 {
+					append(&polygon,
 						linalg.Vector3f32 {1.0, 1.0, -1.0},
 						linalg.Vector3f32 {1.0, -1.0, -1.0},
 						linalg.Vector3f32 {-1.0, -1.0, -1.0},
 						linalg.Vector3f32 {-1.0, 1.0, -1.0},
-					};
+					);
 				}
 			} else {
 				if d.y > 0.0 {
 					plane_normal = linalg.Vector3f32 {0.0, 1.0, 0.0};
-					polygon = [dynamic]linalg.Vector3f32 {
+					append(&polygon,
 						linalg.Vector3f32 {1.0, 1.0, 1.0},
 						linalg.Vector3f32 {1.0, 1.0, -1.0},
 						linalg.Vector3f32 {-1.0, 1.0, -1.0},
 						linalg.Vector3f32 {-1.0, 1.0, 1.0},
-					};
+					);
 				} else {
 					plane_normal = linalg.Vector3f32 {0.0, -1.0, 0.0};
-					polygon = [dynamic]linalg.Vector3f32 {
+					append(&polygon,
 						linalg.Vector3f32 {1.0, -1.0, 1.0},
 						linalg.Vector3f32 {-1.0, -1.0, 1.0},
 						linalg.Vector3f32 {-1.0, -1.0, -1.0},
 						linalg.Vector3f32 {1.0, -1.0, -1.0},
-					};
+					);
 				}
 			}
 
@@ -214,7 +215,7 @@ find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: l
 	return;
 }
 
-clip :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon, inc_polygon: ^[dynamic]linalg.Vector3f32, a_is_ref: bool) -> [dynamic]Contact {
+clip :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon, inc_polygon: [dynamic]linalg.Vector3f32, a_is_ref: bool) -> [dynamic]Contact {
 	points := inc_polygon;
 
 	for ref_a, ref_index_a in ref_polygon {
@@ -225,7 +226,7 @@ clip :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon, inc_polygon: ^[dy
 		normal := linalg.normalize(linalg.cross(ref_edge, ref_plane_normal));
 		offset := linalg.dot(normal, ref_a);
 
-		new_points: [dynamic]linalg.Vector3f32;
+		new_points := make([dynamic]linalg.Vector3f32, context.temp_allocator);
 
 		for inc_a, inc_index_a in points {
 			inc_index_b := (inc_index_a + 1) % len(points);
@@ -249,20 +250,13 @@ clip :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon, inc_polygon: ^[dy
 			}
 		}
 
-		// #cleanup I'm not really sure about the best way to do this here
-		clear(points);
-
-		for new_point in new_points {
-			append(points, new_point);
-		}
-
-		delete(new_points);
+		points = new_points;
 	}
 
 	ref_a := ref_polygon[0];
 	offset := linalg.dot(ref_plane_normal, ref_a);
 
-	contacts: [dynamic]Contact;
+	contacts := make([dynamic]Contact, context.temp_allocator);
 
 	for point in points {
 		depth := linalg.dot(ref_plane_normal, point) - offset;
@@ -286,13 +280,16 @@ clip :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon, inc_polygon: ^[dy
 	return contacts;
 }
 
-reduce :: proc(points: ^[dynamic]Contact) -> small_array.Small_Array(4, Contact) {
-	final_points: small_array.Small_Array(4, Contact);
-	count := min(len(points), 4);
+// As is stands like this, we could eliminate this proc and only return at most 4 contacts from clip.
+// In the future, if we want a more complicated manifold reduction proct, this would be the place to do it.
+// So for now, we'll keep it.
+reduce :: proc(contacts: [dynamic]Contact) -> small_array.Small_Array(4, Contact) {
+	reduced_contacts: small_array.Small_Array(4, Contact);
+	count := min(len(contacts), 4);
 
 	for i in 0..<count {
-		small_array.append(&final_points, points[i]);
+		small_array.append(&reduced_contacts, contacts[i]);
 	}
 
-	return final_points;
+	return reduced_contacts;
 }

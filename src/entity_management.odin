@@ -58,7 +58,7 @@ add_entity :: proc(using entities: ^Entities, geometry_lookup: Geometry_Lookup, 
 	if index, ok := pop_safe(&free_entity_records); ok {
 		record := &entity_records[index];
 		record.entity = entity;
-		record.geometry_record_index= geometry_lookup.index;
+		record.geometry_record_index = geometry_lookup.index;
 
 		entity_lookup = Entity_Lookup {index, record.generation };
 	} else {
@@ -104,7 +104,9 @@ remove_entity :: proc(using entites: ^Entities, entity_lookup: Entity_Lookup) {
 	unordered_remove(&geometry_record.entity_lookups, entity_lookup_index);
 
 	if geometry_record.freeable && len(geometry_record.entity_lookups) == 0 {
-		// #nocheckin what things need to be freed here?
+		delete(geometry_record.geometry.indices);
+		delete(geometry_record.geometry.attributes);
+
 		geometry_record.generation += 1;
 		append(&free_geometry_records, entity_record.geometry_record_index);
 	}

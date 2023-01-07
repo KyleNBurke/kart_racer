@@ -62,10 +62,7 @@ reset_ground_grid :: proc(using ground_grid: ^Ground_Grid, half_size: f32) {
 
 insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: ^[dynamic]u16, new_positions: ^[dynamic]f32) {
 	current_indices_count := len(positions) / 3;
-	// append(&positions, ..new_positions^);
-	for new_position in new_positions {
-		append(&positions, new_position); // #nocheckin Try the _elms version?
-	}
+	append(&positions, ..new_positions[:]);
 
 	// Create a mapping from each triangle's edge to it's opposite vertex
 	edge_to_vertex_map := make(map[[2]int]int);

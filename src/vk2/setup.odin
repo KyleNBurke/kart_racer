@@ -26,7 +26,7 @@ Vulkan :: struct {
 	extent: vk.Extent2D,
 	depth_image: DepthImage,
 	swapchain: vk.SwapchainKHR,
-	swapchain_frames: [dynamic]SwapchainFrame, // Consider using small_array?
+	swapchain_frames: [dynamic]SwapchainFrame,
 	descriptor_pool: vk.DescriptorPool,
 	command_pool: vk.CommandPool,
 	image_available_semaphores: [IFFC]vk.Semaphore,
@@ -1013,15 +1013,11 @@ create_pipelines :: proc(
 		primitiveRestartEnable = false,
 	};
 
-	// #nochechin Let's keep our code clean here and remove the triangle parameters
 	line_rasterization_state_create_info := vk.PipelineRasterizationStateCreateInfo {
 		sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 		depthClampEnable = false,
 		rasterizerDiscardEnable = false,
-		polygonMode = .FILL,
 		lineWidth = 1.0,
-		cullMode = {.BACK},
-		frontFace = .COUNTER_CLOCKWISE,
 		depthBiasEnable = false,
 	};
 
@@ -1071,27 +1067,6 @@ create_pipelines :: proc(
 		format = .R32G32B32_SFLOAT,
 		offset = 0,
 	};
-
-	// Basic
-	/*basic_vert_module := create_shader_module(logical_device, "basic.vert.spv");
-	defer vk.DestroyShaderModule(logical_device, basic_vert_module, nil);
-	basic_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.VERTEX},
-		module = basic_vert_module,
-		pName = shader_entry_point,
-	};
-
-	basic_frag_module := create_shader_module(logical_device, "basic.frag.spv");
-	defer vk.DestroyShaderModule(logical_device, basic_frag_module, nil);
-	basic_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.FRAGMENT},
-		module = basic_frag_module,
-		pName = shader_entry_point,
-	};
-
-	basic_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {basic_vert_stage_create_info, basic_frag_stage_create_info};*/
 
 	basic_input_attribute_description_color := vk.VertexInputAttributeDescription {
 		binding = 0,

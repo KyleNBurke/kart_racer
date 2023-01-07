@@ -3,10 +3,12 @@ package main;
 import "core:fmt";
 import "core:c";
 import "core:time";
-import "core:runtime";
-import "core:math/linalg";
 import "vendor:glfw";
 import "vk2";
+
+when ODIN_DEBUG {
+	import "core:mem";
+}
 
 MAX_FRAME_DURATION := time.Duration(33333333); // 1 / 30 seconds
 MAX_UPDATES := 5;
@@ -27,14 +29,18 @@ Game :: struct {
 }
 
 main :: proc() {
-	fmt.assertf(glfw.Init() == 1, "Failed to initialize GLFW");
-	defer glfw.Terminate();
+	when ODIN_DEBUG {
+		track: mem.Tracking_Allocator;
+		mem.tracking_allocator_init(&track, context.allocator);
+		context.allocator = mem.tracking_allocator(&track);
+	}
+
+	assert(glfw.Init() == 1,"Failed to initialize GLFW" );
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
 	glfw.WindowHint(glfw.MAXIMIZED, 1);
 	window := glfw.CreateWindow(1080, 720, "Kart Guys", nil, nil);
-	fmt.assertf(window != nil, "Failed to create window");
-	defer glfw.DestroyWindow(window);
+	assert(window != nil, "Failed to create window");
 
 	window_state: WindowState;
 	glfw.SetWindowUserPointer(window, &window_state);
@@ -43,11 +49,11 @@ main :: proc() {
 	glfw.SetWindowIconifyCallback(window, iconify_callback);
 	glfw.SetWindowContentScaleCallback(window, content_scale_callback);
 	glfw.SetKeyCallback(window, key_callback);
+	glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_DISABLED);
 
 	content_scale_x, content_scale_y := glfw.GetWindowContentScale(window);
 	// font := init_font("roboto", 20, content_scale_x);
 	vulkan := vk2.init_vulkan(window);
-	defer vk2.cleanup_vulkan(&vulkan);
 
 	camera_aspect := f32(vulkan.extent.width) / f32(vulkan.extent.height);
 	game := init_game(camera_aspect, window);
@@ -92,6 +98,20 @@ main :: proc() {
 		}
 
 		suboptimal_swapchain = render(&vulkan, &game.camera, &game.entities);
+	}
+
+	vk2.cleanup_vulkan(&vulkan);
+	glfw.DestroyWindow(window);
+	glfw.Terminate();
+
+	when ODIN_DEBUG {
+		for _, leak in track.allocation_map {
+			fmt.printf("%v leaked %v bytes\n", leak.location, leak.size);
+		}
+
+		for bad_free in track.bad_free_array {
+			fmt.printf("%v allocation %p was freed badly\n", bad_free.location, bad_free.memory);
+		}
 	}
 }
 

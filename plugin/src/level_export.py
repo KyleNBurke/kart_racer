@@ -280,7 +280,14 @@ def export_rigid_body_islands(kgl_file, txt_file, instance_objs, mesh_name_to_in
 			util.write_vec3(kgl_file, body.position)
 			util.write_quat(kgl_file, body.rotation)
 			util.write_vec3(kgl_file, body.scale)
-			kgl_file.write(struct.pack("<I", body.mesh_index))
+			kgl_file.write(struct.pack("<I", body.mesh_index))			
+			txt_file.write("\t\t\tmass: " + str(body.mass) + "\n")
+			txt_file.write("\t\t\tdimensions: " + util.vec3_to_string(body.dimensions) + "\n")
+			txt_file.write("\t\t\tcollision_exclude: " + str(body.collision_exclude) + "\n")
+
+			kgl_file.write(struct.pack("<f", body.mass))
+			util.write_vec3(kgl_file, body.dimensions)
+			kgl_file.write(struct.pack("<?", body.collision_exclude))
 
 			txt_file.write("\t\t\thulls: " + str(len(body.hulls)) + "\n")
 			kgl_file.write(struct.pack("<I", len(body.hulls)))
@@ -299,14 +306,6 @@ def export_rigid_body_islands(kgl_file, txt_file, instance_objs, mesh_name_to_in
 				util.write_quat(kgl_file, hull.local_rotation)
 				util.write_vec3(kgl_file, hull.local_scale)
 				kgl_file.write(struct.pack("<I", hull.hull_type))
-			
-			txt_file.write("\t\t\tmass: " + str(body.mass) + "\n")
-			txt_file.write("\t\t\tdimensions: " + util.vec3_to_string(body.dimensions) + "\n")
-			txt_file.write("\t\t\tcollision_exclude: " + str(body.collision_exclude) + "\n")
-
-			kgl_file.write(struct.pack("<f", body.mass))
-			util.write_vec3(kgl_file, body.dimensions)
-			kgl_file.write(struct.pack("<?", body.collision_exclude))
 
 			cursor_check = 0b10101010_10101010_10101010_10101010
 			txt_file.write("\t\t\tcursor check: " + str(cursor_check) + "\n")

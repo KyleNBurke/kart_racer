@@ -18,7 +18,6 @@ Face :: struct {a, b, c: int, normal: linalg.Vector3f32 }
 
 GroundHull :: small_array.Small_Array(6, linalg.Vector3f32);
 
-// #cleanup What do I need to clean up in here? There are a lot of dynamic arrays created.
 evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangle: ^Ground_Grid_Triangle, entity_hull: ^Collision_Hull) -> Maybe(ContactManifold) {
 	if !math2.box_intersects(entity_hull.global_bounds, ground_grid_triangle.bounds) {
 		return nil;
@@ -31,34 +30,31 @@ evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangl
 
 		if normal, ok := find_collision_normal(&simplex, &ground_hull, entity_hull).?; ok {
 			triangle_normal := triangle.normal;
-			triangle_polygon := [dynamic]linalg.Vector3f32 {triangle.a, triangle.b, triangle.c};
+			triangle_polygon := make([dynamic]linalg.Vector3f32, context.temp_allocator);
+			append(&triangle_polygon, triangle.a, triangle.b, triangle.c);
 
 			hull_normal, hull_polygon := find_plane_normal_and_polygon(entity_hull, -normal);
 
-			points: [dynamic]Contact;
+			contacts: [dynamic]Contact;
 			if abs(linalg.dot(normal, hull_normal)) >= abs(linalg.dot(normal, triangle_normal)) {
-				points = clip(hull_normal, &hull_polygon, &triangle_polygon, true);
+				contacts = clip(hull_normal, hull_polygon, triangle_polygon, true);
 			} else {
-				points = clip(triangle_normal, &triangle_polygon, &hull_polygon, false);
+				contacts = clip(triangle_normal, triangle_polygon, hull_polygon, false);
 			};
 
-			if len(points) == 0 {
+			if len(contacts) == 0 {
 				return nil;
 			}
 
-			contacts := reduce(&points);
+			reduced_contacts := reduce(contacts);
 
-			return ContactManifold {normal, contacts};
+			return ContactManifold {normal, reduced_contacts};
 		}
 	}
 
 	return nil;
 }
 
-// This feels like something that should be done before the evaluate_ground_collision proc is called.
-// If we moved it out, we wouldn't have to pass in the triangle positions, just a single struct which is the Triangle struct defined in this file.
-// Moving this out would also required moving the AABB - AABB check out too. Since we don't need to go through the trouble of this proc if that check fails.
-// The triangle we form outside should also incude the ghost vertex positions.
 form_triangle :: proc(positions: []f32, indices: [6]int) -> Triangle {
 	a_index := indices[0] * 3;
 	b_index := indices[1] * 3;
@@ -81,7 +77,7 @@ colliding :: proc(triangle: ^Triangle, entity_hull: ^Collision_Hull) -> Maybe(Si
 	zero := linalg.Vector3f32 {0.0, 0.0, 0.0};
 	
 	simplex := Simplex {
-		[4]linalg.Vector3f32 {v, zero, zero, zero}, // The rest of the 3 zero'd out?
+		[4]linalg.Vector3f32 {v, zero, zero, zero},
 		1,
 	};
 	

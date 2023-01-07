@@ -12,8 +12,8 @@ load_level :: proc(using game: ^Game) {
 		return v;
 	}
 
-	read_u8 :: proc(bytes: ^[]byte, pos: ^int) -> u8 {
-		v := (cast(^u8) raw_data(bytes[pos^:]))^;
+	read_bool :: proc(bytes: ^[]byte, pos: ^int) -> bool {
+		v := cast(bool) (cast(^b8) raw_data(bytes[pos^:]))^;
 		pos^ += 1;
 		return v;
 	}
@@ -67,7 +67,7 @@ load_level :: proc(using game: ^Game) {
 		return indices, attributes;
 	}
 
-	bytes, success := os.read_entire_file_from_filename("res/all_copy.kgl");
+	bytes, success := os.read_entire_file_from_filename("res/all.kgl");
 	assert(success);
 
 	pos := 0;
@@ -132,33 +132,23 @@ load_level :: proc(using game: ^Game) {
 				orientation := read_quat(&bytes, &pos);
 				scale := read_vec3(&bytes, &pos);
 				geometry_index := read_u32(&bytes, &pos);
+				mass := read_f32(&bytes, &pos);
+				dimensions := read_vec3(&bytes, &pos);
+				collision_exclude := read_bool(&bytes, &pos);
+
+				rigid_body := new_rigid_body_entity(position, orientation, scale, mass, dimensions);
+				rigid_body.collision_exclude = collision_exclude;
+				entity_lookup := add_entity(&entities, geometry_lookups[geometry_index], rigid_body);
+
 				hull_count := read_u32(&bytes, &pos);
-
-				// #nocheckin TEMP
-				hulls: [dynamic]Collision_Hull;
-
 				for hull_index in 0..<hull_count {
 					local_position := read_vec3(&bytes, &pos);
 					local_orientation := read_quat(&bytes, &pos);
 					local_scale := read_vec3(&bytes, &pos);
 					kind := cast(Hull_Kind) read_u32(&bytes, &pos);
 
-					// TEMP
 					local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
-					entity_global_transform := linalg.matrix4_from_trs(position, orientation, scale); // get this from the entity?
-					h := init_collision_hull(local_transform, entity_global_transform, kind);
-					append(&hulls, h);
-				}
-
-				mass := read_f32(&bytes, &pos);
-				dimensions := read_vec3(&bytes, &pos);
-				collision_exclude := cast(bool) read_u8(&bytes, &pos); // #nocheckin There is a b8/b8le
-
-				body := new_rigid_body_entity(position, orientation, scale, mass, dimensions);
-				body.collision_exclude = collision_exclude;
-				entity_lookup := add_entity(&entities, geometry_lookups[geometry_index], body);
-
-				for hull in hulls {
+					hull := init_collision_hull(local_transform, rigid_body.transform, kind);
 					add_collision_hull_to_entity(&entities, &collision_hull_grid, entity_lookup, hull);
 				}
 

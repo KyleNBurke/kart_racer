@@ -14,7 +14,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 		rigid_body.new_position = rigid_body.position + rigid_body.velocity * dt;
 
 		w := cast(linalg.Quaternionf32) quaternion(0, rigid_body.angular_velocity.x, rigid_body.angular_velocity.y, rigid_body.angular_velocity.z)
-		new_orientation := linalg.normalize(rigid_body.orientation + w * math2.quaternion_mul_f32(rigid_body.orientation, 0.5 * dt));
+		new_orientation := linalg.normalize(rigid_body.orientation + math2.quaternion_mul_f32(w * rigid_body.orientation, 0.5 * dt));
 		update_rigid_body_inv_global_inertia_tensor(rigid_body, new_orientation);
 
 		global_entity_transform := linalg.matrix4_from_trs(rigid_body.new_position, new_orientation, rigid_body.size);
@@ -55,7 +55,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 		w := cast(linalg.Quaternionf32) quaternion(0, rigid_body.angular_velocity.x, rigid_body.angular_velocity.y, rigid_body.angular_velocity.z)
 		rigid_body.orientation += math2.quaternion_mul_f32(w * rigid_body.orientation, 0.5 * dt);
-		rigid_body.orientation = linalg.normalize0(rigid_body.orientation);
+		rigid_body.orientation = linalg.normalize(rigid_body.orientation);
 		
 		update_entity_transform(rigid_body);
 	}

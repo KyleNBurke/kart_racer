@@ -82,7 +82,7 @@ new_rigid_body_entity :: proc(
 	return e;
 }
 
-update_rigid_body_inv_global_inertia_tensor :: proc(using rigid_body: ^Rigid_Body_Entity, rotation: linalg.Quaternionf32) {
-	m := linalg.matrix3_from_quaternion(rotation);
+update_rigid_body_inv_global_inertia_tensor :: proc(using rigid_body: ^Rigid_Body_Entity, orientation: linalg.Quaternionf32) {
+	m := linalg.matrix3_from_quaternion(orientation);
 	inv_global_inertia_tensor = m * inv_local_inertia_tensor * linalg.transpose(m);
 }

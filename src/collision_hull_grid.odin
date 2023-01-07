@@ -71,7 +71,7 @@ collision_hull_grid_get_collision_hull :: proc(using collision_hull_grid: ^Colli
 
 // This proc gets called with a tentative transform. That might seem wrong but it's actually correct. We want to move the entities tentatively such that they are
 // actually penetrating one another. The next time the proc gets called the collision hull is removed from the cells wich comprise the old tentative position and
-// then the cells get the hull of the new tentative position.
+// then the cells get the hull of the new tentative position. Hulls in this grid are always at tentative positions.
 collision_hull_grid_transform_entity :: proc(using collision_hull_grid: ^Collision_Hull_Grid, hull_record_indices: []int, global_entity_transform: linalg.Matrix4f32) {
 	for record_index in hull_record_indices {
 		hull := &hull_records[record_index].hull;
