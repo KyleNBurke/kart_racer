@@ -60,7 +60,7 @@ add_entity :: proc(using entities: ^Entities, geometry_lookup: Geometry_Lookup, 
 		record.entity = entity;
 		record.geometry_record_index = geometry_lookup.index;
 
-		entity_lookup = Entity_Lookup {index, record.generation };
+		entity_lookup = Entity_Lookup { index, record.generation };
 	} else {
 		append(&entity_records, Entity_Record {
 			entity = entity,
@@ -95,13 +95,14 @@ remove_entity :: proc(using entites: ^Entities, entity_lookup: Entity_Lookup) {
 
 	if len(entity_record.entity.collision_hull_record_indices) > 0 {
 		unimplemented();
+		// delete(entity_record.entity.collision_hull_record_indices);
 	}
 
 	geometry_record := &geometry_records[entity_record.geometry_record_index];
 
-	entity_lookup_index, ok := slice.linear_search(geometry_record.entity_lookups[:], entity_lookup);
+	removal_index, ok := slice.linear_search(geometry_record.entity_lookups[:], entity_lookup);
 	assert(ok);
-	unordered_remove(&geometry_record.entity_lookups, entity_lookup_index);
+	unordered_remove(&geometry_record.entity_lookups, removal_index);
 
 	if geometry_record.freeable && len(geometry_record.entity_lookups) == 0 {
 		delete(geometry_record.geometry.indices);
@@ -111,6 +112,30 @@ remove_entity :: proc(using entites: ^Entities, entity_lookup: Entity_Lookup) {
 		append(&free_geometry_records, entity_record.geometry_record_index);
 	}
 
+	free(entity_record.entity);
 	entity_record.generation += 1;
 	append(&free_entity_records, entity_lookup.index);
+}
+
+cleanup_entities :: proc(using entites: ^Entities) {
+	for record, i in &geometry_records {\
+		if slice.contains(free_geometry_records[:], i) do continue;
+
+		delete(record.geometry.indices);
+		delete(record.geometry.attributes);
+		delete(record.entity_lookups);
+	}
+
+	delete(geometry_records);
+	delete(free_geometry_records);
+
+	for record, i in &entity_records {
+		if slice.contains(free_entity_records[:], i) do continue;
+
+		delete(record.entity.collision_hull_record_indices);
+		free(record.entity);
+	}
+
+	delete(entity_records);
+	delete(free_entity_records);
 }

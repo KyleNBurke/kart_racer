@@ -202,6 +202,7 @@ cleanup_vulkan :: proc(using vulkan: ^Vulkan) {
 		vk.DestroyImageView(logical_device, frame.color_image_view, nil);
 	}
 
+	delete(swapchain_frames);
 	vk.DestroySwapchainKHR(logical_device, swapchain, nil);
 	vk.FreeMemory(logical_device, depth_image.memory, nil);
 	vk.DestroyImageView(logical_device, depth_image.image_view, nil);
@@ -224,6 +225,7 @@ recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer
 		vk.DestroyImageView(logical_device, frame.color_image_view, nil);
 	}
 
+	delete(swapchain_frames);
 	vk.DestroySwapchainKHR(logical_device, swapchain, nil);
 	vk.FreeMemory(logical_device, depth_image.memory, nil);
 	vk.DestroyImageView(logical_device, depth_image.image_view, nil);
@@ -446,14 +448,12 @@ create_swapchain :: proc(
 	present_modes_count: u32;
 	vk.GetPhysicalDeviceSurfacePresentModesKHR(physical_device, window_surface, &present_modes_count, nil);
 	present_modes := make([]vk.PresentModeKHR, present_modes_count);
+	defer delete(present_modes);
 	vk.GetPhysicalDeviceSurfacePresentModesKHR(physical_device, window_surface, &present_modes_count, raw_data(present_modes));
 
 	present_mode := present_modes[0];
-	for m in present_modes {
-		if m == .FIFO {
-			present_mode = m;
-			break;
-		}
+	if slice.contains(present_modes[:], vk.PresentModeKHR.FIFO) {
+		present_mode = vk.PresentModeKHR.FIFO;
 	}
 
 	swapchain_create_info: vk.SwapchainCreateInfoKHR;
@@ -487,6 +487,7 @@ create_swapchain :: proc(
 	swapchain_images_count: u32;
 	vk.GetSwapchainImagesKHR(logical_device, swapchain, &swapchain_images_count, nil);
 	swapchain_images := make([]vk.Image, swapchain_images_count);
+	defer delete(swapchain_images);
 	vk.GetSwapchainImagesKHR(logical_device, swapchain, &swapchain_images_count, raw_data(swapchain_images));
 
 	swapchain_frames := make([dynamic]SwapchainFrame, swapchain_images_count);
@@ -887,6 +888,7 @@ create_pipelines :: proc(
 	create_shader_module :: proc(logical_device: vk.Device, file_name: string) -> vk.ShaderModule {
 		file_path := fmt.tprintf("build/shaders/%v", file_name);
 		code, success := os.read_entire_file_from_filename(file_path);
+		defer delete(code);
 		assert(success);
 		
 		create_info := vk.ShaderModuleCreateInfo {

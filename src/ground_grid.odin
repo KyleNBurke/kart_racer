@@ -60,9 +60,9 @@ reset_ground_grid :: proc(using ground_grid: ^Ground_Grid, half_size: f32) {
 	triangles = make([dynamic]Ground_Grid_Triangle, 0);
 }
 
-insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: ^[dynamic]u16, new_positions: ^[dynamic]f32) {
+insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: []u16, new_positions: []f32) {
 	current_indices_count := len(positions) / 3;
-	append(&positions, ..new_positions[:]);
+	append(&positions, ..new_positions);
 
 	// Create a mapping from each triangle's edge to it's opposite vertex
 	edge_to_vertex_map := make(map[[2]int]int);
@@ -122,6 +122,8 @@ insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: ^[
 			}
 		}
 	}
+
+	delete(edge_to_vertex_map);
 }
 
 ground_grid_get_triangle :: proc(using ground_grid: ^Ground_Grid, index: int) -> ^Ground_Grid_Triangle {
@@ -153,4 +155,20 @@ ground_grid_find_nearby_triangles :: proc(using ground_grid: ^Ground_Grid, bound
 	}
 
 	return indices;
+}
+
+ground_grid_cleanup :: proc(using ground_grid: ^Ground_Grid) {
+	delete(positions);
+	delete(triangles);
+	delete(query_flags);
+
+	for col in &grid {
+		for row in &col {
+			delete(row);
+		}
+
+		delete(col);
+	}
+
+	delete(grid);
 }

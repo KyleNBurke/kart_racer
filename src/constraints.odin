@@ -126,3 +126,7 @@ solve_constraints :: proc(using constraints: ^Constraints, entities: ^Entities) 
 		}
 	}
 }
+
+cleanup_constraints :: proc(using constraints: ^Constraints) {
+	delete(fixed_constraint_sets);
+}

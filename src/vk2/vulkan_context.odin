@@ -64,6 +64,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 	// Create instance
 	{
 		required_extensions: [dynamic]cstring;
+		defer delete(required_extensions);
 
 		when ODIN_DEBUG {
 			for required_extension in REQUIRED_DEBUG_INSTANCE_EXTENSIONS {
@@ -188,6 +189,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 			vk.GetPhysicalDeviceProperties(device, &properties);
 			name := strings.clone_from_bytes(properties.deviceName[:]);
 			fmt.printf("Using %v\n", name);
+			delete(name);
 			
 			break;
 		}

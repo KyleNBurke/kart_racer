@@ -3,7 +3,6 @@ package main
 import "core:os";
 import "core:math/linalg";
 import "core:fmt";
-import "core:mem";
 
 load_level :: proc(using game: ^Game) {
 	read_u32 :: proc(bytes: ^[]byte, pos: ^int) -> u32 {
@@ -68,6 +67,7 @@ load_level :: proc(using game: ^Game) {
 	}
 
 	bytes, success := os.read_entire_file_from_filename("res/all.kgl");
+	defer delete(bytes);
 	assert(success);
 
 	pos := 0;
@@ -85,13 +85,17 @@ load_level :: proc(using game: ^Game) {
 
 		for i in 0..<meshes_count {
 			indices, positions := read_indices_attributes(&bytes, &pos);
-			insert_into_ground_grid(&ground_grid, &indices, &positions);
+			insert_into_ground_grid(&ground_grid, indices[:], positions[:]);
+			
+			delete(indices);
+			delete(positions);
 		}
 	}
 
 	// Geometries
 	geometries_count := read_u32(&bytes, &pos);
 	geometry_lookups := make([dynamic]Geometry_Lookup, geometries_count);
+	defer delete(geometry_lookups);
 
 	for i in 0..<geometries_count {
 		indices, attributes := read_indices_attributes(&bytes, &pos);

@@ -1,8 +1,6 @@
 package main;
 
 import "core:slice";
-import "core:math/linalg";
-import "core:fmt";
 
 GREY :: [?]f32 {0.3, 0.3, 0.3};
 YELLOW :: [?]f32 {1, 1, 0};

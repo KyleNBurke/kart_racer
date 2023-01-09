@@ -105,13 +105,15 @@ main :: proc() {
 	glfw.Terminate();
 
 	when ODIN_DEBUG {
-		// for _, leak in track.allocation_map {
-		// 	fmt.printf("%v leaked %v bytes\n", leak.location, leak.size);
-		// }
+		cleanup_game(&game);
 
-		// for bad_free in track.bad_free_array {
-		// 	fmt.printf("%v allocation %p was freed badly\n", bad_free.location, bad_free.memory);
-		// }
+		for _, leak in track.allocation_map {
+			fmt.printf("%v leaked %v bytes\n", leak.location, leak.size);
+		}
+
+		for bad_free in track.bad_free_array {
+			fmt.printf("%v allocation %p was freed badly\n", bad_free.location, bad_free.memory);
+		}
 	}
 }
 
@@ -153,4 +155,13 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities);
 
 	free_all(context.temp_allocator);
+}
+
+cleanup_game :: proc(game: ^Game) {
+	cleanup_entities(&game.entities);
+	ground_grid_cleanup(&game.ground_grid);
+	collision_hull_grid_cleanup(&game.collision_hull_grid);
+	cleanup_constraints(&game.constraints);
+
+	delete(game.awake_rigid_body_lookups);
 }

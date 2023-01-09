@@ -115,10 +115,26 @@ collision_hull_grid_update_hull_helpers :: proc(using collision_hull_grid: ^Coll
 	geo := init_box_helper();
 	geo_lookup := add_geometry(entities, geo, true);
 
-	for hull_record, i in &hull_records {
+	for hull_record in &hull_records {
 		helper := new_inanimate_entity();
 		helper.transform = hull_record.hull.global_transform;
 		helper_lookup := add_entity(entities, geo_lookup, helper);
 		append(&hull_helpers, helper_lookup);
 	}
+}
+
+collision_hull_grid_cleanup :: proc(using collision_hull_grid: ^Collision_Hull_Grid) {
+	delete(hull_records);
+	delete(query_flags);
+
+	for col in &grid {
+		for row in &col {
+			delete(row);
+		}
+
+		delete(col);
+	}
+
+	delete(grid);
+	delete(hull_helpers);
 }

@@ -221,15 +221,19 @@ find_collision_normal :: proc(simplex: ^Simplex, ground_hull: ^GroundHull, entit
 	dca_norm := linalg.normalize(linalg.cross(dc, da));
 
 	polytope := Polytope {
-		[dynamic]linalg.Vector3f32 {a, b, c, d},
-		[dynamic]bool {true, true, true, true},
-		[dynamic]Face {
-			Face {0, 2, 1, acb_norm},
-			Face {3, 0, 1, dab_norm},
-			Face {3, 1, 2, dbc_norm},
-			Face {3, 2, 0, dca_norm},
-		},
+		make([dynamic]linalg.Vector3f32, context.temp_allocator),
+		make([dynamic]bool, context.temp_allocator),
+		make([dynamic]Face, context.temp_allocator),
 	};
+
+	append(&polytope.vertices, a, b, c, d);
+	append(&polytope.markers, true, true, true, true);
+	append(&polytope.faces,
+		Face {0, 2, 1, acb_norm},
+		Face {3, 0, 1, dab_norm},
+		Face {3, 1, 2, dbc_norm},
+		Face {3, 2, 0, dca_norm},
+	);
 
 	iteration := 0;
 
@@ -306,7 +310,7 @@ find_closest_face :: proc(polytope: ^Polytope) -> (int, f32) {
 }
 
 expand_polytope :: proc(polytope: ^Polytope, v: linalg.Vector3f32, marker: bool) {
-	edges: [dynamic][2]int;
+	edges := make([dynamic][2]int, context.temp_allocator);
 
 	for i := len(polytope.faces) - 1; i >= 0; i -= 1 {
 		face := &polytope.faces[i];
