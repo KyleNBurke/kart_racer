@@ -888,27 +888,30 @@ create_pipelines :: proc(
 ) -> [PIPELINES_COUNT]vk.Pipeline {
 	// Shared
 	create_shader_module :: proc(logical_device: vk.Device, file_name: string) -> vk.ShaderModule {
-		src_path := fmt.tprintf("src/shaders/%v", file_name);
-		src_time, src_error := os.last_write_time_by_name(src_path);
-		assert(src_error == os.ERROR_NONE);
-
 		cmp_path := fmt.tprintf("build/shaders/%v.spv", file_name);
-		cmp_time, cmp_error := os.last_write_time_by_name(cmp_path);
+		
+		when ODIN_DEBUG {
+			src_path := fmt.tprintf("src/shaders/%v", file_name);
+			src_time, src_error := os.last_write_time_by_name(src_path);
+			assert(src_error == os.ERROR_NONE);
 
-		if cmp_error == os.ERROR_PATH_NOT_FOUND {
-			e := os.make_directory("build/shaders");
-			assert(e == os.ERROR_NONE);
-		}
+			cmp_time, cmp_error := os.last_write_time_by_name(cmp_path);
 
-		if cmp_error == os.ERROR_PATH_NOT_FOUND || cmp_error == os.ERROR_FILE_NOT_FOUND || src_time > cmp_time {
-			command := fmt.tprintf("glslc %v -o %v", src_path, cmp_path);
-			command_cstring := strings.clone_to_cstring(command);
-			defer delete(command_cstring);
+			if cmp_error == os.ERROR_PATH_NOT_FOUND {
+				e := os.make_directory("build/shaders");
+				assert(e == os.ERROR_NONE);
+			}
+
+			if cmp_error == os.ERROR_PATH_NOT_FOUND || cmp_error == os.ERROR_FILE_NOT_FOUND || src_time > cmp_time {
+				command := fmt.tprintf("glslc %v -o %v", src_path, cmp_path);
+				command_cstring := strings.clone_to_cstring(command);
+				defer delete(command_cstring);
 			
-			r := libc.system(command_cstring);
-			assert(r == 0);
+				r := libc.system(command_cstring);
+				assert(r == 0);
 			
-			fmt.printf("Compiled shader %v\n", cmp_path);
+				fmt.printf("Compiled shader %v\n", cmp_path);
+			}
 		}
 
 		code, success := os.read_entire_file_from_filename(cmp_path);
