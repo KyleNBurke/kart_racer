@@ -5,6 +5,8 @@ import "core:c";
 import "core:os";
 import "core:slice";
 import "core:mem";
+import "core:c/libc";
+import "core:strings";
 import vk "vendor:vulkan";
 import "vendor:glfw";
 
@@ -886,8 +888,30 @@ create_pipelines :: proc(
 ) -> [PIPELINES_COUNT]vk.Pipeline {
 	// Shared
 	create_shader_module :: proc(logical_device: vk.Device, file_name: string) -> vk.ShaderModule {
-		file_path := fmt.tprintf("build/shaders/%v", file_name);
-		code, success := os.read_entire_file_from_filename(file_path);
+		src_path := fmt.tprintf("src/shaders/%v", file_name);
+		src_time, src_error := os.last_write_time_by_name(src_path);
+		assert(src_error == os.ERROR_NONE);
+
+		cmp_path := fmt.tprintf("build/shaders/%v.spv", file_name);
+		cmp_time, cmp_error := os.last_write_time_by_name(cmp_path);
+
+		if cmp_error == os.ERROR_PATH_NOT_FOUND {
+			e := os.make_directory("build/shaders");
+			assert(e == os.ERROR_NONE);
+		}
+
+		if cmp_error == os.ERROR_PATH_NOT_FOUND || cmp_error == os.ERROR_FILE_NOT_FOUND || src_time > cmp_time {
+			command := fmt.tprintf("glslc %v -o %v", src_path, cmp_path);
+			command_cstring := strings.clone_to_cstring(command);
+			defer delete(command_cstring);
+			
+			r := libc.system(command_cstring);
+			assert(r == 0);
+			
+			fmt.printf("Compiled shader %v\n", cmp_path);
+		}
+
+		code, success := os.read_entire_file_from_filename(cmp_path);
 		defer delete(code);
 		assert(success);
 		
@@ -956,7 +980,7 @@ create_pipelines :: proc(
 	};
 
 	// Line
-	basic_vert_module := create_shader_module(logical_device, "basic.vert.spv");
+	basic_vert_module := create_shader_module(logical_device, "basic.vert");
 	defer vk.DestroyShaderModule(logical_device, basic_vert_module, nil);
 	basic_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
 		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -965,7 +989,7 @@ create_pipelines :: proc(
 		pName = shader_entry_point,
 	};
 
-	basic_frag_module := create_shader_module(logical_device, "basic.frag.spv");
+	basic_frag_module := create_shader_module(logical_device, "basic.frag");
 	defer vk.DestroyShaderModule(logical_device, basic_frag_module, nil);
 	basic_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
 		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -1107,7 +1131,7 @@ create_pipelines :: proc(
 	};
 
 	// Lambert
-	lambert_vert_module := create_shader_module(logical_device, "lambert.vert.spv");
+	lambert_vert_module := create_shader_module(logical_device, "lambert.vert");
 	defer vk.DestroyShaderModule(logical_device, lambert_vert_module, nil);
 	lambert_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
 		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -1116,7 +1140,7 @@ create_pipelines :: proc(
 		pName = shader_entry_point,
 	};
 
-	lambert_frag_module := create_shader_module(logical_device, "lambert.frag.spv");
+	lambert_frag_module := create_shader_module(logical_device, "lambert.frag");
 	defer vk.DestroyShaderModule(logical_device, lambert_frag_module, nil);
 	lambert_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
 		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
