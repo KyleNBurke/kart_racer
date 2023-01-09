@@ -76,25 +76,29 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 			append(&required_extensions, glfw_extension);
 		}
 
-		app_info: vk.ApplicationInfo;
-		app_info.sType = .APPLICATION_INFO;
-		app_info.pApplicationName = "Vulkan game";
-		app_info.applicationVersion = vk.MAKE_VERSION(0, 0, 1);
-		app_info.pEngineName = "Vulkan engine";
-		app_info.engineVersion = vk.MAKE_VERSION(0, 0, 1);
-		app_info.apiVersion = vk.API_VERSION_1_3;
+		app_info := vk.ApplicationInfo {
+			sType = .APPLICATION_INFO,
+			pApplicationName = "Vulkan game",
+			applicationVersion = vk.MAKE_VERSION(0, 0, 1),
+			pEngineName = "Vulkan engine",
+			engineVersion = vk.MAKE_VERSION(0, 0, 1),
+			apiVersion = vk.API_VERSION_1_3,
+		};
 
-		create_info: vk.InstanceCreateInfo;
-		create_info.sType = .INSTANCE_CREATE_INFO;
-		create_info.pApplicationInfo = &app_info;
-		create_info.ppEnabledExtensionNames = raw_data(required_extensions);
-		create_info.enabledExtensionCount = cast(u32) len(required_extensions);
+		create_info := vk.InstanceCreateInfo {
+			sType = .INSTANCE_CREATE_INFO,
+			pApplicationInfo = &app_info,
+			ppEnabledExtensionNames = raw_data(required_extensions),
+			enabledExtensionCount = cast(u32) len(required_extensions),
+		};
 
 		when ODIN_DEBUG {
-			debug_messenger_create_info.sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-			debug_messenger_create_info.messageSeverity = {.WARNING, .ERROR};
-			debug_messenger_create_info.messageType = {.GENERAL, .VALIDATION, .PERFORMANCE};
-			debug_messenger_create_info.pfnUserCallback = debug_message_callback;
+			debug_messenger_create_info = vk.DebugUtilsMessengerCreateInfoEXT {
+				sType = .DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+				messageSeverity = {.WARNING, .ERROR},
+				messageType = {.GENERAL, .VALIDATION, .PERFORMANCE},
+				pfnUserCallback = debug_message_callback,
+			};
 
 			create_info.ppEnabledLayerNames = &REQUIRED_DEBUG_LAYERS[0];
 			create_info.enabledLayerCount = cast(u32) len(REQUIRED_DEBUG_LAYERS);
@@ -204,28 +208,33 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 
 		queue_priority := f32(1.0);
 
-		graphics_queue_create_info: vk.DeviceQueueCreateInfo;
-		graphics_queue_create_info.sType = .DEVICE_QUEUE_CREATE_INFO;
-		graphics_queue_create_info.queueFamilyIndex = graphics_queue_family;
-		graphics_queue_create_info.queueCount = 1;
-		graphics_queue_create_info.pQueuePriorities = &queue_priority;
+		graphics_queue_create_info := vk.DeviceQueueCreateInfo {
+			sType = .DEVICE_QUEUE_CREATE_INFO,
+			queueFamilyIndex = graphics_queue_family,
+			queueCount = 1,
+			pQueuePriorities = &queue_priority,
+		};
+		
 		append(&queue_create_infos, graphics_queue_create_info);
 
 		if graphics_queue_family != present_queue_family {
-			present_queue_create_info: vk.DeviceQueueCreateInfo;
-			present_queue_create_info.sType = .DEVICE_QUEUE_CREATE_INFO;
-			present_queue_create_info.queueFamilyIndex = present_queue_family;
-			present_queue_create_info.queueCount = 1;
-			present_queue_create_info.pQueuePriorities = &queue_priority;
+			present_queue_create_info := vk.DeviceQueueCreateInfo {
+				sType = .DEVICE_QUEUE_CREATE_INFO,
+				queueFamilyIndex = present_queue_family,
+				queueCount = 1,
+				pQueuePriorities = &queue_priority,
+			};
+			
 			append(&queue_create_infos, present_queue_create_info);
 		}
 
-		logical_device_create_info: vk.DeviceCreateInfo;
-		logical_device_create_info.sType = .DEVICE_CREATE_INFO;
-		logical_device_create_info.ppEnabledExtensionNames = &REQUIRED_DEVICE_EXTENSIONS[0];
-		logical_device_create_info.enabledExtensionCount = cast(u32) len(REQUIRED_DEVICE_EXTENSIONS);
-		logical_device_create_info.pQueueCreateInfos = raw_data(queue_create_infos);
-		logical_device_create_info.queueCreateInfoCount = cast(u32) len(queue_create_infos);
+		logical_device_create_info := vk.DeviceCreateInfo {
+			sType = .DEVICE_CREATE_INFO,
+			ppEnabledExtensionNames = &REQUIRED_DEVICE_EXTENSIONS[0],
+			enabledExtensionCount = cast(u32) len(REQUIRED_DEVICE_EXTENSIONS),
+			pQueueCreateInfos = raw_data(queue_create_infos),
+			queueCreateInfoCount = cast(u32) len(queue_create_infos),
+		};
 
 		when ODIN_DEBUG {
 			logical_device_create_info.ppEnabledLayerNames = &REQUIRED_DEBUG_LAYERS[0];

@@ -300,52 +300,57 @@ find_depth_format :: proc(physical_device: vk.PhysicalDevice) -> vk.Format {
 }
 
 create_render_pass :: proc(logical_device: vk.Device, color_format: vk.Format, depth_format: vk.Format) -> vk.RenderPass {
-	color_attachment_description: vk.AttachmentDescription;
-	color_attachment_description.format = color_format;
-	color_attachment_description.samples = {._1};
-	color_attachment_description.loadOp = .CLEAR;
-	color_attachment_description.storeOp = .STORE;
-	color_attachment_description.stencilLoadOp = .DONT_CARE;
-	color_attachment_description.stencilStoreOp = .DONT_CARE;
-	color_attachment_description.initialLayout = .UNDEFINED;
-	color_attachment_description.finalLayout = .PRESENT_SRC_KHR;
+	color_attachment_description := vk.AttachmentDescription {
+		format = color_format,
+		samples = {._1},
+		loadOp = .CLEAR,
+		storeOp = .STORE,
+		stencilLoadOp = .DONT_CARE,
+		stencilStoreOp = .DONT_CARE,
+		initialLayout = .UNDEFINED,
+		finalLayout = .PRESENT_SRC_KHR,
+	};
 
-	depth_attachment_description: vk.AttachmentDescription;
-	depth_attachment_description.format = depth_format;
-	depth_attachment_description.samples = {._1};
-	depth_attachment_description.loadOp = .CLEAR;
-	depth_attachment_description.storeOp = .DONT_CARE;
-	depth_attachment_description.stencilLoadOp = .DONT_CARE;
-	depth_attachment_description.stencilStoreOp = .DONT_CARE;
-	depth_attachment_description.initialLayout = .UNDEFINED;
-	depth_attachment_description.finalLayout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	depth_attachment_description := vk.AttachmentDescription {
+		format = depth_format,
+		samples = {._1},
+		loadOp = .CLEAR,
+		storeOp = .DONT_CARE,
+		stencilLoadOp = .DONT_CARE,
+		stencilStoreOp = .DONT_CARE,
+		initialLayout = .UNDEFINED,
+		finalLayout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+	};
 
 	attachments := [?]vk.AttachmentDescription{color_attachment_description, depth_attachment_description};
 
-	color_attachment_reference: vk.AttachmentReference;
-	color_attachment_reference.attachment = 0;
-	color_attachment_reference.layout = .COLOR_ATTACHMENT_OPTIMAL;
+	color_attachment_reference := vk.AttachmentReference {
+		attachment = 0,
+		layout = .COLOR_ATTACHMENT_OPTIMAL,
+	};
 
-	depth_attachment_reference: vk.AttachmentReference;
-	depth_attachment_reference.attachment = 1;
-	depth_attachment_reference.layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	depth_attachment_reference := vk.AttachmentReference {
+		attachment = 1,
+		layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+	};
 
-	subpass_description: vk.SubpassDescription;
-	subpass_description.pipelineBindPoint = .GRAPHICS;
-	subpass_description.pColorAttachments = &color_attachment_reference;
-	subpass_description.colorAttachmentCount = 1;
-	subpass_description.pDepthStencilAttachment = &depth_attachment_reference;
+	subpass_description := vk.SubpassDescription {
+		pipelineBindPoint = .GRAPHICS,
+		pColorAttachments = &color_attachment_reference,
+		colorAttachmentCount = 1,
+		pDepthStencilAttachment = &depth_attachment_reference,
+	};
 	
 	subpass_dependency: vk.SubpassDependency;
 
-	create_info: vk.RenderPassCreateInfo;
-	create_info.sType = .RENDER_PASS_CREATE_INFO;
-	create_info.pAttachments = &attachments[0];
-	create_info.attachmentCount = cast(u32) len(attachments);
-	create_info.pSubpasses = &subpass_description;
-	create_info.subpassCount = 1;
-	create_info.pDependencies = &subpass_dependency;
-	create_info.subpassCount = 1;
+	create_info := vk.RenderPassCreateInfo {
+		sType = .RENDER_PASS_CREATE_INFO,
+		pAttachments = &attachments[0],
+		attachmentCount = cast(u32) len(attachments),
+		pSubpasses = &subpass_description,
+		subpassCount = 1,
+		pDependencies = &subpass_dependency,
+	};
 
 	render_pass: vk.RenderPass;
 	r := vk.CreateRenderPass(logical_device, &create_info, nil, &render_pass);
@@ -370,18 +375,19 @@ create_extent :: proc(physical_device: vk.PhysicalDevice, surface: vk.SurfaceKHR
 
 create_depth_image :: proc(logical_device: vk.Device, physical_device: vk.PhysicalDevice, format: vk.Format, extent: vk.Extent2D) -> DepthImage {
 	// Create image
-	image_create_info: vk.ImageCreateInfo;
-	image_create_info.sType = .IMAGE_CREATE_INFO;
-	image_create_info.imageType = .D2;
-	image_create_info.extent = vk.Extent3D { extent.width, extent.height, 1 };
-	image_create_info.mipLevels = 1;
-	image_create_info.arrayLayers = 1;
-	image_create_info.format = format;
-	image_create_info.tiling = .OPTIMAL;
-	image_create_info.initialLayout = .UNDEFINED;
-	image_create_info.usage = {.DEPTH_STENCIL_ATTACHMENT};
-	image_create_info.samples = {._1};
-	image_create_info.sharingMode = .EXCLUSIVE;
+	image_create_info := vk.ImageCreateInfo {
+		sType = .IMAGE_CREATE_INFO,
+		imageType = .D2,
+		extent = vk.Extent3D { extent.width, extent.height, 1 },
+		mipLevels = 1,
+		arrayLayers = 1,
+		format = format,
+		tiling = .OPTIMAL,
+		initialLayout = .UNDEFINED,
+		usage = {.DEPTH_STENCIL_ATTACHMENT},
+		samples = {._1},
+		sharingMode = .EXCLUSIVE,
+	};
 
 	image: vk.Image;
 	r := vk.CreateImage(logical_device, &image_create_info, nil, &image);
@@ -392,10 +398,11 @@ create_depth_image :: proc(logical_device: vk.Device, physical_device: vk.Physic
 	vk.GetImageMemoryRequirements(logical_device, image, &memory_requirements);
 	memory_type_index := find_memory_type_index(physical_device, memory_requirements, {.DEVICE_LOCAL});
 
-	memory_allocate_info: vk.MemoryAllocateInfo;
-	memory_allocate_info.sType = .MEMORY_ALLOCATE_INFO;
-	memory_allocate_info.allocationSize = memory_requirements.size;
-	memory_allocate_info.memoryTypeIndex = memory_type_index;
+	memory_allocate_info := vk.MemoryAllocateInfo {
+		sType = .MEMORY_ALLOCATE_INFO,
+		allocationSize = memory_requirements.size,
+		memoryTypeIndex = memory_type_index,
+	};
 
 	memory: vk.DeviceMemory;
 	r = vk.AllocateMemory(logical_device, &memory_allocate_info, nil, &memory);
@@ -406,19 +413,21 @@ create_depth_image :: proc(logical_device: vk.Device, physical_device: vk.Physic
 	assert(r == .SUCCESS);
 
 	// Create image view
-	subresource_range: vk.ImageSubresourceRange;
-	subresource_range.aspectMask = {.DEPTH};
-	subresource_range.baseMipLevel = 0;
-	subresource_range.levelCount = 1;
-	subresource_range.baseArrayLayer = 0;
-	subresource_range.layerCount = 1;
+	subresource_range := vk.ImageSubresourceRange {
+		aspectMask = {.DEPTH},
+		baseMipLevel = 0,
+		levelCount = 1,
+		baseArrayLayer = 0,
+		layerCount = 1,
+	};
 
-	image_view_create_info: vk.ImageViewCreateInfo;
-	image_view_create_info.sType = .IMAGE_VIEW_CREATE_INFO;
-	image_view_create_info.image = image;
-	image_view_create_info.viewType = .D2;
-	image_view_create_info.format = format;
-	image_view_create_info.subresourceRange = subresource_range;
+	image_view_create_info := vk.ImageViewCreateInfo {
+		sType = .IMAGE_VIEW_CREATE_INFO,
+		image = image,
+		viewType = .D2,
+		format = format,
+		subresourceRange = subresource_range,
+	};
 
 	image_view: vk.ImageView;
 	r = vk.CreateImageView(logical_device, &image_view_create_info, nil, &image_view);
@@ -458,21 +467,22 @@ create_swapchain :: proc(
 		present_mode = vk.PresentModeKHR.FIFO;
 	}
 
-	swapchain_create_info: vk.SwapchainCreateInfoKHR;
-	swapchain_create_info.sType = .SWAPCHAIN_CREATE_INFO_KHR;
-	swapchain_create_info.surface = window_surface;
-	swapchain_create_info.minImageCount = min_image_count;
-	swapchain_create_info.imageFormat = color_surface_format.format;
-	swapchain_create_info.imageColorSpace = color_surface_format.colorSpace;
-	swapchain_create_info.imageExtent = extent;
-	swapchain_create_info.imageArrayLayers = 1;
-	swapchain_create_info.imageUsage = {.COLOR_ATTACHMENT};
-	swapchain_create_info.preTransform = surface_capabilities.currentTransform;
-	swapchain_create_info.compositeAlpha = {.OPAQUE};
-	swapchain_create_info.presentMode = present_mode;
-	swapchain_create_info.clipped = true;
+	swapchain_create_info := vk.SwapchainCreateInfoKHR {
+		sType = .SWAPCHAIN_CREATE_INFO_KHR,
+		surface = window_surface,
+		minImageCount = min_image_count,
+		imageFormat = color_surface_format.format,
+		imageColorSpace = color_surface_format.colorSpace,
+		imageExtent = extent,
+		imageArrayLayers = 1,
+		imageUsage = {.COLOR_ATTACHMENT},
+		preTransform = surface_capabilities.currentTransform,
+		compositeAlpha = {.OPAQUE},
+		presentMode = present_mode,
+		clipped = true,
+	};
 
-	queue_family_indices := []u32{graphics_queue_family, present_queue_family};
+	queue_family_indices := []u32 { graphics_queue_family, present_queue_family };
 
 	if graphics_queue_family == present_queue_family {
 		swapchain_create_info.imageSharingMode = .EXCLUSIVE;
@@ -496,20 +506,22 @@ create_swapchain :: proc(
 
 	for image, i in swapchain_images {
 		// Create image view
-		subresource_range: vk.ImageSubresourceRange;
-		subresource_range.aspectMask = {.COLOR};
-		subresource_range.baseMipLevel = 0;
-		subresource_range.levelCount = 1;
-		subresource_range.baseArrayLayer = 0;
-		subresource_range.layerCount = 1;
+		subresource_range := vk.ImageSubresourceRange {
+			aspectMask = {.COLOR},
+			baseMipLevel = 0,
+			levelCount = 1,
+			baseArrayLayer = 0,
+			layerCount = 1,
+		};
 
-		image_view_create_info: vk.ImageViewCreateInfo;
-		image_view_create_info.sType = .IMAGE_VIEW_CREATE_INFO;
-		image_view_create_info.image = image;
-		image_view_create_info.viewType = .D2;
-		image_view_create_info.format = color_surface_format.format;
-		image_view_create_info.components = vk.ComponentMapping {.IDENTITY, .IDENTITY, .IDENTITY, .IDENTITY};
-		image_view_create_info.subresourceRange = subresource_range;
+		image_view_create_info := vk.ImageViewCreateInfo {
+			sType = .IMAGE_VIEW_CREATE_INFO,
+			image = image,
+			viewType = .D2,
+			format = color_surface_format.format,
+			components = vk.ComponentMapping {.IDENTITY, .IDENTITY, .IDENTITY, .IDENTITY},
+			subresourceRange = subresource_range,
+		};
 
 		image_view: vk.ImageView;
 		r = vk.CreateImageView(logical_device, &image_view_create_info, nil, &image_view);
@@ -518,14 +530,15 @@ create_swapchain :: proc(
 		// Create framebuffer
 		framebuffer_attachments := []vk.ImageView{image_view, depth_image_view};
 
-		framebuffer_create_info: vk.FramebufferCreateInfo;
-		framebuffer_create_info.sType = .FRAMEBUFFER_CREATE_INFO;
-		framebuffer_create_info.renderPass = render_pass;
-		framebuffer_create_info.pAttachments = &framebuffer_attachments[0];
-		framebuffer_create_info.attachmentCount = cast(u32) len(framebuffer_attachments);
-		framebuffer_create_info.width = extent.width;
-		framebuffer_create_info.height = extent.height;
-		framebuffer_create_info.layers = 1;
+		framebuffer_create_info := vk.FramebufferCreateInfo {
+			sType = .FRAMEBUFFER_CREATE_INFO,
+			renderPass = render_pass,
+			pAttachments = &framebuffer_attachments[0],
+			attachmentCount = cast(u32) len(framebuffer_attachments),
+			width = extent.width,
+			height = extent.height,
+			layers = 1,
+		}
 
 		framebuffer: vk.Framebuffer;
 		r = vk.CreateFramebuffer(logical_device, &framebuffer_create_info, nil, &framebuffer);
@@ -539,26 +552,30 @@ create_swapchain :: proc(
 
 create_descriptor_pool :: proc(logical_device: vk.Device, fonts_count: u32) -> vk.DescriptorPool {
 	// 1 set per logical frame
-	storage_buffer_pool_size: vk.DescriptorPoolSize;
-	storage_buffer_pool_size.type = .STORAGE_BUFFER;
-	// 1 descriptor for the mesh data per logical frame
-	storage_buffer_pool_size.descriptorCount = IFFC;
+	storage_buffer_pool_size := vk.DescriptorPoolSize {
+		type = .STORAGE_BUFFER,
+		// 1 descriptor for the mesh data per logical frame
+		descriptorCount = IFFC,
+	};
 
 	// 1 set per logical frame
-	uniform_buffer_pool_size: vk.DescriptorPoolSize;
-	uniform_buffer_pool_size.type = .UNIFORM_BUFFER;
-	// 1 descriptor for the frame data and particle instance data per logical frame
-	uniform_buffer_pool_size.descriptorCount = IFFC * 2;
+	uniform_buffer_pool_size := vk.DescriptorPoolSize {
+		type = .UNIFORM_BUFFER,
+		// 1 descriptor for the frame data and particle instance data per logical frame
+		descriptorCount = IFFC * 2,
+	};
 
-	sampler_pool_size: vk.DescriptorPoolSize;
-	sampler_pool_size.type = .SAMPLER;
-	// 1 descriptor for the text sampler
-	sampler_pool_size.descriptorCount = 1;
+	sampler_pool_size := vk.DescriptorPoolSize {
+		type = .SAMPLER,
+		// 1 descriptor for the text sampler
+		descriptorCount = 1,
+	};
 
-	sampled_image_pool_size: vk.DescriptorPoolSize;
-	sampled_image_pool_size.type = .SAMPLED_IMAGE;
-	// 1 descriptor for each atlas
-	sampled_image_pool_size.descriptorCount = fonts_count;
+	sampled_image_pool_size := vk.DescriptorPoolSize {
+		type = .SAMPLED_IMAGE,
+		// 1 descriptor for each atlas
+		descriptorCount = fonts_count,
+	};
 
 	pool_sizes := []vk.DescriptorPoolSize {
 		storage_buffer_pool_size,
@@ -567,11 +584,12 @@ create_descriptor_pool :: proc(logical_device: vk.Device, fonts_count: u32) -> v
 		sampled_image_pool_size,
 	};
 
-	create_info: vk.DescriptorPoolCreateInfo;
-	create_info.sType = .DESCRIPTOR_POOL_CREATE_INFO;
-	create_info.pPoolSizes = &pool_sizes[0];
-	create_info.poolSizeCount = cast(u32) len(pool_sizes);
-	create_info.maxSets = IFFC * 3 + 2;
+	create_info := vk.DescriptorPoolCreateInfo {
+		sType = .DESCRIPTOR_POOL_CREATE_INFO,
+		pPoolSizes = &pool_sizes[0],
+		poolSizeCount = cast(u32) len(pool_sizes),
+		maxSets = IFFC * 3 + 2,
+	};
 
 	descriptor_pool: vk.DescriptorPool;
 	r := vk.CreateDescriptorPool(logical_device, &create_info, nil, &descriptor_pool);
@@ -581,10 +599,11 @@ create_descriptor_pool :: proc(logical_device: vk.Device, fonts_count: u32) -> v
 }
 
 create_command_pool :: proc(logical_device: vk.Device, graphics_queue_family: u32) -> vk.CommandPool {
-	create_info: vk.CommandPoolCreateInfo;
-	create_info.sType = .COMMAND_POOL_CREATE_INFO;
-	create_info.queueFamilyIndex = graphics_queue_family;
-	create_info.flags = {.RESET_COMMAND_BUFFER};
+	create_info := vk.CommandPoolCreateInfo {
+		sType = .COMMAND_POOL_CREATE_INFO,
+		queueFamilyIndex = graphics_queue_family,
+		flags = {.RESET_COMMAND_BUFFER},
+	};
 
 	command_pool: vk.CommandPool;
 	r := vk.CreateCommandPool(logical_device, &create_info, nil, &command_pool);
