@@ -21,6 +21,14 @@ Simplex :: struct {
 	overwrite_index: u32,
 }
 
+Polytope :: struct {
+	vertices: [dynamic]linalg.Vector3f32,
+	markers: [dynamic]bool, // Only used in ground collisions
+	faces: [dynamic]Face,
+}
+
+Face :: struct {a, b, c: int, normal: linalg.Vector3f32 }
+
 furthest_point_hull :: proc(hull: ^Collision_Hull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
 	d := math2.matrix3_transform_direction(hull.inv_global_transform, direction);
 	point: linalg.Vector3f32;
@@ -119,6 +127,64 @@ evaluate_and_evolve_simplex :: proc(using simplex: ^Simplex, direction: ^linalg.
 			return true;
 		case:
 			unreachable();
+	}
+}
+
+find_closest_face :: proc(polytope: ^Polytope) -> (int, f32) {
+	closest_index := 0;
+	closest_distance: f32 = math.F32_MAX;
+
+	for face, i in &polytope.faces {
+		a := polytope.vertices[face.a];
+		distance := linalg.dot(face.normal, a);
+
+		if distance < closest_distance {
+			closest_index = i;
+			closest_distance = distance;
+		}
+	}
+
+	return closest_index, closest_distance;
+}
+
+// The marker is only used for ground collisions
+expand_polytope :: proc(polytope: ^Polytope, v: linalg.Vector3f32, marker: Maybe(bool)) {
+	edges := make([dynamic][2]int, context.temp_allocator);
+
+	for i := len(polytope.faces) - 1; i >= 0; i -= 1 {
+		face := &polytope.faces[i];
+		a := polytope.vertices[face.a];
+		av := v - a;
+
+		if linalg.dot(face.normal, av) > 0.0 {
+			develop_unique_edges(&edges, face.a, face.b);
+			develop_unique_edges(&edges, face.b, face.c);
+			develop_unique_edges(&edges, face.c, face.a);
+			
+			unordered_remove(&polytope.faces, i);
+		}
+	}
+
+	append(&polytope.vertices, v);
+	
+	if marker, ok := marker.?; ok {
+		append(&polytope.markers, marker);
+	}
+
+	v_index := len(polytope.vertices) - 1;
+
+	for edge in &edges {
+		a_index := edge[0];
+		b_index := edge[1];
+
+		a := polytope.vertices[a_index];
+		b := polytope.vertices[b_index];
+		
+		ab := b - a;
+		av := v - a;
+		normal := linalg.normalize(linalg.cross(ab, av));
+
+		append(&polytope.faces, Face {a_index, b_index, v_index, normal});
 	}
 }
 

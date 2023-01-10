@@ -1,6 +1,8 @@
 import struct
 from . import util
 
+POSITION_CHECK_VALUE = 0b10101010_10101010_10101010_10101010
+
 def export(operator, context):
 	depsgraph = context.evaluated_depsgraph_get()
 	instance_objs = depsgraph.object_instances
@@ -215,6 +217,9 @@ def export_inanimate_entities(kgl_file, txt_file, instance_objs, mesh_name_to_in
 			util.write_quat(kgl_file, hull.local_rotation)
 			util.write_vec3(kgl_file, hull.local_scale)
 			kgl_file.write(struct.pack("<I", hull.hull_type))
+		
+		txt_file.write("\t\t\tcursor check: " + str(POSITION_CHECK_VALUE) + "\n")
+		kgl_file.write(struct.pack("<I", POSITION_CHECK_VALUE))
 
 	txt_file.write("\n")
 
@@ -307,8 +312,7 @@ def export_rigid_body_islands(kgl_file, txt_file, instance_objs, mesh_name_to_in
 				util.write_vec3(kgl_file, hull.local_scale)
 				kgl_file.write(struct.pack("<I", hull.hull_type))
 
-			cursor_check = 0b10101010_10101010_10101010_10101010
-			txt_file.write("\t\t\tcursor check: " + str(cursor_check) + "\n")
-			kgl_file.write(struct.pack("<I", cursor_check))
+			txt_file.write("\t\t\tcursor check: " + str(POSITION_CHECK_VALUE) + "\n")
+			kgl_file.write(struct.pack("<I", POSITION_CHECK_VALUE))
 	
 	txt_file.write("\n")

@@ -82,7 +82,7 @@ add_fixed_constraint_set :: proc(constraints: ^Constraints, entity_lookup: Entit
 solve_constraints :: proc(using constraints: ^Constraints, entities: ^Entities) {
 	for _ in 0..<10 {
 		for constraint_set in &fixed_constraint_sets {
-			rigid_body := get_entity(entities, Rigid_Body_Entity, constraint_set.entity_lookup);
+			rigid_body := get_entity(entities, constraint_set.entity_lookup).variant.(^Rigid_Body_Entity);
 
 			for _, constraint_index in small_array.slice(&constraint_set.constraints) {
 				constraint := small_array.get_ptr(&constraint_set.constraints, constraint_index);

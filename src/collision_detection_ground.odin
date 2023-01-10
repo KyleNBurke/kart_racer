@@ -8,14 +8,6 @@ import "math2";
 
 Triangle :: struct { a, b, c, normal: linalg.Vector3f32 }
 
-Polytope :: struct {
-	vertices: [dynamic]linalg.Vector3f32,
-	markers: [dynamic]bool,
-	faces: [dynamic]Face,
-}
-
-Face :: struct {a, b, c: int, normal: linalg.Vector3f32 }
-
 GroundHull :: small_array.Small_Array(6, linalg.Vector3f32);
 
 evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangle: ^Ground_Grid_Triangle, entity_hull: ^Collision_Hull) -> Maybe(ContactManifold) {
@@ -47,8 +39,7 @@ evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangl
 			}
 
 			reduced_contacts := reduce(contacts);
-
-			return ContactManifold {normal, reduced_contacts};
+			return ContactManifold { normal, reduced_contacts };
 		}
 	}
 
@@ -71,6 +62,7 @@ form_triangle :: proc(positions: []f32, indices: [6]int) -> Triangle {
 	return Triangle { a, b, c, normal };
 }
 
+@(private="file")
 colliding :: proc(triangle: ^Triangle, entity_hull: ^Collision_Hull) -> Maybe(Simplex) {
 	direction := linalg.Vector3f32 {0.0, 0.0, 1.0};
 	v := support_gjk(triangle, entity_hull, direction);
@@ -105,6 +97,7 @@ colliding :: proc(triangle: ^Triangle, entity_hull: ^Collision_Hull) -> Maybe(Si
 	}
 }
 
+@(private="file")
 support_gjk :: proc(triangle: ^Triangle, hull: ^Collision_Hull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
 	v1 := furthest_point_triangle(triangle, direction);
 	v2 := furthest_point_hull(hull, -direction);
@@ -203,6 +196,7 @@ form_convex_ground_hull :: proc(triangle: ^Triangle, positions: []f32, indices: 
 	return hull;
 }
 
+@(private="file")
 find_collision_normal :: proc(simplex: ^Simplex, ground_hull: ^GroundHull, entity_hull: ^Collision_Hull) -> Maybe(linalg.Vector3f32) {
 	a := simplex.vertices[0];
 	b := simplex.vertices[1];
@@ -221,9 +215,9 @@ find_collision_normal :: proc(simplex: ^Simplex, ground_hull: ^GroundHull, entit
 	dca_norm := linalg.normalize(linalg.cross(dc, da));
 
 	polytope := Polytope {
-		make([dynamic]linalg.Vector3f32, context.temp_allocator),
-		make([dynamic]bool, context.temp_allocator),
-		make([dynamic]Face, context.temp_allocator),
+		vertices = make([dynamic]linalg.Vector3f32, context.temp_allocator),
+		markers = make([dynamic]bool, context.temp_allocator),
+		faces = make([dynamic]Face, context.temp_allocator),
 	};
 
 	append(&polytope.vertices, a, b, c, d);
@@ -266,6 +260,7 @@ find_collision_normal :: proc(simplex: ^Simplex, ground_hull: ^GroundHull, entit
 	}
 }
 
+@(private="file")
 support_epa :: proc(ground_hull: ^GroundHull, entity_hull: ^Collision_Hull, direction: linalg.Vector3f32) -> (linalg.Vector3f32, bool) {
 	v1, marker := furthest_point_ground_hull(ground_hull, direction);
 	v2 := furthest_point_hull(entity_hull, -direction);
@@ -273,6 +268,7 @@ support_epa :: proc(ground_hull: ^GroundHull, entity_hull: ^Collision_Hull, dire
 	return v1 - v2, marker;
 }
 
+@(private="file")
 furthest_point_ground_hull :: proc(ground_hull: ^GroundHull, direction: linalg.Vector3f32) -> (linalg.Vector3f32, bool) {
 	furthest_dot: f32 = math.F32_MIN;
 	furthest_index := 0;
@@ -290,57 +286,4 @@ furthest_point_ground_hull :: proc(ground_hull: ^GroundHull, direction: linalg.V
 	marker := furthest_index < 3; // If the index is < 3 then we know it came from the reference triangle
 
 	return point, marker;
-}
-
-find_closest_face :: proc(polytope: ^Polytope) -> (int, f32) {
-	closest_index := 0;
-	closest_distance: f32 = math.F32_MAX;
-
-	for face, i in &polytope.faces {
-		a := polytope.vertices[face.a];
-		distance := linalg.dot(face.normal, a);
-
-		if distance < closest_distance {
-			closest_index = i;
-			closest_distance = distance;
-		}
-	}
-
-	return closest_index, closest_distance;
-}
-
-expand_polytope :: proc(polytope: ^Polytope, v: linalg.Vector3f32, marker: bool) {
-	edges := make([dynamic][2]int, context.temp_allocator);
-
-	for i := len(polytope.faces) - 1; i >= 0; i -= 1 {
-		face := &polytope.faces[i];
-		a := polytope.vertices[face.a];
-		av := v - a;
-
-		if linalg.dot(face.normal, av) > 0.0 {
-			develop_unique_edges(&edges, face.a, face.b);
-			develop_unique_edges(&edges, face.b, face.c);
-			develop_unique_edges(&edges, face.c, face.a);
-			
-			unordered_remove(&polytope.faces, i);
-		}
-	}
-
-	append(&polytope.vertices, v);
-	append(&polytope.markers, marker);
-	v_index := len(polytope.vertices) - 1;
-
-	for edge in &edges {
-		a_index := edge[0];
-		b_index := edge[1];
-
-		a := polytope.vertices[a_index];
-		b := polytope.vertices[b_index];
-		
-		ab := b - a;
-		av := v - a;
-		normal := linalg.normalize(linalg.cross(ab, av));
-
-		append(&polytope.faces, Face {a_index, b_index, v_index, normal});
-	}
 }

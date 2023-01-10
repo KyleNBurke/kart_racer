@@ -82,11 +82,11 @@ add_collision_hull_to_entity :: proc(using entities: ^Entities, collision_hull_g
 	append(&record.entity.collision_hull_record_indices, record_index);
 }
 
-get_entity :: proc(using entities: ^Entities, $T: typeid, lookup: Entity_Lookup) -> ^T {
+get_entity :: proc(using entities: ^Entities, lookup: Entity_Lookup) -> ^Entity {
 	record := &entity_records[lookup.index];
 	assert(lookup.generation == record.generation);
 
-	return record.entity.variant.(^T);
+	return record.entity;
 }
 
 remove_entity :: proc(using entites: ^Entities, entity_lookup: Entity_Lookup) {

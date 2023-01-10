@@ -105,6 +105,34 @@ collision_hull_grid_transform_entity :: proc(using collision_hull_grid: ^Collisi
 	}
 }
 
+collision_hull_grid_find_nearby_hulls :: proc(using collision_hull_grid: ^Collision_Hull_Grid, bounds: math2.Box3f32) -> [dynamic]int {
+	@(static) query_run: u32 = 0;
+
+	if query_run == max(u32) {
+		slice.fill(query_flags[:], 0);
+		query_run = 0;
+	}
+
+	query_run += 1;
+	indices := make([dynamic]int, context.temp_allocator);
+
+	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(half_cell_count, CELL_SIZE, bounds);
+	if !ok do return indices;
+
+	for x in grid_min_x..<grid_max_x {
+		for y in grid_min_y..<grid_max_y {
+			for index in &grid[x][y] {
+				if query_flags[index] != query_run {
+					append(&indices, index);
+					query_flags[index] = query_run;
+				}
+			}
+		}
+	}
+
+	return indices;
+}
+
 collision_hull_grid_update_hull_helpers :: proc(using collision_hull_grid: ^Collision_Hull_Grid, entities: ^Entities) {
 	for lookup in &hull_helpers {
 		remove_entity(entities, lookup);

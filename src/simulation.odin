@@ -8,7 +8,7 @@ GRAVITY: f32 : -20.0;
 
 simulate :: proc(game: ^Game, dt: f32) {
 	for lookup in game.awake_rigid_body_lookups {
-		rigid_body := get_entity(&game.entities, Rigid_Body_Entity, lookup);
+		rigid_body := get_entity(&game.entities, lookup).variant.(^Rigid_Body_Entity);
 
 		rigid_body.velocity.y += GRAVITY * dt;
 		rigid_body.new_position = rigid_body.position + rigid_body.velocity * dt;
@@ -25,11 +25,13 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 	clear_constraints(&game.constraints);
 
-	for provoking_lookup in game.awake_rigid_body_lookups {
-		provoking_entity := get_entity(&game.entities, Rigid_Body_Entity, provoking_lookup);
+	checked_hulls := make([dynamic]bool, len(game.collision_hull_grid.hull_records), context.temp_allocator);
 
-		for provoking_hull_record_index in provoking_entity.collision_hull_record_indices {
-			provoking_hull := collision_hull_grid_get_collision_hull(&game.collision_hull_grid, provoking_hull_record_index);
+	for provoking_lookup in game.awake_rigid_body_lookups {
+		provoking_entity := get_entity(&game.entities, provoking_lookup).variant.(^Rigid_Body_Entity);
+
+		for provoking_hull_index in provoking_entity.collision_hull_record_indices {
+			provoking_hull := &game.collision_hull_grid.hull_records[provoking_hull_index].hull;
 
 			// Handle collisions with the ground
 			nearby_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, provoking_hull.global_bounds);
@@ -43,13 +45,40 @@ simulate :: proc(game: ^Game, dt: f32) {
 			}
 
 			// Handle collisions with other hulls
+			nearby_hull_indices := collision_hull_grid_find_nearby_hulls(&game.collision_hull_grid, provoking_hull.global_bounds);
+
+			for nearby_hull_index in nearby_hull_indices {
+				if checked_hulls[nearby_hull_index] || provoking_hull_index == nearby_hull_index do continue;
+
+				nearby_hull_record := &game.collision_hull_grid.hull_records[nearby_hull_index];
+				nearby_lookup := nearby_hull_record.entity_lookup;
+				nearby_hull := &nearby_hull_record.hull;
+
+				if provoking_lookup == nearby_lookup do continue;
+
+				nearby_entity := get_entity(&game.entities, nearby_lookup);
+
+				if nearby_rigid_body, ok := nearby_entity.variant.(^Rigid_Body_Entity); ok {
+					if provoking_entity.collision_exclude && nearby_rigid_body.collision_exclude do continue;
+				}
+
+				if manifold, ok := evaluate_entity_collision(provoking_hull, nearby_hull).?; ok {
+					switch e in nearby_entity.variant {
+						case ^Rigid_Body_Entity:
+						case ^Inanimate_Entity:
+							add_fixed_constraint_set(&game.constraints, provoking_lookup, provoking_entity, &manifold, dt);
+					}
+				}
+			}
+
+			checked_hulls[provoking_hull_index] = true;
 		}
 	}
 
 	solve_constraints(&game.constraints, &game.entities);
 
 	for lookup in game.awake_rigid_body_lookups {
-		rigid_body := get_entity(&game.entities, Rigid_Body_Entity, lookup);
+		rigid_body := get_entity(&game.entities, lookup).variant.(^Rigid_Body_Entity);
 
 		rigid_body.position += rigid_body.velocity * dt;
 

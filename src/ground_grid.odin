@@ -135,6 +135,7 @@ ground_grid_find_nearby_triangles :: proc(using ground_grid: ^Ground_Grid, bound
 
 	if query_run == max(u32) {
 		slice.fill(query_flags[:], 0);
+		query_run = 0;
 	}
 
 	query_run += 1;
