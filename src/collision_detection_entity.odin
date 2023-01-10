@@ -4,7 +4,7 @@ import "core:fmt";
 import "core:math/linalg";
 import "math2";
 
-evaluate_entity_collision :: proc(hull_a, hull_b: ^Collision_Hull) -> Maybe(ContactManifold) {
+evaluate_entity_collision :: proc(hull_a, hull_b: ^Collision_Hull) -> Maybe(Contact_Manifold) {
 	if !math2.box_intersects(hull_a.global_bounds, hull_b.global_bounds) {
 		return nil;
 	}
@@ -27,7 +27,7 @@ evaluate_entity_collision :: proc(hull_a, hull_b: ^Collision_Hull) -> Maybe(Cont
 			}
 			
 			reduced_contacts := reduce(contacts);
-			return ContactManifold { normal, reduced_contacts };
+			return Contact_Manifold { normal, reduced_contacts };
 		}
 	}
 	

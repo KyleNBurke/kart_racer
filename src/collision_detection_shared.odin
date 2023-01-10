@@ -11,7 +11,7 @@ Contact :: struct {
 	position_b: linalg.Vector3f32,
 }
 
-ContactManifold :: struct {
+Contact_Manifold :: struct {
 	normal: linalg.Vector3f32,
 	contacts: small_array.Small_Array(4, Contact),
 }

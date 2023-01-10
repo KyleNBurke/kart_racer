@@ -65,6 +65,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 				if manifold, ok := evaluate_entity_collision(provoking_hull, nearby_hull).?; ok {
 					switch e in nearby_entity.variant {
 						case ^Rigid_Body_Entity:
+							add_movable_constraint_set(&game.constraints, provoking_lookup, nearby_lookup, provoking_entity, e, &manifold, dt);
 						case ^Inanimate_Entity:
 							add_fixed_constraint_set(&game.constraints, provoking_lookup, provoking_entity, &manifold, dt);
 					}
