@@ -135,6 +135,7 @@ load_level :: proc(using game: ^Game) {
 
 	{ // Rigid body islands
 		island_count := read_u32(&bytes, &pos);
+		islands.asleep_islands = make([dynamic][dynamic]Entity_Lookup, island_count);
 		
 		for island_index in 0..<island_count {
 			bodies_count := read_u32(&bytes, &pos);
@@ -163,7 +164,7 @@ load_level :: proc(using game: ^Game) {
 					add_collision_hull_to_entity(&entities, &collision_hull_grid, entity_lookup, hull);
 				}
 
-				append(&awake_rigid_body_lookups, entity_lookup);
+				append(&islands.asleep_islands[island_index], entity_lookup);
 
 				position_check := read_u32(&bytes, &pos);
 				assert(position_check == POSITION_CHECK_VALUE);
