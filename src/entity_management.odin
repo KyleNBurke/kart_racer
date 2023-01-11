@@ -118,12 +118,13 @@ remove_entity :: proc(using entites: ^Entities, entity_lookup: Entity_Lookup) {
 }
 
 cleanup_entities :: proc(using entites: ^Entities) {
-	for record, i in &geometry_records {\
+	for record, i in &geometry_records {
+		delete(record.entity_lookups);
+		
 		if slice.contains(free_geometry_records[:], i) do continue;
 
 		delete(record.geometry.indices);
 		delete(record.geometry.attributes);
-		delete(record.entity_lookups);
 	}
 
 	delete(geometry_records);

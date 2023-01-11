@@ -153,6 +153,7 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	move_camera(&game.camera, window, dt);
 
 	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities);
+	update_island_helpers(&game.islands, &game.collision_hull_grid, &game.entities);
 
 	free_all(context.temp_allocator);
 }
@@ -162,6 +163,7 @@ cleanup_game :: proc(game: ^Game) {
 	ground_grid_cleanup(&game.ground_grid);
 	collision_hull_grid_cleanup(&game.collision_hull_grid);
 	cleanup_constraints(&game.constraints);
+	cleanup_islands(&game.islands);
 
 	delete(game.awake_rigid_body_lookups);
 }

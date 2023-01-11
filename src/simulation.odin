@@ -7,6 +7,8 @@ import "core:fmt";
 GRAVITY: f32 : -20.0;
 
 simulate :: proc(game: ^Game, dt: f32) {
+	clear_islands(&game.islands);
+
 	for lookup in game.awake_rigid_body_lookups {
 		rigid_body := get_entity(&game.entities, lookup).variant.(^Rigid_Body_Entity);
 
@@ -21,11 +23,14 @@ simulate :: proc(game: ^Game, dt: f32) {
 		collision_hull_grid_transform_entity(&game.collision_hull_grid, rigid_body.collision_hull_record_indices[:], global_entity_transform);
 		
 		rigid_body.new_transform = global_entity_transform;
+
+		init_island(&game.islands, lookup, rigid_body);
 	}
 
 	clear_constraints(&game.constraints);
 
 	checked_hulls := make([dynamic]bool, len(game.collision_hull_grid.hull_records), context.temp_allocator);
+	entities_woken_up := make([dynamic]Entity_Lookup, context.temp_allocator);
 
 	for provoking_lookup in game.awake_rigid_body_lookups {
 		provoking_entity := get_entity(&game.entities, provoking_lookup).variant.(^Rigid_Body_Entity);
@@ -66,6 +71,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 					switch e in nearby_entity.variant {
 						case ^Rigid_Body_Entity:
 							add_movable_constraint_set(&game.constraints, provoking_lookup, nearby_lookup, provoking_entity, e, &manifold, dt);
+							merge_islands(&game.islands, &game.entities, &entities_woken_up, provoking_entity, e);
 						case ^Inanimate_Entity:
 							add_fixed_constraint_set(&game.constraints, provoking_lookup, provoking_entity, &manifold, dt);
 					}
@@ -77,10 +83,12 @@ simulate :: proc(game: ^Game, dt: f32) {
 	}
 
 	solve_constraints(&game.constraints, &game.entities);
+	append(&game.awake_rigid_body_lookups, ..entities_woken_up[:]);
 
 	for lookup in game.awake_rigid_body_lookups {
 		rigid_body := get_entity(&game.entities, lookup).variant.(^Rigid_Body_Entity);
 
+		old_position := rigid_body.position;
 		rigid_body.position += rigid_body.velocity * dt;
 
 		w := cast(linalg.Quaternionf32) quaternion(0, rigid_body.angular_velocity.x, rigid_body.angular_velocity.y, rigid_body.angular_velocity.z)
@@ -88,5 +96,13 @@ simulate :: proc(game: ^Game, dt: f32) {
 		rigid_body.orientation = linalg.normalize(rigid_body.orientation);
 		
 		update_entity_transform(rigid_body);
+
+		if linalg.length2(rigid_body.position - old_position) < 0.00005 {
+			rigid_body.sleep_duration += dt;
+		} else {
+			rigid_body.sleep_duration = 0;
+		}
 	}
+
+	sleep_islands(&game.islands, &game.entities, &game.awake_rigid_body_lookups);
 }

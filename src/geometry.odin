@@ -2,6 +2,9 @@ package main;
 
 import "core:slice";
 
+NEG_ONE :: [?]f32 {-1, -1, -1};
+POS_ONE :: [?]f32 {1, 1, 1};
+
 GREY :: [?]f32 {0.3, 0.3, 0.3};
 YELLOW :: [?]f32 {1, 1, 0};
 
@@ -33,9 +36,7 @@ init_box :: proc(color: [3]f32 = GREY) -> Geometry {
 		20, 22, 21,
 	};
 
-	r := color[0];
-	g := color[1];
-	b := color[2];
+	r, g, b := color[0], color[1], color[2];
 
 	attributes := [?]f32 {
 		 1.0,  1.0,  1.0,  0.0,  1.0,  0.0, r, g, b, // top
@@ -70,26 +71,26 @@ init_box :: proc(color: [3]f32 = GREY) -> Geometry {
 	return Geometry { indices_dyn, attributes_dyn, .Lambert };
 }
 
-init_box_helper :: proc(color: [3]f32 = YELLOW) -> Geometry {
+init_box_helper :: proc(min: [3]f32 = NEG_ONE, max: [3]f32 = POS_ONE, color: [3]f32 = YELLOW) -> Geometry {
 	indices := [?]u16 {
 		0, 1, 0, 2, 3, 1, 3, 2,
 		5, 4, 5, 7, 6, 4, 6, 7,
 		0, 4, 5, 1, 3, 7, 6, 2,
 	};
 
-	r := color[0];
-	g := color[1];
-	b := color[2];
+	min_x, min_y, min_z := min[0], min[1], min[2];
+	max_x, max_y, max_z := max[0], max[1], max[2];
+	r, g, b := color[0], color[1], color[2];
 
 	attributes := [?]f32 {
-		 1.0,  1.0,  1.0, r, g, b,
-		 1.0, -1.0,  1.0, r, g, b,
-		-1.0,  1.0,  1.0, r, g, b,
-		-1.0, -1.0,  1.0, r, g, b,
-		 1.0,  1.0, -1.0, r, g, b,
-		 1.0, -1.0, -1.0, r, g, b,
-		-1.0,  1.0, -1.0, r, g, b,
-		-1.0, -1.0, -1.0, r, g, b,
+		max_x, max_y, max_z, r, g, b,
+		max_x, min_y, max_z, r, g, b,
+		min_x, max_y, max_z, r, g, b,
+		min_x, min_y, max_z, r, g, b,
+		max_x, max_y, min_z, r, g, b,
+		max_x, min_y, min_z, r, g, b,
+		min_x, max_y, min_z, r, g, b,
+		min_x, min_y, min_z, r, g, b,
 	};
 
 	indices_dyn := slice.clone_to_dynamic(indices[:]);

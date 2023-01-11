@@ -48,9 +48,9 @@ update_collision_hull_global_transform_and_bounds :: proc(using hull: ^Collision
 
 	// We can ignore the translation components and use a matrix 3 because we're transforming the extent with this which is a direction vector
 	global_transform_abs := linalg.Matrix3f32 {
-		abs(global_transform[0][0]), abs(global_transform[0][1]), abs(global_transform[0][2]),
-		abs(global_transform[1][0]), abs(global_transform[1][1]), abs(global_transform[1][2]),
-		abs(global_transform[2][0]), abs(global_transform[2][1]), abs(global_transform[2][2]),
+		abs(global_transform[0][0]), abs(global_transform[1][0]), abs(global_transform[2][0]),
+		abs(global_transform[0][1]), abs(global_transform[1][1]), abs(global_transform[2][1]),
+		abs(global_transform[0][2]), abs(global_transform[1][2]), abs(global_transform[2][2]),
 	};
 
 	center := math2.matrix4_transform_point(global_transform, math2.box_center(local_bounds));
