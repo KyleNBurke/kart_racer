@@ -9,3 +9,8 @@ Path forward
 I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting
 the impulse but they don't do anything. Maybe this is correct behavior and I need to put a lower bound on delta time, maybe the clamping logic is incorrect, need to investigate.
 	- Need to check this again given the fix we made for the other issue
+
+Exporter
+- Remove the text file exporting. Make a translator from the binary file to the text file.
+- Make better procs, i.e. a proc that get the indices and positions and exports it all in one. Combine the functionality into one. Make a single export hulls proc.
+- I think just make a get_indices_global_positions proc even if it's just used once.

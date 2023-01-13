@@ -1,5 +1,7 @@
 import struct
 
+POSITION_CHECK_VALUE = 0b10101010_10101010_10101010_10101010
+
 def instance_obj_name(instance_obj):
 	if instance_obj.is_instance:
 		return  instance_obj.parent.name_full + " -> " + instance_obj.object.name_full
@@ -37,7 +39,7 @@ def write_quat(kgl_file, q):
 	kgl_file.write(struct.pack("<f", q[2]))
 	kgl_file.write(struct.pack("<f", q[3]))
 
-def write_indices_attributes(kgl_file, txt_file, indices, attributes, name):
+def write_indices_attributes(kgl_file, indices, attributes):
 	kgl_file.write(struct.pack("<I", len(indices)))
 
 	for index in indices:
@@ -48,8 +50,6 @@ def write_indices_attributes(kgl_file, txt_file, indices, attributes, name):
 	for attribute in attributes:
 		kgl_file.write(struct.pack("<f", attribute))
 	
-	txt_file.write("\t" + name + ": " + str(len(indices)) + " indices, " + str(len(attributes)) + " attributes" + "\n")
-
 def get_indices_local_positions_normals_colors(mesh):
 	mesh.calc_loop_triangles()
 	

@@ -207,20 +207,6 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 		geometry_offset = attribute_array_offset + attribute_array_size;
 
 		when ODIN_DEBUG {
-			indices_multiple: int;
-			attributes_multiple: int;
-
-			if record.geometry.pipeline == .Line {
-				indices_multiple = 2;
-				attributes_multiple = 6;
-			} else {
-				indices_multiple = 3;
-				attributes_multiple = 9;
-			}
-
-			assert(len(record.geometry.indices) % indices_multiple == 0);
-			assert(len(record.geometry.attributes) % attributes_multiple == 0);
-
 			assert(geometry_offset <= instance_offset);
 			assert(int(first_instance) + len(record.entity_lookups) <= vk2.MAX_ENTITIES);
 		}

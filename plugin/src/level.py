@@ -1,8 +1,6 @@
 import struct
 from . import util
 
-POSITION_CHECK_VALUE = 0b10101010_10101010_10101010_10101010
-
 def export(operator, context):
 	depsgraph = context.evaluated_depsgraph_get()
 	instance_objs = depsgraph.object_instances
@@ -112,7 +110,8 @@ def export_ground_collision_meshes(kgl_file, txt_file, instance_objs):
 	kgl_file.write(struct.pack("<I", len(grounds)))
 
 	for g in grounds:
-		util.write_indices_attributes(kgl_file, txt_file, g.indices, g.positions, g.name)
+		txt_file.write("\t" + g.name + ": " + str(len(g.indices)) + " indices, " + str(len(g.positions)) + " attributes" + "\n")
+		util.write_indices_attributes(kgl_file, g.indices, g.positions)
 
 	txt_file.write("\n")
 
@@ -153,7 +152,8 @@ def export_geometries(kgl_file, txt_file, instance_objs):
 	kgl_file.write(struct.pack("<I", len(geometries)))
 
 	for g in geometries:
-		util.write_indices_attributes(kgl_file, txt_file, g.indices, g.attributes, g.name)
+		txt_file.write("\t" + g.name + ": " + str(len(g.indices)) + " indices, " + str(len(g.attributes)) + " attributes" + "\n")
+		util.write_indices_attributes(kgl_file, g.indices, g.attributes)
 	
 	txt_file.write("\n")
 	
@@ -218,8 +218,8 @@ def export_inanimate_entities(kgl_file, txt_file, instance_objs, mesh_name_to_in
 			util.write_vec3(kgl_file, hull.local_scale)
 			kgl_file.write(struct.pack("<I", hull.hull_type))
 		
-		txt_file.write("\t\t\tcursor check: " + str(POSITION_CHECK_VALUE) + "\n")
-		kgl_file.write(struct.pack("<I", POSITION_CHECK_VALUE))
+		txt_file.write("\t\t\tcursor check: " + str(util.POSITION_CHECK_VALUE) + "\n")
+		kgl_file.write(struct.pack("<I", util.POSITION_CHECK_VALUE))
 
 	txt_file.write("\n")
 
@@ -312,7 +312,7 @@ def export_rigid_body_islands(kgl_file, txt_file, instance_objs, mesh_name_to_in
 				util.write_vec3(kgl_file, hull.local_scale)
 				kgl_file.write(struct.pack("<I", hull.hull_type))
 
-			txt_file.write("\t\t\tcursor check: " + str(POSITION_CHECK_VALUE) + "\n")
-			kgl_file.write(struct.pack("<I", POSITION_CHECK_VALUE))
+			txt_file.write("\t\t\tcursor check: " + str(util.POSITION_CHECK_VALUE) + "\n")
+			kgl_file.write(struct.pack("<I", util.POSITION_CHECK_VALUE))
 	
 	txt_file.write("\n")

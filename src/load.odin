@@ -4,70 +4,70 @@ import "core:os";
 import "core:math/linalg";
 import "core:fmt";
 
+POSITION_CHECK_VALUE :: 0b10101010_10101010_10101010_10101010;
+
+read_u32 :: proc(bytes: ^[]byte, pos: ^int) -> u32 {
+	v := cast(u32) (cast(^u32le) raw_data(bytes[pos^:]))^;
+	pos^ += 4;
+	return v;
+}
+
+read_bool :: proc(bytes: ^[]byte, pos: ^int) -> bool {
+	v := cast(bool) (cast(^b8) raw_data(bytes[pos^:]))^;
+	pos^ += 1;
+	return v;
+}
+
+read_f32 :: proc(bytes: ^[]byte, pos: ^int) -> f32 {
+	v := cast(f32) (cast(^f32le) raw_data(bytes[pos^:]))^;
+	pos^ += 4;
+	return v;
+}
+
+read_vec3 :: proc(bytes: ^[]byte, pos: ^int) -> linalg.Vector3f32 {
+	x := cast(f32) (cast(^f32le) raw_data(bytes[pos^:]))^;
+	y := cast(f32) (cast(^f32le) raw_data(bytes[pos^ + 4:]))^;
+	z := cast(f32) (cast(^f32le) raw_data(bytes[pos^ + 8:]))^;
+
+	pos^ += 12;
+
+	return linalg.Vector3f32 {x, y, z};
+}
+
+read_quat :: proc(bytes: ^[]byte, pos: ^int) -> linalg.Quaternionf32 {
+	x := cast(f32) (cast(^f32le) raw_data(bytes[pos^:]))^;
+	y := cast(f32) (cast(^f32le) raw_data(bytes[pos^ + 4:]))^;
+	z := cast(f32) (cast(^f32le) raw_data(bytes[pos^ + 8:]))^;
+	w := cast(f32) (cast(^f32le) raw_data(bytes[pos^ + 12:]))^;
+
+	pos^ += 16;
+
+	return cast(linalg.Quaternionf32) quaternion(w, x, y, z);
+}
+
+read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dynamic]f32) {
+	indices_count := read_u32(bytes, pos);
+	indices := make([dynamic]u16, indices_count);
+
+	for i in 0..<indices_count {
+		index := cast(u16) (cast(^u16le) raw_data(bytes[pos^:]))^;
+		pos^ += 2;
+		indices[i] = index;
+	}
+
+	attributes_count := read_u32(bytes, pos);
+	attributes := make([dynamic]f32, attributes_count);
+
+	for i in 0..<attributes_count {
+		attribute := cast(f32) (cast(^f32le) raw_data(bytes[pos^:]))^;
+		pos^ += 4;
+		attributes[i] = attribute;
+	}
+
+	return indices, attributes;
+}
+
 load_level :: proc(using game: ^Game) {
-	read_u32 :: proc(bytes: ^[]byte, pos: ^int) -> u32 {
-		v := cast(u32) (cast(^u32le) raw_data(bytes[pos^:]))^;
-		pos^ += 4;
-		return v;
-	}
-
-	read_bool :: proc(bytes: ^[]byte, pos: ^int) -> bool {
-		v := cast(bool) (cast(^b8) raw_data(bytes[pos^:]))^;
-		pos^ += 1;
-		return v;
-	}
-
-	read_f32 :: proc(bytes: ^[]byte, pos: ^int) -> f32 {
-		v := cast(f32) (cast(^f32le) raw_data(bytes[pos^:]))^;
-		pos^ += 4;
-		return v;
-	}
-
-	read_vec3 :: proc(bytes: ^[]byte, pos: ^int) -> linalg.Vector3f32 {
-		x := cast(f32) (cast(^f32le) raw_data(bytes[pos^:]))^;
-		y := cast(f32) (cast(^f32le) raw_data(bytes[pos^ + 4:]))^;
-		z := cast(f32) (cast(^f32le) raw_data(bytes[pos^ + 8:]))^;
-
-		pos^ += 12;
-
-		return linalg.Vector3f32 {x, y, z};
-	}
-
-	read_quat :: proc(bytes: ^[]byte, pos: ^int) -> linalg.Quaternionf32 {
-		x := cast(f32) (cast(^f32le) raw_data(bytes[pos^:]))^;
-		y := cast(f32) (cast(^f32le) raw_data(bytes[pos^ + 4:]))^;
-		z := cast(f32) (cast(^f32le) raw_data(bytes[pos^ + 8:]))^;
-		w := cast(f32) (cast(^f32le) raw_data(bytes[pos^ + 12:]))^;
-
-		pos^ += 16;
-
-		return cast(linalg.Quaternionf32) quaternion(w, x, y, z);
-	}
-
-	read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dynamic]f32) {
-		indices_count := read_u32(bytes, pos);
-		indices := make([dynamic]u16, indices_count);
-
-		for i in 0..<indices_count {
-			index := cast(u16) (cast(^u16le) raw_data(bytes[pos^:]))^;
-			pos^ += 2;
-			indices[i] = index;
-		}
-
-		attributes_count := read_u32(bytes, pos);
-		attributes := make([dynamic]f32, attributes_count);
-
-		for i in 0..<attributes_count {
-			attribute := cast(f32) (cast(^f32le) raw_data(bytes[pos^:]))^;
-			pos^ += 4;
-			attributes[i] = attribute;
-		}
-
-		return indices, attributes;
-	}
-
-	POSITION_CHECK_VALUE :: 0b10101010_10101010_10101010_10101010;
-
 	bytes, success := os.read_entire_file_from_filename("res/all.kgl");
 	defer delete(bytes);
 	assert(success);
@@ -171,4 +171,22 @@ load_level :: proc(using game: ^Game) {
 			}
 		}
 	}
+}
+
+load_car :: proc(using game: ^Game) {
+	bytes, success := os.read_entire_file_from_filename("res/car.kgc");
+	defer delete(bytes);
+	assert(success);
+	
+	pos := 0;
+
+	indices, attributes := read_indices_attributes(&bytes, &pos);
+
+	position_check := read_u32(&bytes, &pos);
+	assert(position_check == POSITION_CHECK_VALUE);
+
+	geometry := init_triangle_geometry(indices, attributes);
+	geometry_lookup := add_geometry(&entities, geometry, true);
+	entity := new_inanimate_entity(linalg.Vector3f32 {0, 5, 0});
+	entity_lookup := add_entity(&entities, geometry_lookup, entity);
 }

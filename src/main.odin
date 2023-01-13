@@ -144,6 +144,7 @@ init_game :: proc(camera_aspect: f32, window: glfw.WindowHandle) -> Game {
 	};
 
 	load_level(&game);
+	load_car(&game);
 
 	return game;
 }

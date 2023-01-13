@@ -17,6 +17,11 @@ Geometry :: struct {
 Pipeline :: enum { Line, Basic, Lambert }
 
 init_triangle_geometry :: proc(indices: [dynamic]u16, attributes: [dynamic]f32) -> Geometry {
+	when ODIN_DEBUG {
+		assert(len(indices) % 3 == 0);
+		assert(len(attributes) % 9 == 0);
+	}
+
 	return Geometry { indices, attributes, .Lambert };
 }
 

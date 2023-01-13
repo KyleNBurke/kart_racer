@@ -8,14 +8,16 @@ bl_info = {
 if "bpy" in locals():
 	import importlib
 	importlib.reload(util)
-	importlib.reload(level_export)
+	importlib.reload(level)
+	importlib.reload(car)
 else:
 	import bpy
 
 	from bpy_extras.io_utils import ExportHelper
 
 	from . import util
-	from . import level_export
+	from . import level
+	from . import car
 
 class KartGuysLevelExporter(bpy.types.Operator, ExportHelper):
 	bl_idname = "level.kgl"
@@ -25,7 +27,17 @@ class KartGuysLevelExporter(bpy.types.Operator, ExportHelper):
 	filter_glob: bpy.props.StringProperty(default="*.kgl", options={'HIDDEN'}, maxlen=255)
 
 	def execute(self, context):
-		return level_export.export(self, context)
+		return level.export(self, context)
+
+class KartGuysCarExporter(bpy.types.Operator, ExportHelper):
+	bl_idname = "car.kgc"
+	bl_label = "Export"
+
+	filename_ext = ".kgc"
+	filter_glob: bpy.props.StringProperty(default="*.kgc", options={'HIDDEN'}, maxlen=255)
+
+	def execute(self, context):
+		return car.export(self, context)
 
 class KartGuysObjectPanel(bpy.types.Panel):
 	bl_idname = 'PROPERTIES_PT_kart_guys_object_panel'
@@ -48,9 +60,15 @@ class KartGuysObjectPanel(bpy.types.Panel):
 def level_exporter_menu_item(self, context):
 	self.layout.operator(KartGuysLevelExporter.bl_idname, text="Kart Guys level (.kgl)")
 
+def car_exporter_menu_item(self, context):
+	self.layout.operator(KartGuysCarExporter.bl_idname, text="Kart Guys car (.kgc)")
+
 def register():
 	bpy.utils.register_class(KartGuysLevelExporter)
 	bpy.types.TOPBAR_MT_file_export.append(level_exporter_menu_item)
+
+	bpy.utils.register_class(KartGuysCarExporter)
+	bpy.types.TOPBAR_MT_file_export.append(car_exporter_menu_item)
 
 	bpy.utils.register_class(KartGuysObjectPanel)
 
@@ -80,6 +98,9 @@ def register():
 def unregister():
 	bpy.utils.unregister_class(KartGuysLevelExporter)
 	bpy.types.TOPBAR_MT_file_export.remove(level_exporter_menu_item)
+
+	bpy.utils.unregister_class(KartGuysCarExporter)
+	bpy.types.TOPBAR_MT_file_export.remove(car_exporter_menu_item)
 
 	bpy.utils.unregister_class(KartGuysObjectPanel)
 
