@@ -67,14 +67,14 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 	return indices, attributes;
 }
 
-load_level :: proc(using game: ^Game) {
+load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
 	bytes, success := os.read_entire_file_from_filename("res/all.kgl");
 	defer delete(bytes);
 	assert(success);
 
 	pos := 0;
-	spawn_position := read_vec3(&bytes, &pos);
-	spawn_rotation := read_quat(&bytes, &pos);
+	spawn_position = read_vec3(&bytes, &pos);
+	spawn_orientation = read_quat(&bytes, &pos);
 
 	// Ground grid
 	ground_grid_half_size := read_f32(&bytes, &pos);
@@ -128,8 +128,7 @@ load_level :: proc(using game: ^Game) {
 				add_collision_hull_to_entity(&entities, &collision_hull_grid, entity_lookup, hull);
 			}
 
-			position_check := read_u32(&bytes, &pos);
-			assert(position_check == POSITION_CHECK_VALUE);
+			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 		}
 	}
 
@@ -165,15 +164,17 @@ load_level :: proc(using game: ^Game) {
 				}
 
 				append(&islands.asleep_islands[island_index], entity_lookup);
+				// append(&awake_rigid_body_lookups, entity_lookup);
 
-				position_check := read_u32(&bytes, &pos);
-				assert(position_check == POSITION_CHECK_VALUE);
+				assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 			}
 		}
 	}
+
+	return;
 }
 
-load_car :: proc(using game: ^Game) {
+load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
 	bytes, success := os.read_entire_file_from_filename("res/car.kgc");
 	defer delete(bytes);
 	assert(success);
@@ -182,11 +183,24 @@ load_car :: proc(using game: ^Game) {
 
 	indices, attributes := read_indices_attributes(&bytes, &pos);
 
-	position_check := read_u32(&bytes, &pos);
-	assert(position_check == POSITION_CHECK_VALUE);
-
 	geometry := init_triangle_geometry(indices, attributes);
 	geometry_lookup := add_geometry(&entities, geometry, true);
-	entity := new_inanimate_entity(linalg.Vector3f32 {0, 5, 0});
+	entity := new_car_entity(spawn_position, spawn_orientation);
 	entity_lookup := add_entity(&entities, geometry_lookup, entity);
+	game.car = entity;
+
+	hull_count := read_u32(&bytes, &pos);
+	for hull_index in 0..<hull_count {
+		local_position := read_vec3(&bytes, &pos);
+		local_orientation := read_quat(&bytes, &pos);
+		local_scale := read_vec3(&bytes, &pos);
+		kind := cast(Hull_Kind) read_u32(&bytes, &pos);
+
+		local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
+		hull := init_collision_hull(local_transform, entity.transform, kind);
+		add_collision_hull_to_entity(&entities, &collision_hull_grid, entity_lookup, hull);
+	}
+	
+	position_check := read_u32(&bytes, &pos);
+	assert(position_check == POSITION_CHECK_VALUE);
 }

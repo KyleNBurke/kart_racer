@@ -1,12 +1,31 @@
 package main;
 
+import "core:math";
 import "core:math/linalg";
 import "core:container/small_array";
 import "math2";
 
-import "core:fmt";
-
 SLOP: f32 : 0.001;
+
+SPRING_ZETA: f32 : 1.0;
+SPRING_FREQUENCY: f32 : 5.0;
+SPRING_OMEGA: f32 : 2.0 * math.PI * SPRING_FREQUENCY;
+
+SPRING_EQUILIBRIUM_LENGTH: f32 : 0.4;
+
+Spring_Constraint_Set :: struct {
+	n: linalg.Vector3f32,
+	constraints: small_array.Small_Array(4, Spring_Constraint),
+}
+
+Spring_Constraint :: struct {
+	r,
+	rxn: linalg.Vector3f32,
+	effective_mass_inv,
+	softness,
+	bias,
+	total_impulse: f32,
+}
 
 Fixed_Constraint_Set :: struct {
 	entity_lookup: Entity_Lookup,
@@ -54,13 +73,53 @@ Movable_Constraint :: struct {
 }
 
 Constraints :: struct {
+	spring_constraint_set: Maybe(Spring_Constraint_Set),
 	fixed_constraint_sets: [dynamic]Fixed_Constraint_Set,
 	movable_constraint_sets: [dynamic]Movable_Constraint_Set,
 }
 
 clear_constraints :: proc(using constraints: ^Constraints) {
+	spring_constraint_set = nil;
 	clear(&fixed_constraint_sets);
 	clear(&movable_constraint_sets);
+}
+
+set_spring_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, manifold: ^Spring_Contact_Manifold, dt: f32) {
+	n := manifold.normal;
+	
+	spring_constraint_set := Spring_Constraint_Set {
+		n = n,
+	};
+
+	inverse_mass := 1.0 / CAR_MASS;
+
+	for contact in small_array.slice(&manifold.contacts) {
+		r := contact.start - car.new_position;
+		rxn := linalg.cross(r, n);
+
+		effective_mass_inv := inverse_mass + linalg.dot((rxn * car.inv_global_inertia_tensor), rxn);
+		effective_mass := 1.0 / effective_mass_inv;
+
+		spring_k := effective_mass * SPRING_OMEGA * SPRING_OMEGA;
+		spring_c := 2.0 * effective_mass * SPRING_ZETA * SPRING_OMEGA;
+
+		gamma := 1.0 / (spring_c + dt * spring_k);
+		softness := gamma / dt;
+
+		beta := (dt * spring_k) / (spring_c + dt * spring_k);
+		position_error := SPRING_EQUILIBRIUM_LENGTH - contact.length;
+		bias := beta / dt * -position_error;
+
+		small_array.append(&spring_constraint_set.constraints, Spring_Constraint {
+			r = r,
+			rxn = rxn,
+			effective_mass_inv = effective_mass_inv,
+			softness = softness,
+			bias = bias,
+		});
+	}
+
+	constraints.spring_constraint_set = spring_constraint_set;
 }
 
 add_fixed_constraint_set :: proc(constraints: ^Constraints, entity_lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity, manifold: ^Contact_Manifold, dt: f32) {
@@ -160,8 +219,25 @@ add_movable_constraint_set :: proc(constraints: ^Constraints, entity_a_lookup, e
 	append(&constraints.movable_constraint_sets, constraint_set);
 }
 
-solve_constraints :: proc(using constraints: ^Constraints, entities: ^Entities) {
+solve_constraints :: proc(using constraints: ^Constraints, entities: ^Entities, car: ^Car_Entity) {
 	for _ in 0..<10 {
+		if constraint_set, ok := spring_constraint_set.?; ok {
+			for _, constraint_index in small_array.slice(&constraint_set.constraints) {
+				constraint := small_array.get_ptr(&constraint_set.constraints, constraint_index);
+
+				velocity := car.velocity + linalg.cross(car.angular_velocity, constraint.r);
+				velocity_error := linalg.dot(velocity, constraint_set.n);
+				lambda := -(velocity_error + constraint.bias + constraint.softness * constraint.total_impulse) / (constraint.effective_mass_inv + constraint.softness);
+
+				prev_total_impulse := constraint.total_impulse;
+				constraint.total_impulse = max((prev_total_impulse + lambda), 0.0); // It's weird that using using the prev_total_impulse here but not in the other two constraints
+				total_impulse_delta := constraint.total_impulse - prev_total_impulse;
+
+				car.velocity += constraint_set.n * total_impulse_delta / CAR_MASS;
+				car.angular_velocity += car.inv_global_inertia_tensor * constraint.rxn * total_impulse_delta;
+			}
+		}
+
 		for constraint_set in &fixed_constraint_sets {
 			rigid_body := get_entity(entities, constraint_set.entity_lookup).variant.(^Rigid_Body_Entity);
 

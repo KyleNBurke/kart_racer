@@ -26,6 +26,7 @@ Game :: struct {
 	awake_rigid_body_lookups: [dynamic]Entity_Lookup,
 	islands: Islands,
 	constraints: Constraints,
+	car: ^Car_Entity,
 }
 
 main :: proc() {
@@ -143,8 +144,8 @@ init_game :: proc(camera_aspect: f32, window: glfw.WindowHandle) -> Game {
 		camera = init_camera(camera_aspect, 75.0, window),
 	};
 
-	load_level(&game);
-	load_car(&game);
+	spawn_position, spawn_orientation := load_level(&game);
+	load_car(&game, spawn_position, spawn_orientation);
 
 	return game;
 }

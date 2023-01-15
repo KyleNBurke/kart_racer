@@ -103,3 +103,24 @@ init_box_helper :: proc(min: [3]f32 = NEG_ONE, max: [3]f32 = POS_ONE, color: [3]
 
 	return Geometry { indices_dyn, attributes_dyn, .Line };
 }
+
+init_line_helper :: proc(origin: [3]f32, vector: [3]f32, color: [3]f32 = YELLOW) -> Geometry {
+	indices := [?]u16 {0, 1};
+
+	s := origin;
+	e := origin + vector;
+
+	s_x, s_y, s_z := s[0], s[1], s[2];
+	e_x, e_y, e_z := e[0], e[1], e[2];
+	r, g, b := color[0], color[1], color[2];
+
+	attributes := [?]f32 {
+		s_x, s_y, s_z, r, g, b,
+		e_x, e_y, e_z, r, g, b,
+	};
+
+	indices_dyn := slice.clone_to_dynamic(indices[:]);
+	attributes_dyn := slice.clone_to_dynamic(attributes[:]);
+
+	return Geometry { indices_dyn, attributes_dyn, .Line };
+}

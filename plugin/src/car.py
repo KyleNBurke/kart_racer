@@ -21,6 +21,7 @@ def export_car(file, instance_objs):
 			util.write_indices_attributes(file, indices, attributes)
 
 			hulls = util.get_hulls(instance_obj, instance_objs)
+			file.write(struct.pack("<I", len(hulls)))
 
 			for hull in hulls:
 				if hull.hull_type == 2:

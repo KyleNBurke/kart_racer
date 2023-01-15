@@ -8,7 +8,7 @@ Entity :: struct {
 	size: linalg.Vector3f32,
 	transform: linalg.Matrix4x4f32,
 	collision_hull_record_indices: [dynamic]int,
-	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity},
+	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity, ^Car_Entity},
 }
 
 Inanimate_Entity :: struct {
@@ -23,11 +23,19 @@ Rigid_Body_Entity :: struct {
 	velocity: linalg.Vector3f32,
 	angular_velocity: linalg.Vector3f32,
 	new_position: linalg.Vector3f32,
-	new_transform: linalg.Matrix4f32, // This is only used to find spring constraints for the car, move it somewhere else?
 	collision_exclude: bool,
 	node_index: int,
 	asleep_island_index: int,
 	sleep_duration: f32,
+}
+
+Car_Entity :: struct {
+	using entity: Entity,
+	inv_global_inertia_tensor: linalg.Matrix3f32,
+	velocity: linalg.Vector3f32,
+	angular_velocity: linalg.Vector3f32,
+	new_position: linalg.Vector3f32,
+	new_transform: linalg.Matrix4f32,
 }
 
 update_entity_transform :: proc(using entity: ^Entity) {
@@ -50,13 +58,14 @@ new_inanimate_entity :: proc(
 }
 
 new_rigid_body_entity :: proc(
-	position := linalg.Vector3f32 {0.0, 0.0, 0.0 },
+	position := linalg.Vector3f32 {0.0, 0.0, 0.0},
 	orientation := linalg.QUATERNIONF32_IDENTITY,
 	size := linalg.Vector3f32 {1.0, 1.0, 1.0},
 	mass: f32,
 	dimensions: linalg.Vector3f32,
 ) -> ^Rigid_Body_Entity {
 	k := mass / 12.0;
+	
 	width  := dimensions.x;
 	height := dimensions.y;
 	depth  := dimensions.z;
@@ -80,13 +89,36 @@ new_rigid_body_entity :: proc(
 	e.mass = mass;
 	e.inv_local_inertia_tensor = inv_local_inertia_tensor;
 	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
-	e.new_transform = linalg.MATRIX4F32_IDENTITY;
 	e.asleep_island_index = -1;
 
 	return e;
 }
 
-update_rigid_body_inv_global_inertia_tensor :: proc(using rigid_body: ^Rigid_Body_Entity, orientation: linalg.Quaternionf32) {
-	m := linalg.matrix3_from_quaternion(orientation);
-	inv_global_inertia_tensor = m * inv_local_inertia_tensor * linalg.transpose(m);
+CAR_MASS: f32 : 1000;
+CAR_K :: CAR_MASS / 12;
+CAR_WIDTH :: 2.0;
+CAR_HEIGHT :: 1.2;
+CAR_DEPTH :: 3.5;
+
+CAR_W :: CAR_K * (CAR_DEPTH * CAR_DEPTH + CAR_HEIGHT * CAR_HEIGHT);
+CAR_H :: CAR_K * (CAR_WIDTH * CAR_WIDTH + CAR_DEPTH * CAR_DEPTH);
+CAR_D :: CAR_K * (CAR_WIDTH * CAR_WIDTH + CAR_HEIGHT * CAR_HEIGHT);
+
+CAR_INV_LOCAL_INERTIA_TENSOR :: linalg.Matrix3f32 {
+	1.0 / CAR_W, 0.0, 0.0,
+	0.0, 1.0 / CAR_H, 0.0,
+	0.0, 0.0, 1.0 / CAR_D,
+};
+
+new_car_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaternionf32) -> ^Car_Entity {
+	e := new(Car_Entity);
+	e.position = position;
+	e.orientation =  orientation;
+	e.size = linalg.Vector3f32 {1, 1, 1};
+	e.transform = linalg.matrix4_from_trs_f32(position, orientation, linalg.Vector3f32 {1, 1, 1});
+	e.variant = e;
+	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
+	e.new_transform = linalg.MATRIX4F32_IDENTITY;
+
+	return e;
 }

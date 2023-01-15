@@ -1,5 +1,6 @@
 Todo
-- Instead of exporting two files, it would be better if I just made an interpreter of the .kgl file. Could be written in odin.
+- Instead of exporting two files, it would be better if I just made an interpreter of the .kgl file. Could be written in odin. We could totally call it from python too.
+- Some fence posts fall through the ground. They might not have collision hulls or something.
 
 Path forward
 - [done] Lambert pipeline

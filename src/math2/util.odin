@@ -43,6 +43,20 @@ matrix4_transform_direction :: proc(m: linalg.Matrix4f32, d: linalg.Vector3f32) 
 	};
 }
 
+integrate_angular_velocity :: proc(vel: linalg.Vector3f32, ori: linalg.Quaternionf32, dt: f32) -> linalg.Quaternionf32 {
+	w := cast(linalg.Quaternionf32) quaternion(0, vel.x, vel.y, vel.z)
+	return linalg.normalize(ori + quaternion_mul_f32(w * ori, 0.5 * dt));
+}
+
+calculate_inv_global_inertia_tensor :: proc(orientation: linalg.Quaternionf32, inv_local_inertia_tensor: linalg.Matrix3f32) -> linalg.Matrix3f32 {
+	m := linalg.matrix3_from_quaternion(orientation);
+	return m * inv_local_inertia_tensor * linalg.transpose(m);
+}
+
+matrix4_down :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
+	return linalg.Vector3f32 {-m[0][1], -m[1][1], -m[2][1]};
+}
+
 @(test, private)
 test_matrix3_transform_direction :: proc(t: ^testing.T) {
 	m := linalg.Matrix3f32 {
