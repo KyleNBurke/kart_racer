@@ -3,6 +3,7 @@ package main;
 import "core:fmt";
 import "core:c";
 import "core:time";
+import "core:runtime";
 import "vendor:glfw";
 import "vk2";
 
@@ -13,9 +14,10 @@ when ODIN_DEBUG {
 MAX_FRAME_DURATION := time.Duration(33333333); // 1 / 30 seconds
 MAX_UPDATES := 5;
 
-WindowState :: struct {
+Callback_State :: struct {
 	framebuffer_size_change: bool,
 	minimized: bool,
+	game: ^Game,
 }
 
 Game :: struct {
@@ -43,14 +45,10 @@ main :: proc() {
 	window := glfw.CreateWindow(1080, 720, "Kart Guys", nil, nil);
 	assert(window != nil, "Failed to create window");
 
-	window_state: WindowState;
-	glfw.SetWindowUserPointer(window, &window_state);
-
 	glfw.SetFramebufferSizeCallback(window, framebuffer_size_callback);
 	glfw.SetWindowIconifyCallback(window, iconify_callback);
 	glfw.SetWindowContentScaleCallback(window, content_scale_callback);
 	glfw.SetKeyCallback(window, key_callback);
-	glfw.SetInputMode(window, glfw.CURSOR, glfw.CURSOR_DISABLED);
 
 	content_scale_x, content_scale_y := glfw.GetWindowContentScale(window);
 	// font := init_font("roboto", 20, content_scale_x);
@@ -59,19 +57,25 @@ main :: proc() {
 	camera_aspect := f32(vulkan.extent.width) / f32(vulkan.extent.height);
 	game := init_game(camera_aspect, window);
 
+	callback_state := Callback_State {
+		game = &game,
+	};
+
+	glfw.SetWindowUserPointer(window, &callback_state);
+
 	frame_start := time.now();
 	suboptimal_swapchain := false;
 
 	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents();
 
-		if window_state.minimized {
+		if callback_state.minimized {
 			glfw.WaitEvents();
 			continue;
 		}
 
-		if window_state.framebuffer_size_change || suboptimal_swapchain {
-			window_state.framebuffer_size_change = false;
+		if callback_state.framebuffer_size_change || suboptimal_swapchain {
+			callback_state.framebuffer_size_change = false;
 
 			width_i32, height_i32 := glfw.GetFramebufferSize(window);
 			width := u32(width_i32);
@@ -119,13 +123,13 @@ main :: proc() {
 }
 
 framebuffer_size_callback : glfw.FramebufferSizeProc : proc "c" (window: glfw.WindowHandle, width, height: c.int) {
-	window_state := cast(^WindowState) glfw.GetWindowUserPointer(window);
-	window_state.framebuffer_size_change = true;
+	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
+	callback_state.framebuffer_size_change = true;
 }
 
 iconify_callback : glfw.WindowIconifyProc : proc "c" (window: glfw.WindowHandle, iconified: c.int) {
-	window_state := cast(^WindowState) glfw.GetWindowUserPointer(window);
-	window_state.minimized = iconified == 1 ? true : false;
+	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
+	callback_state.minimized = iconified == 1 ? true : false;
 }
 
 content_scale_callback : glfw.WindowContentScaleProc : proc "c" (window: glfw.WindowHandle, xscale, yscale: f32) {
@@ -133,9 +137,16 @@ content_scale_callback : glfw.WindowContentScaleProc : proc "c" (window: glfw.Wi
 }
 
 key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: c.int) {
-	switch key {
-		case glfw.KEY_ESCAPE:
-			glfw.SetWindowShouldClose(window, true);
+	context = runtime.default_context()
+	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
+
+	if action == glfw.PRESS {
+		switch key {
+			case glfw.KEY_ESCAPE:
+				glfw.SetWindowShouldClose(window, true);
+		}
+
+		camera_handle_key_press(&callback_state.game.camera, key, window);
 	}
 }
 
@@ -152,7 +163,7 @@ init_game :: proc(camera_aspect: f32, window: glfw.WindowHandle) -> Game {
 
 update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	simulate(game, dt);
-	move_camera(&game.camera, window, dt);
+	move_camera(&game.camera, window, game.car, dt);
 
 	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities);
 	update_island_helpers(&game.islands, &game.collision_hull_grid, &game.entities);

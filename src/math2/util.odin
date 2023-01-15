@@ -1,7 +1,15 @@
 package math2;
 
+import "core:math";
 import "core:math/linalg";
 import "core:testing";
+
+vector2_rotate :: proc(v: linalg.Vector2f32, angle: f32) -> linalg.Vector2f32 {
+	return linalg.Vector2f32 {
+		v.x * math.cos(angle) - v.y * math.sin(angle),
+		v.x * math.sin(angle) + v.y * math.cos(angle),
+	};
+}
 
 vector3_tangents :: proc(v: linalg.Vector3f32) -> (t1, t2: linalg.Vector3f32) {
 	if abs(v.x) >= 0.57735027 {
@@ -55,6 +63,10 @@ calculate_inv_global_inertia_tensor :: proc(orientation: linalg.Quaternionf32, i
 
 matrix4_down :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
 	return linalg.Vector3f32 {-m[0][1], -m[1][1], -m[2][1]};
+}
+
+matrix4_forward :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
+	return linalg.Vector3f32 {m[0][2], m[1][2], m[2][2]};
 }
 
 @(test, private)

@@ -186,6 +186,7 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 	geometry := init_triangle_geometry(indices, attributes);
 	geometry_lookup := add_geometry(&entities, geometry, true);
 	entity := new_car_entity(spawn_position, spawn_orientation);
+	entity.velocity.z = 5;
 	entity_lookup := add_entity(&entities, geometry_lookup, entity);
 	game.car = entity;
 

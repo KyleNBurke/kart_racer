@@ -279,7 +279,7 @@ debug_message_callback : vk.ProcDebugUtilsMessengerCallbackEXT : proc "system" (
 		m_type = "[performance]";
 	}
 
-	context = runtime.default_context()
+	context = runtime.default_context();
 	fmt.println(severity, m_type, pCallbackData^.pMessage, "\n");
 
 	return false;
