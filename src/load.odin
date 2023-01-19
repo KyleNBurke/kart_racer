@@ -101,7 +101,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 	for i in 0..<geometries_count {
 		indices, attributes := read_indices_attributes(&bytes, &pos);
 		geometry := init_triangle_geometry(indices, attributes);
-		geometry_lookups[i] = add_geometry(&entities, geometry, true);
+		geometry_lookups[i] = add_geometry(&entities_geos, geometry);
 	}
 
 	{ // Inanimate entities
@@ -115,7 +115,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 			hull_count := read_u32(&bytes, &pos);
 
 			inanimate_entity := new_inanimate_entity(position, orientation, scale);
-			entity_lookup := add_entity(&entities, geometry_lookups[geometry_index], inanimate_entity);
+			entity_lookup := add_entity(&entities_geos, geometry_lookups[geometry_index], inanimate_entity);
 
 			for hull_index in 0..<hull_count {
 				local_position := read_vec3(&bytes, &pos);
@@ -125,7 +125,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 				local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
 				hull := init_collision_hull(local_transform, inanimate_entity.transform, kind);
-				add_collision_hull_to_entity(&entities, &collision_hull_grid, entity_lookup, hull);
+				add_collision_hull_to_entity(&entities_geos, &collision_hull_grid, entity_lookup, hull);
 			}
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -149,7 +149,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 				rigid_body := new_rigid_body_entity(position, orientation, scale, mass, dimensions);
 				rigid_body.collision_exclude = collision_exclude;
-				entity_lookup := add_entity(&entities, geometry_lookups[geometry_index], rigid_body);
+				entity_lookup := add_entity(&entities_geos, geometry_lookups[geometry_index], rigid_body);
 
 				hull_count := read_u32(&bytes, &pos);
 				for hull_index in 0..<hull_count {
@@ -160,14 +160,25 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 					local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
 					hull := init_collision_hull(local_transform, rigid_body.transform, kind);
-					add_collision_hull_to_entity(&entities, &collision_hull_grid, entity_lookup, hull);
+					add_collision_hull_to_entity(&entities_geos, &collision_hull_grid, entity_lookup, hull);
 				}
 
-				append(&islands.asleep_islands[island_index], entity_lookup);
-				// append(&awake_rigid_body_lookups, entity_lookup);
+				// append(&islands.asleep_islands[island_index], entity_lookup);
+				append(&awake_rigid_body_lookups, entity_lookup);
 
 				assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 			}
+		}
+	}
+
+	// Temporary until we've implemented everything missing from the old project.
+	// We need to remove the geometries which aren't tied to any entities. This is not allowed.
+	// The situation only happens because we have a geometry for an oil slick but don't create
+	// and entity for it yet.
+	for lookup in geometry_lookups {
+		geometry_record := &entities_geos.geometry_records[lookup.index];
+		if len(geometry_record.entity_lookups) == 0 {
+			remove_geometry(&entities_geos, lookup);
 		}
 	}
 
@@ -184,10 +195,9 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 	indices, attributes := read_indices_attributes(&bytes, &pos);
 
 	geometry := init_triangle_geometry(indices, attributes);
-	geometry_lookup := add_geometry(&entities, geometry, true);
+	geometry_lookup := add_geometry(&entities_geos, geometry);
 	entity := new_car_entity(spawn_position, spawn_orientation);
-	entity.velocity.z = 5;
-	entity_lookup := add_entity(&entities, geometry_lookup, entity);
+	entity_lookup := add_entity(&entities_geos, geometry_lookup, entity);
 	game.car = entity;
 
 	hull_count := read_u32(&bytes, &pos);
@@ -199,7 +209,7 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 
 		local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
 		hull := init_collision_hull(local_transform, entity.transform, kind);
-		add_collision_hull_to_entity(&entities, &collision_hull_grid, entity_lookup, hull);
+		add_collision_hull_to_entity(&entities_geos, &collision_hull_grid, entity_lookup, hull);
 	}
 	
 	position_check := read_u32(&bytes, &pos);

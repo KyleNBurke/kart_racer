@@ -133,20 +133,20 @@ collision_hull_grid_find_nearby_hulls :: proc(using collision_hull_grid: ^Collis
 	return indices;
 }
 
-collision_hull_grid_update_hull_helpers :: proc(using collision_hull_grid: ^Collision_Hull_Grid, entities: ^Entities) {
+collision_hull_grid_update_hull_helpers :: proc(using collision_hull_grid: ^Collision_Hull_Grid, entities_geos: ^Entities_Geos) {
 	for lookup in &hull_helpers {
-		remove_entity(entities, lookup);
+		remove_entity(entities_geos, lookup);
 	}
 
 	clear(&hull_helpers);
 
 	geo := init_box_helper();
-	geo_lookup := add_geometry(entities, geo, true);
+	geo_lookup := add_geometry(entities_geos, geo);
 
 	for hull_record in &hull_records {
 		helper := new_inanimate_entity();
 		helper.transform = hull_record.hull.global_transform;
-		helper_lookup := add_entity(entities, geo_lookup, helper);
+		helper_lookup := add_entity(entities_geos, geo_lookup, helper);
 		append(&hull_helpers, helper_lookup);
 	}
 }

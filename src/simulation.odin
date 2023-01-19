@@ -23,7 +23,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 	clear_islands(&islands);
 
 	for lookup in awake_rigid_body_lookups {
-		rigid_body := get_entity(&entities, lookup).variant.(^Rigid_Body_Entity);
+		rigid_body := get_entity(&entities_geos, lookup).variant.(^Rigid_Body_Entity);
 
 		rigid_body.velocity.y += GRAVITY * dt;
 		rigid_body.new_position = rigid_body.position + rigid_body.velocity * dt;
@@ -44,7 +44,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 	entities_woken_up := make([dynamic]Entity_Lookup, context.temp_allocator);
 
 	for provoking_lookup in awake_rigid_body_lookups {
-		provoking_entity := get_entity(&entities, provoking_lookup).variant.(^Rigid_Body_Entity);
+		provoking_entity := get_entity(&entities_geos, provoking_lookup).variant.(^Rigid_Body_Entity);
 
 		for provoking_hull_index in provoking_entity.collision_hull_record_indices {
 			provoking_hull := &collision_hull_grid.hull_records[provoking_hull_index].hull;
@@ -72,7 +72,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 				if provoking_lookup == nearby_lookup do continue;
 
-				nearby_entity := get_entity(&entities, nearby_lookup);
+				nearby_entity := get_entity(&entities_geos, nearby_lookup);
 
 				if nearby_rigid_body, ok := nearby_entity.variant.(^Rigid_Body_Entity); ok {
 					if provoking_entity.collision_exclude && nearby_rigid_body.collision_exclude do continue;
@@ -82,7 +82,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 					switch e in nearby_entity.variant {
 						case ^Rigid_Body_Entity:
 							add_movable_constraint_set(&constraints, provoking_lookup, nearby_lookup, provoking_entity, e, &manifold, dt);
-							merge_islands(&islands, &entities, &entities_woken_up, provoking_entity, e);
+							merge_islands(&islands, &entities_geos, &entities_woken_up, provoking_entity, e);
 						case ^Inanimate_Entity:
 							add_fixed_constraint_set(&constraints, provoking_lookup, provoking_entity, &manifold, dt);
 						case ^Car_Entity:
@@ -95,7 +95,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 		}
 	}
 
-	solve_constraints(&constraints, &entities, car);
+	solve_constraints(&constraints, &entities_geos, car);
 	append(&awake_rigid_body_lookups, ..entities_woken_up[:]);
 
 	{
@@ -106,7 +106,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 	}
 
 	for lookup in awake_rigid_body_lookups {
-		rigid_body := get_entity(&entities, lookup).variant.(^Rigid_Body_Entity);
+		rigid_body := get_entity(&entities_geos, lookup).variant.(^Rigid_Body_Entity);
 
 		old_position := rigid_body.position;
 		rigid_body.position += rigid_body.velocity * dt;
@@ -122,7 +122,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 		}
 	}
 
-	sleep_islands(&islands, &entities, &awake_rigid_body_lookups);
+	sleep_islands(&islands, &entities_geos, &awake_rigid_body_lookups);
 }
 
 Spring_Contact_Manifold :: struct {
@@ -131,38 +131,39 @@ Spring_Contact_Manifold :: struct {
 }
 
 Spring_Contact :: struct {
-	start: linalg.Vector3f32,
+	body_point: linalg.Vector3f32,
 	length: f32,
 }
 
+SPRING_BODY_POINT_Z: f32 : 1.1;
+
 find_spring_constraints :: proc(using game: ^Game, dt: f32) {
-	extension_dir := math2.matrix4_down(car.new_transform);
+	extension_dir := -math2.matrix4_up(car.new_transform);
 
-	SPRING_START_X: f32 : 0.8;
-	SPRING_START_Y: f32 : -0.35
-	SPRING_START_Z: f32 : 1.1;
+	SPRING_BODY_POINT_X: f32 : 0.8;
+	SPRING_BODY_POINT_Y: f32 : -0.35
 
-	SPRING_START_LOCAL_FL :: linalg.Vector3f32 {SPRING_START_X, SPRING_START_Y, SPRING_START_Z};
-	SPRING_START_LOCAL_FR :: linalg.Vector3f32 {-SPRING_START_X, SPRING_START_Y, SPRING_START_Z};
-	SPRING_START_LOCAL_BL :: linalg.Vector3f32 {SPRING_START_X, SPRING_START_Y, -SPRING_START_Z};
-	SPRING_START_LOCAL_BR :: linalg.Vector3f32 {-SPRING_START_X, SPRING_START_Y, -SPRING_START_Z};
+	SPRING_BODY_POINT_LOCAL_FL :: linalg.Vector3f32 {SPRING_BODY_POINT_X, SPRING_BODY_POINT_Y, SPRING_BODY_POINT_Z};
+	SPRING_BODY_POINT_LOCAL_FR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, SPRING_BODY_POINT_Y, SPRING_BODY_POINT_Z};
+	SPRING_BODY_POINT_LOCAL_BL :: linalg.Vector3f32 {SPRING_BODY_POINT_X, SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
+	SPRING_BODY_POINT_LOCAL_BR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
 
-	spring_start_fl := math2.matrix4_transform_point(car.new_transform, SPRING_START_LOCAL_FL);
-	spring_start_fr := math2.matrix4_transform_point(car.new_transform, SPRING_START_LOCAL_FR);
-	spring_start_bl := math2.matrix4_transform_point(car.new_transform, SPRING_START_LOCAL_BL);
-	spring_start_br := math2.matrix4_transform_point(car.new_transform, SPRING_START_LOCAL_BR);
+	spring_body_point_fl := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_FL);
+	spring_body_point_fr := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_FR);
+	spring_body_point_bl := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_BL);
+	spring_body_point_br := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_BR);
 
 	SPRING_MAX_LENGTH: f32 : 0.8;
 
-	spring_end_fl := spring_start_fl + extension_dir * SPRING_MAX_LENGTH;
-	spring_end_fr := spring_start_fr + extension_dir * SPRING_MAX_LENGTH;
-	spring_end_bl := spring_start_bl + extension_dir * SPRING_MAX_LENGTH;
-	spring_end_br := spring_start_br + extension_dir * SPRING_MAX_LENGTH;
+	spring_wheel_point_fl := spring_body_point_fl + extension_dir * SPRING_MAX_LENGTH;
+	spring_wheel_point_fr := spring_body_point_fr + extension_dir * SPRING_MAX_LENGTH;
+	spring_wheel_point_bl := spring_body_point_bl + extension_dir * SPRING_MAX_LENGTH;
+	spring_wheel_point_br := spring_body_point_br + extension_dir * SPRING_MAX_LENGTH;
 
-	spring_bounds_fl := math2.Box3f32 {linalg.min(spring_start_fl, spring_end_fl), linalg.max(spring_start_fl, spring_end_fl)};
-	spring_bounds_fr := math2.Box3f32 {linalg.min(spring_start_fr, spring_end_fr), linalg.max(spring_start_fr, spring_end_fr)};
-	spring_bounds_bl := math2.Box3f32 {linalg.min(spring_start_bl, spring_end_bl), linalg.max(spring_start_bl, spring_end_bl)};
-	spring_bounds_br := math2.Box3f32 {linalg.min(spring_start_br, spring_end_br), linalg.max(spring_start_br, spring_end_br)};
+	spring_bounds_fl := math2.Box3f32 {linalg.min(spring_body_point_fl, spring_wheel_point_fl), linalg.max(spring_body_point_fl, spring_wheel_point_fl)};
+	spring_bounds_fr := math2.Box3f32 {linalg.min(spring_body_point_fr, spring_wheel_point_fr), linalg.max(spring_body_point_fr, spring_wheel_point_fr)};
+	spring_bounds_bl := math2.Box3f32 {linalg.min(spring_body_point_bl, spring_wheel_point_bl), linalg.max(spring_body_point_bl, spring_wheel_point_bl)};
+	spring_bounds_br := math2.Box3f32 {linalg.min(spring_body_point_br, spring_wheel_point_br), linalg.max(spring_body_point_br, spring_wheel_point_br)};
 
 	spring_bounds := math2.box_union(spring_bounds_fl, spring_bounds_fr, spring_bounds_bl, spring_bounds_br);
 
@@ -173,14 +174,14 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 		normal = -extension_dir,
 	};
 
-	spring_starts := [?]linalg.Vector3f32 {spring_start_fl, spring_start_fr, spring_start_bl, spring_start_br};
+	spring_body_points := [?]linalg.Vector3f32 {spring_body_point_fl, spring_body_point_fr, spring_body_point_bl, spring_body_point_br};
 
 	for spring_index in 0..<4 {
 		best_spring_contact := Spring_Contact_Intermediary {
 			length = max(f32),
 		};
 
-		spring_start := spring_starts[spring_index];
+		spring_body_point := spring_body_points[spring_index];
 
 		for triangle_index in triangle_indices {
 			triangle := ground_grid_get_triangle(&ground_grid, triangle_index);
@@ -194,7 +195,7 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 			b := linalg.Vector3f32 {positions[b_index], positions[b_index + 1], positions[b_index + 2]};
 			c := linalg.Vector3f32 {positions[c_index], positions[c_index + 1], positions[c_index + 2]};
 
-			if contact, ok := spring_intersects_triangle(spring_start, extension_dir, SPRING_MAX_LENGTH, a, b, c).?; ok {
+			if contact, ok := spring_intersects_triangle(spring_body_point, extension_dir, SPRING_MAX_LENGTH, a, b, c).?; ok {
 				if math.acos(linalg.dot(-extension_dir, contact.normal)) > math.PI / 4 {
 					continue;
 				}
@@ -205,12 +206,24 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 			}
 		}
 
+		wheel := Wheel {
+			spring_body_point,
+			nil,
+		};
+
 		if best_spring_contact.length != max(f32) {
 			small_array.append(&manifold.contacts, Spring_Contact {
-				spring_start,
+				spring_body_point,
 				best_spring_contact.length,
 			});
+
+			wheel.contact = Wheel_Contact {
+				best_spring_contact.normal,
+				best_spring_contact.length,
+			};
 		}
+
+		car.wheels[spring_index] = wheel;
 	}
 
 	if small_array.len(manifold.contacts) > 0 {

@@ -36,6 +36,21 @@ Car_Entity :: struct {
 	angular_velocity: linalg.Vector3f32,
 	new_position: linalg.Vector3f32,
 	new_transform: linalg.Matrix4f32,
+	wheels: [4]Wheel,
+	steer_angle: f32,
+
+	forward_helper_geo,
+	steer_angle_helper_geo: Geometry_Lookup,
+}
+
+Wheel :: struct {
+	body_point: linalg.Vector3f32,
+	contact: Maybe(Wheel_Contact),
+}
+
+Wheel_Contact :: struct {
+	normal: linalg.Vector3f32,
+	length: f32,
 }
 
 update_entity_transform :: proc(using entity: ^Entity) {

@@ -22,13 +22,14 @@ Callback_State :: struct {
 
 Game :: struct {
 	camera: Camera,
-	entities: Entities,
+	entities_geos: Entities_Geos,
 	ground_grid: Ground_Grid,
 	collision_hull_grid: Collision_Hull_Grid,
 	awake_rigid_body_lookups: [dynamic]Entity_Lookup,
 	islands: Islands,
 	constraints: Constraints,
 	car: ^Car_Entity,
+	car_helpers: Car_Helpers,
 }
 
 main :: proc() {
@@ -102,7 +103,7 @@ main :: proc() {
 			updates += 1;
 		}
 
-		suboptimal_swapchain = render(&vulkan, &game.camera, &game.entities);
+		suboptimal_swapchain = render(&vulkan, &game.camera, &game.entities_geos);
 	}
 
 	vk2.cleanup_vulkan(&vulkan);
@@ -157,22 +158,24 @@ init_game :: proc(camera_aspect: f32, window: glfw.WindowHandle) -> Game {
 
 	spawn_position, spawn_orientation := load_level(&game);
 	load_car(&game, spawn_position, spawn_orientation);
+	game.car_helpers = init_car_helpers(&game.entities_geos);
 
 	return game;
 }
 
 update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
+	move_car(window, game.car, dt, &game.entities_geos, &game.car_helpers);
 	simulate(game, dt);
 	move_camera(&game.camera, window, game.car, dt);
 
-	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities);
-	update_island_helpers(&game.islands, &game.collision_hull_grid, &game.entities);
+	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
+	update_island_helpers(&game.islands, &game.collision_hull_grid, &game.entities_geos);
 
 	free_all(context.temp_allocator);
 }
 
 cleanup_game :: proc(game: ^Game) {
-	cleanup_entities(&game.entities);
+	cleanup_entities_geos(&game.entities_geos);
 	ground_grid_cleanup(&game.ground_grid);
 	collision_hull_grid_cleanup(&game.collision_hull_grid);
 	cleanup_constraints(&game.constraints);

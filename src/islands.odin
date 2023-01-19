@@ -8,7 +8,7 @@ Islands :: struct {
 	root_node_indices: [dynamic]int,
 	asleep_islands: [dynamic][dynamic]Entity_Lookup,
 	free_asleep_island_indices: [dynamic]int,
-	island_helpers: [dynamic]Entity_Lookup,
+	island_helpers: [dynamic]Geometry_Lookup,
 }
 
 Node :: struct {
@@ -43,17 +43,17 @@ init_island :: proc(using islands: ^Islands, lookup: Entity_Lookup, rigid_body: 
 	rigid_body.node_index = node_index;
 }
 
-merge_islands :: proc(using islands: ^Islands, entities: ^Entities, entities_woken_up: ^[dynamic]Entity_Lookup, provoking_rigid_body, nearby_rigid_body: ^Rigid_Body_Entity) {
+merge_islands :: proc(using islands: ^Islands, entities_geos: ^Entities_Geos, entities_woken_up: ^[dynamic]Entity_Lookup, provoking_rigid_body, nearby_rigid_body: ^Rigid_Body_Entity) {
 	if nearby_rigid_body.asleep_island_index != -1 {
-		wake_island(islands, entities, nearby_rigid_body.asleep_island_index, entities_woken_up);
+		wake_island(islands, entities_geos, nearby_rigid_body.asleep_island_index, entities_woken_up);
 	}
 
 	link_nodes(islands, provoking_rigid_body.node_index, nearby_rigid_body.node_index);
 }
 
-wake_island :: proc(using islands: ^Islands, entities: ^Entities, asleep_island_index: int, entities_woken_up: ^[dynamic]Entity_Lookup) {
+wake_island :: proc(using islands: ^Islands, entities_geos: ^Entities_Geos, asleep_island_index: int, entities_woken_up: ^[dynamic]Entity_Lookup) {
 	for lookup in asleep_islands[asleep_island_index] {
-		rigid_body := get_entity(entities, lookup).variant.(^Rigid_Body_Entity);
+		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
 		rigid_body.asleep_island_index = -1;
 		rigid_body.sleep_duration = 0;
 
@@ -112,8 +112,7 @@ find_root_node_index :: proc(using islands: ^Islands, node_index: int) -> int {
 	}
 }
 
-// #todo Need the car entity lookup here.
-sleep_islands :: proc(using islands: ^Islands, entities: ^Entities, awake_rigid_body_lookups: ^[dynamic]Entity_Lookup) {
+sleep_islands :: proc(using islands: ^Islands, entities_geos: ^Entities_Geos, awake_rigid_body_lookups: ^[dynamic]Entity_Lookup) {
 	clear(awake_rigid_body_lookups);
 
 	for root_node_index in root_node_indices {
@@ -131,7 +130,7 @@ sleep_islands :: proc(using islands: ^Islands, entities: ^Entities, awake_rigid_
 					append(&indices_to_visit, n.child_a_index, n.child_b_index);
 				
 				case Leaf_Node:
-					rigid_body := get_entity(entities, n.entity_lookup).variant.(^Rigid_Body_Entity);
+					rigid_body := get_entity(entities_geos, n.entity_lookup).variant.(^Rigid_Body_Entity);
 					if rigid_body.sleep_duration < 2.0 do island_asleep = false;
 
 					append(&lookups, n.entity_lookup);
@@ -151,7 +150,7 @@ sleep_islands :: proc(using islands: ^Islands, entities: ^Entities, awake_rigid_
 			}
 
 			for lookup in lookups {
-				rigid_body := get_entity(entities, lookup).variant.(^Rigid_Body_Entity);
+				rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
 				rigid_body.asleep_island_index = asleep_island_index;
 			}
 
@@ -162,9 +161,9 @@ sleep_islands :: proc(using islands: ^Islands, entities: ^Entities, awake_rigid_
 	}
 }
 
-update_island_helpers :: proc(using islands: ^Islands, collision_hull_grid: ^Collision_Hull_Grid, entities: ^Entities) {
+update_island_helpers :: proc(using islands: ^Islands, collision_hull_grid: ^Collision_Hull_Grid, entities_geos: ^Entities_Geos) {
 	for lookup in island_helpers {
-		remove_entity(entities, lookup);
+		remove_geometry(entities_geos, lookup);
 	}
 
 	clear(&island_helpers);
@@ -185,7 +184,7 @@ update_island_helpers :: proc(using islands: ^Islands, collision_hull_grid: ^Col
 					append(&indices_to_visit, n.child_a_index, n.child_b_index);
 				
 				case Leaf_Node:
-					entity := get_entity(entities, n.entity_lookup);
+					entity := get_entity(entities_geos, n.entity_lookup);
 
 					for hull_index in entity.collision_hull_record_indices {
 						hull := &collision_hull_grid.hull_records[hull_index].hull;
@@ -197,11 +196,9 @@ update_island_helpers :: proc(using islands: ^Islands, collision_hull_grid: ^Col
 			node_index, ok = pop_safe(&indices_to_visit);
 		}
 
-		geo := init_box_helper(cast([3]f32) bounds_min, cast([3]f32) bounds_max, [?]f32 {0, 1, 0});
-		geo_lookup := add_geometry(entities, geo, true);
-		entity := new_inanimate_entity();
-		entity_lookup := add_entity(entities, geo_lookup, entity);
-		append(&island_helpers, entity_lookup);
+		geo := init_box_helper(bounds_min, bounds_max, [?]f32 {0, 1, 0});
+		geo_lookup := add_geometry(entities_geos, geo, .Render);
+		append(&island_helpers, geo_lookup);
 	}
 
 	for island, island_index in &asleep_islands {
@@ -211,7 +208,7 @@ update_island_helpers :: proc(using islands: ^Islands, collision_hull_grid: ^Col
 		bounds_max := linalg.Vector3f32 { min(f32), min(f32), min(f32) };
 
 		for lookup in island {
-			entity := get_entity(entities, lookup);
+			entity := get_entity(entities_geos, lookup);
 
 			for hull_index in entity.collision_hull_record_indices {
 				hull := &collision_hull_grid.hull_records[hull_index].hull;
@@ -220,11 +217,9 @@ update_island_helpers :: proc(using islands: ^Islands, collision_hull_grid: ^Col
 			}
 		}
 
-		geo := init_box_helper(cast([3]f32) bounds_min, cast([3]f32) bounds_max, [?]f32 {1, 1, 1});
-		geo_lookup := add_geometry(entities, geo, true);
-		entity := new_inanimate_entity();
-		entity_lookup := add_entity(entities, geo_lookup, entity);
-		append(&island_helpers, entity_lookup);
+		geo := init_box_helper(bounds_min, bounds_max, [?]f32 {1, 1, 1});
+		geo_lookup := add_geometry(entities_geos, geo, .Render);
+		append(&island_helpers, geo_lookup);
 	}
 }
 

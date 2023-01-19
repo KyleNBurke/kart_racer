@@ -1,9 +1,10 @@
 package main;
 
 import "core:slice";
+import "core:math/linalg";
 
-NEG_ONE :: [?]f32 {-1, -1, -1};
-POS_ONE :: [?]f32 {1, 1, 1};
+NEG_ONE :: linalg.Vector3f32 {-1, -1, -1};
+POS_ONE :: linalg.Vector3f32 {1, 1, 1};
 
 GREY :: [?]f32 {0.3, 0.3, 0.3};
 YELLOW :: [?]f32 {1, 1, 0};
@@ -76,7 +77,7 @@ init_box :: proc(color: [3]f32 = GREY) -> Geometry {
 	return Geometry { indices_dyn, attributes_dyn, .Lambert };
 }
 
-init_box_helper :: proc(min: [3]f32 = NEG_ONE, max: [3]f32 = POS_ONE, color: [3]f32 = YELLOW) -> Geometry {
+init_box_helper :: proc(min: linalg.Vector3f32 = NEG_ONE, max: linalg.Vector3f32 = POS_ONE, color: [3]f32 = YELLOW) -> Geometry {
 	indices := [?]u16 {
 		0, 1, 0, 2, 3, 1, 3, 2,
 		5, 4, 5, 7, 6, 4, 6, 7,
@@ -104,8 +105,17 @@ init_box_helper :: proc(min: [3]f32 = NEG_ONE, max: [3]f32 = POS_ONE, color: [3]
 	return Geometry { indices_dyn, attributes_dyn, .Line };
 }
 
-init_line_helper :: proc(origin: [3]f32, vector: [3]f32, color: [3]f32 = YELLOW) -> Geometry {
-	indices := [?]u16 {0, 1};
+init_line_helper :: proc(origin, vector: linalg.Vector3f32, color: [3]f32 = YELLOW) -> Geometry {
+	geo: Geometry;
+	set_line_helper(&geo, origin, vector, color);
+	return geo;
+}
+
+set_line_helper :: proc(using geometry: ^Geometry, origin, vector: linalg.Vector3f32, color: [3]f32 = YELLOW) {
+	clear(&indices);
+	clear(&attributes);
+
+	append(&indices, 0, 1);
 
 	s := origin;
 	e := origin + vector;
@@ -114,13 +124,10 @@ init_line_helper :: proc(origin: [3]f32, vector: [3]f32, color: [3]f32 = YELLOW)
 	e_x, e_y, e_z := e[0], e[1], e[2];
 	r, g, b := color[0], color[1], color[2];
 
-	attributes := [?]f32 {
+	append(&attributes,
 		s_x, s_y, s_z, r, g, b,
 		e_x, e_y, e_z, r, g, b,
-	};
+	);
 
-	indices_dyn := slice.clone_to_dynamic(indices[:]);
-	attributes_dyn := slice.clone_to_dynamic(attributes[:]);
-
-	return Geometry { indices_dyn, attributes_dyn, .Line };
+	pipeline = .Line;
 }

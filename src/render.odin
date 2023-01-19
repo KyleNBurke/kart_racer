@@ -7,7 +7,7 @@ import vk "vendor:vulkan";
 import "core:math/linalg";
 import "vk2";
 
-render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities: ^Entities) -> bool {
+render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities_geos: ^Entities_Geos) -> bool {
 	@(static) logical_frame_index := 0;
 	logical_device := vulkan_context.logical_device;
 
@@ -27,7 +27,7 @@ render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities: ^Entities) 
 	assert(r == .SUCCESS);
 
 	// Copy data and record draw commands
-	handle_scene(vulkan, logical_frame_index, framebuffer, camera, entities);
+	handle_scene(vulkan, logical_frame_index, framebuffer, camera, entities_geos);
 
 	// Record primary command buffer
 	command_buffer_begin_info := vk.CommandBufferBeginInfo {
@@ -121,7 +121,7 @@ render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities: ^Entities) 
 	return suboptimal;
 }
 
-handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, framebuffer: vk.Framebuffer, camera: ^Camera, entities: ^Entities) {
+handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, framebuffer: vk.Framebuffer, camera: ^Camera, entities_geos: ^Entities_Geos) {
 	logical_device := vulkan_context.logical_device;
 
 	{ // Copy matrices into per frame buffer
@@ -198,7 +198,9 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 	instance_offset := mesh_resources.per_instance_buffer_instance_block_offset;
 	first_instance: u32 = 0;
 
-	for record in &entities.geometry_records {
+	for record, i in &entities_geos.geometry_records {
+		if record.freed do continue;
+
 		index_array_size := size_of(u16) * len(record.geometry.indices);
 		attribute_array_size := size_of(f32) * len(record.geometry.attributes);
 
@@ -209,17 +211,29 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 		when ODIN_DEBUG {
 			assert(geometry_offset <= instance_offset);
 			assert(int(first_instance) + len(record.entity_lookups) <= vk2.MAX_ENTITIES);
+			if len(record.entity_lookups) == 0 do assert(record.on_no_entities == .Render);
 		}
 
 		// Copy geometry data
 		mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, index_array_offset), raw_data(record.geometry.indices), index_array_size);
 		mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, attribute_array_offset), raw_data(record.geometry.attributes), attribute_array_size);
 
+		instance_count: u32;
+
 		// Copy matrix data
-		for entity_lookup in &record.entity_lookups {
-			entity := entities.entity_records[entity_lookup.index].entity;
-			mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, instance_offset), &entity.transform, size_of(entity.transform));
+		if len(record.entity_lookups) == 0 {
+			transform := linalg.MATRIX4F32_IDENTITY;
+			mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, instance_offset), &transform, size_of(transform));
 			instance_offset += vk2.MESH_INSTANCE_ELEMENT_SIZE;
+			instance_count = 1;
+		} else {
+			for entity_lookup in &record.entity_lookups {
+				entity := entities_geos.entity_records[entity_lookup.index].entity;
+				mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, instance_offset), &entity.transform, size_of(entity.transform));
+				instance_offset += vk2.MESH_INSTANCE_ELEMENT_SIZE;
+			}
+
+			instance_count = cast(u32) len(record.entity_lookups);
 		}
 
 		// Record draw command
@@ -238,9 +252,9 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 
 		vk.CmdBindIndexBuffer(secondary_command_buffer, per_instance_buffer, cast(vk.DeviceSize) index_array_offset, .UINT16);
 		vk.CmdBindVertexBuffers(secondary_command_buffer, 0, 1, &vertex_buffers[0], &offsets[0]);
-		vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(record.geometry.indices), cast(u32) len(record.entity_lookups), 0, 0, first_instance);
+		vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(record.geometry.indices), instance_count, 0, 0, first_instance);
 
-		first_instance += cast(u32) len(record.entity_lookups);
+		first_instance += instance_count;
 	}
 
 	// End secondary command buffers

@@ -94,7 +94,7 @@ set_spring_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, m
 	inverse_mass := 1.0 / CAR_MASS;
 
 	for contact in small_array.slice(&manifold.contacts) {
-		r := contact.start - car.new_position;
+		r := contact.body_point - car.new_position;
 		rxn := linalg.cross(r, n);
 
 		effective_mass_inv := inverse_mass + linalg.dot((rxn * car.inv_global_inertia_tensor), rxn);
@@ -219,7 +219,7 @@ add_movable_constraint_set :: proc(constraints: ^Constraints, entity_a_lookup, e
 	append(&constraints.movable_constraint_sets, constraint_set);
 }
 
-solve_constraints :: proc(using constraints: ^Constraints, entities: ^Entities, car: ^Car_Entity) {
+solve_constraints :: proc(using constraints: ^Constraints, entities_geos: ^Entities_Geos, car: ^Car_Entity) {
 	for _ in 0..<10 {
 		if constraint_set, ok := spring_constraint_set.?; ok {
 			for _, constraint_index in small_array.slice(&constraint_set.constraints) {
@@ -239,7 +239,7 @@ solve_constraints :: proc(using constraints: ^Constraints, entities: ^Entities, 
 		}
 
 		for constraint_set in &fixed_constraint_sets {
-			rigid_body := get_entity(entities, constraint_set.entity_lookup).variant.(^Rigid_Body_Entity);
+			rigid_body := get_entity(entities_geos, constraint_set.entity_lookup).variant.(^Rigid_Body_Entity);
 
 			for _, constraint_index in small_array.slice(&constraint_set.constraints) {
 				constraint := small_array.get_ptr(&constraint_set.constraints, constraint_index);
@@ -283,8 +283,8 @@ solve_constraints :: proc(using constraints: ^Constraints, entities: ^Entities, 
 		}
 
 		for constraint_set in &movable_constraint_sets {
-			rigid_body_a := get_entity(entities, constraint_set.entity_a_lookup).variant.(^Rigid_Body_Entity);
-			rigid_body_b := get_entity(entities, constraint_set.entity_b_lookup).variant.(^Rigid_Body_Entity);
+			rigid_body_a := get_entity(entities_geos, constraint_set.entity_a_lookup).variant.(^Rigid_Body_Entity);
+			rigid_body_b := get_entity(entities_geos, constraint_set.entity_b_lookup).variant.(^Rigid_Body_Entity);
 
 			for _, constraint_index in small_array.slice(&constraint_set.constraints) {
 				constraint := small_array.get_ptr(&constraint_set.constraints, constraint_index);

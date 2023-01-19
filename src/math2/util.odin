@@ -11,6 +11,16 @@ vector2_rotate :: proc(v: linalg.Vector2f32, angle: f32) -> linalg.Vector2f32 {
 	};
 }
 
+vector3_rotate :: proc(v, axis: linalg.Vector3f32, angle: f32) -> linalg.Vector3f32 {
+	a_sin := math.sin(angle / 2);
+	a_cos := math.cos(angle / 2);
+	b := linalg.Vector3f32 {a_sin * axis.x, a_sin * axis.y, a_sin * axis.z};
+
+	return b * 2 * linalg.dot(b, v) + v * (a_cos * a_cos - linalg.dot(b, b)) + linalg.cross(b, v) * 2 * a_cos;
+}
+
+vector_rotate :: proc{vector2_rotate, vector3_rotate}
+
 vector3_tangents :: proc(v: linalg.Vector3f32) -> (t1, t2: linalg.Vector3f32) {
 	if abs(v.x) >= 0.57735027 {
 		t1 = linalg.normalize(linalg.Vector3f32 {v.y, -v.x, 0});
@@ -61,12 +71,16 @@ calculate_inv_global_inertia_tensor :: proc(orientation: linalg.Quaternionf32, i
 	return m * inv_local_inertia_tensor * linalg.transpose(m);
 }
 
-matrix4_down :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
-	return linalg.Vector3f32 {-m[0][1], -m[1][1], -m[2][1]};
+matrix4_left :: proc() {
+	unimplemented();
+}
+
+matrix4_up :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
+	return linalg.Vector3f32 {m[1][0], m[1][1], m[1][2]};
 }
 
 matrix4_forward :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
-	return linalg.Vector3f32 {m[0][2], m[1][2], m[2][2]};
+	return linalg.Vector3f32 {m[2][0], m[2][1], m[2][2]};
 }
 
 @(test, private)
