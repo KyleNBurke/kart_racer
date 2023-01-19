@@ -175,23 +175,26 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 	basic_secondary_command_buffer := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
 	lambert_secondary_command_buffer := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
 
+	frame_descriptor_set := frame_resources.descriptor_sets[logical_frame_index];
+	mesh_instance_descriptor_set := mesh_resources.instance_descriptor_sets[logical_frame_index];
+
 	r := vk.BeginCommandBuffer(line_secondary_command_buffer, &command_buffer_begin_info);
 	assert(r == .SUCCESS);
 	vk.CmdBindPipeline(line_secondary_command_buffer, .GRAPHICS, mesh_resources.line_pipeline);
-	vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[logical_frame_index], 0, {});
-	vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[logical_frame_index], 0, {});
+	vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
+	vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
 
 	r = vk.BeginCommandBuffer(basic_secondary_command_buffer, &command_buffer_begin_info);
 	assert(r == .SUCCESS);
 	vk.CmdBindPipeline(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.basic_pipeline);
-	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[logical_frame_index], 0, {});
-	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[logical_frame_index], 0, {});
+	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
+	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
 
 	r = vk.BeginCommandBuffer(lambert_secondary_command_buffer, &command_buffer_begin_info);
 	assert(r == .SUCCESS);
 	vk.CmdBindPipeline(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.lambert_pipeline);
-	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[logical_frame_index], 0, {});
-	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[logical_frame_index], 0, {});
+	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
+	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
 
 	// Copy mesh data and record draw commands
 	geometry_offset := 0;
