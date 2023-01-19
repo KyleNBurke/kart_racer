@@ -178,27 +178,27 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 	r := vk.BeginCommandBuffer(line_secondary_command_buffer, &command_buffer_begin_info);
 	assert(r == .SUCCESS);
 	vk.CmdBindPipeline(line_secondary_command_buffer, .GRAPHICS, mesh_resources.line_pipeline);
-	vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[0], 0, {});
-	vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[0], 0, {});
+	vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[logical_frame_index], 0, {});
+	vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[logical_frame_index], 0, {});
 
 	r = vk.BeginCommandBuffer(basic_secondary_command_buffer, &command_buffer_begin_info);
 	assert(r == .SUCCESS);
 	vk.CmdBindPipeline(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.basic_pipeline);
-	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[0], 0, {});
-	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[0], 0, {});
+	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[logical_frame_index], 0, {});
+	vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[logical_frame_index], 0, {});
 
 	r = vk.BeginCommandBuffer(lambert_secondary_command_buffer, &command_buffer_begin_info);
 	assert(r == .SUCCESS);
 	vk.CmdBindPipeline(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.lambert_pipeline);
-	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[0], 0, {});
-	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[0], 0, {});
+	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_resources.descriptor_sets[logical_frame_index], 0, {});
+	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_resources.instance_descriptor_sets[logical_frame_index], 0, {});
 
 	// Copy mesh data and record draw commands
 	geometry_offset := 0;
 	instance_offset := mesh_resources.per_instance_buffer_instance_block_offset;
 	first_instance: u32 = 0;
 
-	for record, i in &entities_geos.geometry_records {
+	for record in &entities_geos.geometry_records {
 		if record.freed do continue;
 
 		index_array_size := size_of(u16) * len(record.geometry.indices);
@@ -210,8 +210,8 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 
 		when ODIN_DEBUG {
 			assert(geometry_offset <= instance_offset);
-			assert(int(first_instance) + len(record.entity_lookups) <= vk2.MAX_ENTITIES);
-			if len(record.entity_lookups) == 0 do assert(record.on_no_entities == .Render);
+			assert(int(first_instance) <= vk2.MAX_ENTITIES);
+			if record.on_no_entities == .Render do assert(len(record.entity_lookups) == 0);
 		}
 
 		// Copy geometry data
