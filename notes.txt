@@ -1,8 +1,6 @@
 Todo
 - Instead of exporting two files, it would be better if I just made an interpreter of the .kgl file. Could be written in odin. We could totally call it from python too.
 - Some fence posts fall through the ground. They might not have collision hulls or something.
-- When you debug using VS Code, the name of the physical Vulkan device has question marks in it.
-- Things are not stable at all on the 60hz monitor.
 - Car collision hull physics
 
 I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting

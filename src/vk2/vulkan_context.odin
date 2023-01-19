@@ -191,9 +191,8 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 
 			properties: vk.PhysicalDeviceProperties;
 			vk.GetPhysicalDeviceProperties(device, &properties);
-			name := strings.clone_from_bytes(properties.deviceName[:]);
+			name := strings.string_from_nul_terminated_ptr(raw_data(&properties.deviceName), vk.MAX_PHYSICAL_DEVICE_NAME_SIZE);
 			fmt.printf("Using %v\n", name);
-			delete(name);
 			
 			break;
 		}
