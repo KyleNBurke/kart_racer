@@ -40,6 +40,52 @@ simulate :: proc(using game: ^Game, dt: f32) {
 	clear_constraints(&constraints);
 	find_spring_constraints(game, dt);
 
+	// Car collisions
+	for hull_index in car.collision_hull_record_indices {
+		provoking_hull_record := &collision_hull_grid.hull_records[hull_index];
+		provoking_hull := &provoking_hull_record.hull;
+
+		// Ground collisions
+		nearby_triangle_indices := ground_grid_find_nearby_triangles(&ground_grid, provoking_hull.global_bounds);
+
+		for nearby_triangle_index in nearby_triangle_indices {
+			nearby_triangle := ground_grid_get_triangle(&ground_grid, nearby_triangle_index);
+
+			if manifold, ok := evaluate_ground_collision(ground_grid.positions[:], nearby_triangle, provoking_hull).?; ok {
+				add_car_fixed_constraint_set(&constraints, car, &manifold, dt);
+			}
+		}
+
+		// Other hull collisions
+		nearby_hull_indices := collision_hull_grid_find_nearby_hulls(&collision_hull_grid, provoking_hull.global_bounds);
+
+		for nearby_hull_index in nearby_hull_indices {
+			nearby_hull_record := &collision_hull_grid.hull_records[nearby_hull_index];
+			nearby_lookup := nearby_hull_record.entity_lookup;
+
+			provoking_lookup := provoking_hull_record.entity_lookup; // This would just been the car entity lookup which we don't save anywhere but could.
+			if provoking_lookup == nearby_lookup do continue;
+
+			nearby_hull := &nearby_hull_record.hull;
+
+			if manifold, ok := evaluate_entity_collision(provoking_hull, nearby_hull).?; ok {
+				nearby_entity := get_entity(&entities_geos, nearby_lookup);
+				
+				switch e in nearby_entity.variant {
+					case ^Rigid_Body_Entity:
+						unimplemented();
+					case ^Inanimate_Entity:
+						// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
+						// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
+						add_car_fixed_constraint_set(&constraints, car, &manifold, dt);
+					case ^Car_Entity:
+						unreachable();
+				}
+			}
+		}
+	}
+
+	// Other rigid body collisions
 	checked_hulls := make([dynamic]bool, len(collision_hull_grid.hull_records), context.temp_allocator);
 	entities_woken_up := make([dynamic]Entity_Lookup, context.temp_allocator);
 
@@ -68,7 +114,6 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 				nearby_hull_record := &collision_hull_grid.hull_records[nearby_hull_index];
 				nearby_lookup := nearby_hull_record.entity_lookup;
-				nearby_hull := &nearby_hull_record.hull;
 
 				if provoking_lookup == nearby_lookup do continue;
 
@@ -77,6 +122,8 @@ simulate :: proc(using game: ^Game, dt: f32) {
 				if nearby_rigid_body, ok := nearby_entity.variant.(^Rigid_Body_Entity); ok {
 					if provoking_entity.collision_exclude && nearby_rigid_body.collision_exclude do continue;
 				}
+				
+				nearby_hull := &nearby_hull_record.hull;
 
 				if manifold, ok := evaluate_entity_collision(provoking_hull, nearby_hull).?; ok {
 					switch e in nearby_entity.variant {
@@ -86,7 +133,9 @@ simulate :: proc(using game: ^Game, dt: f32) {
 						case ^Inanimate_Entity:
 							add_fixed_constraint_set(&constraints, provoking_lookup, provoking_entity, &manifold, dt);
 						case ^Car_Entity:
-							unreachable();
+							// unreachable(); I don't see a need to have the car's hulls be in the collision hull grid. If we can remove them we can have this be unreachable.
+							// Maybe the car can just own it's hulls because those are stored in the collision hull grid right now.
+							continue;
 					}
 				}
 			}
