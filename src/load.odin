@@ -3,6 +3,7 @@ package main
 import "core:os";
 import "core:math/linalg";
 import "core:fmt";
+import "core:slice";
 
 POSITION_CHECK_VALUE :: 0b10101010_10101010_10101010_10101010;
 
@@ -125,7 +126,10 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 				local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
 				hull := init_collision_hull(local_transform, inanimate_entity.transform, kind);
-				add_collision_hull_to_entity(&entities_geos, &collision_hull_grid, entity_lookup, hull);
+				
+				append(&inanimate_entity.collision_hulls, hull);
+				hull_ptr := slice.last_ptr(inanimate_entity.collision_hulls[:]);
+				insert_into_collision_hull_grid(&collision_hull_grid, entity_lookup, hull_ptr);
 			}
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -160,7 +164,11 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 					local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
 					hull := init_collision_hull(local_transform, rigid_body.transform, kind);
-					add_collision_hull_to_entity(&entities_geos, &collision_hull_grid, entity_lookup, hull);
+
+					append(&rigid_body.collision_hulls, hull);
+					hull_ptr := slice.last_ptr(rigid_body.collision_hulls[:]);
+					hull_record := insert_into_collision_hull_grid(&collision_hull_grid, entity_lookup, hull_ptr);
+					append(&rigid_body.collision_hull_record_indices, hull_record);
 				}
 
 				// append(&islands.asleep_islands[island_index], entity_lookup);
@@ -209,7 +217,7 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 
 		local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
 		hull := init_collision_hull(local_transform, entity.transform, kind);
-		add_collision_hull_to_entity(&entities_geos, &collision_hull_grid, entity_lookup, hull);
+		append(&car.collision_hulls, hull);
 	}
 	
 	position_check := read_u32(&bytes, &pos);

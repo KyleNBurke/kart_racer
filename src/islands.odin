@@ -186,8 +186,7 @@ update_island_helpers :: proc(using islands: ^Islands, collision_hull_grid: ^Col
 				case Leaf_Node:
 					entity := get_entity(entities_geos, n.entity_lookup);
 
-					for hull_index in entity.collision_hull_record_indices {
-						hull := &collision_hull_grid.hull_records[hull_index].hull;
+					for hull in &entity.collision_hulls {
 						bounds_min = linalg.min(bounds_min, hull.global_bounds.min);
 						bounds_max = linalg.max(bounds_max, hull.global_bounds.max);
 					}
@@ -210,8 +209,7 @@ update_island_helpers :: proc(using islands: ^Islands, collision_hull_grid: ^Col
 		for lookup in island {
 			entity := get_entity(entities_geos, lookup);
 
-			for hull_index in entity.collision_hull_record_indices {
-				hull := &collision_hull_grid.hull_records[hull_index].hull;
+			for hull in &entity.collision_hulls {
 				bounds_min = linalg.min(bounds_min, hull.global_bounds.min);
 				bounds_max = linalg.max(bounds_max, hull.global_bounds.max);
 			}

@@ -15,9 +15,11 @@ simulate :: proc(using game: ^Game, dt: f32) {
 		new_orientation := math2.integrate_angular_velocity(car.angular_velocity, car.orientation, dt);
 		car.inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(new_orientation, CAR_INV_LOCAL_INERTIA_TENSOR);
 
-		transform := linalg.matrix4_from_trs(car.new_position, new_orientation, linalg.Vector3f32 {1, 1, 1});
-		collision_hull_grid_transform_entity(&collision_hull_grid, car.collision_hull_record_indices[:], transform);
-		car.new_transform = transform;
+		car.new_transform = linalg.matrix4_from_trs(car.new_position, new_orientation, linalg.Vector3f32 {1, 1, 1});
+
+		for hull in &car.collision_hulls {
+			update_collision_hull_global_transform_and_bounds(&hull, car.new_transform);
+		}
 	}
 
 	clear_islands(&islands);
@@ -41,17 +43,14 @@ simulate :: proc(using game: ^Game, dt: f32) {
 	find_spring_constraints(game, dt);
 
 	// Car collisions
-	for hull_index in car.collision_hull_record_indices {
-		provoking_hull_record := &collision_hull_grid.hull_records[hull_index];
-		provoking_hull := &provoking_hull_record.hull;
-
+	for provoking_hull in &car.collision_hulls {
 		// Ground collisions
 		nearby_triangle_indices := ground_grid_find_nearby_triangles(&ground_grid, provoking_hull.global_bounds);
 
 		for nearby_triangle_index in nearby_triangle_indices {
 			nearby_triangle := ground_grid_get_triangle(&ground_grid, nearby_triangle_index);
 
-			if manifold, ok := evaluate_ground_collision(ground_grid.positions[:], nearby_triangle, provoking_hull).?; ok {
+			if manifold, ok := evaluate_ground_collision(ground_grid.positions[:], nearby_triangle, &provoking_hull).?; ok {
 				add_car_fixed_constraint_set(&constraints, car, &manifold, dt);
 			}
 		}
@@ -61,16 +60,12 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 		for nearby_hull_index in nearby_hull_indices {
 			nearby_hull_record := &collision_hull_grid.hull_records[nearby_hull_index];
-			nearby_lookup := nearby_hull_record.entity_lookup;
+			nearby_hull := nearby_hull_record.hull;
 
-			provoking_lookup := provoking_hull_record.entity_lookup; // This would just been the car entity lookup which we don't save anywhere but could.
-			if provoking_lookup == nearby_lookup do continue;
-
-			nearby_hull := &nearby_hull_record.hull;
-
-			if manifold, ok := evaluate_entity_collision(provoking_hull, nearby_hull).?; ok {
+			if manifold, ok := evaluate_entity_collision(&provoking_hull, nearby_hull).?; ok {
+				nearby_lookup := nearby_hull_record.entity_lookup;
 				nearby_entity := get_entity(&entities_geos, nearby_lookup);
-				
+
 				switch e in nearby_entity.variant {
 					case ^Rigid_Body_Entity:
 						unimplemented();
@@ -93,7 +88,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 		provoking_entity := get_entity(&entities_geos, provoking_lookup).variant.(^Rigid_Body_Entity);
 
 		for provoking_hull_index in provoking_entity.collision_hull_record_indices {
-			provoking_hull := &collision_hull_grid.hull_records[provoking_hull_index].hull;
+			provoking_hull := collision_hull_grid.hull_records[provoking_hull_index].hull;
 
 			// Handle collisions with the ground
 			nearby_triangle_indices := ground_grid_find_nearby_triangles(&ground_grid, provoking_hull.global_bounds);
@@ -110,7 +105,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 			nearby_hull_indices := collision_hull_grid_find_nearby_hulls(&collision_hull_grid, provoking_hull.global_bounds);
 
 			for nearby_hull_index in nearby_hull_indices {
-				if checked_hulls[nearby_hull_index] || provoking_hull_index == nearby_hull_index do continue;
+				if checked_hulls[nearby_hull_index] || provoking_hull_index == nearby_hull_index do continue; // Maybe the collision hull grid could take in an optional provoking hull so that this check can be done in there
 
 				nearby_hull_record := &collision_hull_grid.hull_records[nearby_hull_index];
 				nearby_lookup := nearby_hull_record.entity_lookup;
@@ -123,7 +118,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 					if provoking_entity.collision_exclude && nearby_rigid_body.collision_exclude do continue;
 				}
 				
-				nearby_hull := &nearby_hull_record.hull;
+				nearby_hull := nearby_hull_record.hull;
 
 				if manifold, ok := evaluate_entity_collision(provoking_hull, nearby_hull).?; ok {
 					switch e in nearby_entity.variant {
@@ -133,9 +128,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 						case ^Inanimate_Entity:
 							add_fixed_constraint_set(&constraints, provoking_lookup, provoking_entity, &manifold, dt);
 						case ^Car_Entity:
-							// unreachable(); I don't see a need to have the car's hulls be in the collision hull grid. If we can remove them we can have this be unreachable.
-							// Maybe the car can just own it's hulls because those are stored in the collision hull grid right now.
-							continue;
+							unreachable();
 					}
 				}
 			}

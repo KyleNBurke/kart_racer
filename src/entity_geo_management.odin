@@ -83,14 +83,6 @@ add_entity :: proc(using entities_geos: ^Entities_Geos, geometry_lookup: Geometr
 	return entity_lookup;
 }
 
-add_collision_hull_to_entity :: proc(using entities_geos: ^Entities_Geos, collision_hull_grid: ^Collision_Hull_Grid, lookup: Entity_Lookup, hull: Collision_Hull) {
-	record := &entity_records[lookup.index];
-	assert(lookup.generation == record.generation);
-
-	record_index := insert_into_collision_hull_grid(collision_hull_grid, lookup, hull);
-	append(&record.entity.collision_hull_record_indices, record_index);
-}
-
 get_geometry :: proc(using entities_geos: ^Entities_Geos, lookup: Geometry_Lookup) -> ^Geometry {
 	record := &geometry_records[lookup.index];
 	assert(lookup.generation == record.generation);
@@ -123,7 +115,7 @@ remove_entity :: proc(using entities_geos: ^Entities_Geos, entity_lookup: Entity
 	entity_record := &entity_records[entity_lookup.index];
 	assert(entity_lookup.generation == entity_record.generation);
 
-	if len(entity_record.entity.collision_hull_record_indices) > 0 {
+	if len(entity_record.entity.collision_hulls) > 0 {
 		unimplemented();
 		// delete(entity_record.entity.collision_hull_record_indices);
 	}
@@ -164,7 +156,11 @@ cleanup_entities_geos :: proc(using entities_geos: ^Entities_Geos) {
 	for record, i in &entity_records {
 		if slice.contains(free_entity_records[:], i) do continue;
 
-		delete(record.entity.collision_hull_record_indices);
+		if rigid_body, ok := record.entity.variant.(^Rigid_Body_Entity); ok {
+			delete(rigid_body.collision_hull_record_indices);
+		}
+
+		delete(record.entity.collision_hulls);
 		free(record.entity);
 	}
 

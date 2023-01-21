@@ -18,7 +18,8 @@ Collision_Hull_Grid :: struct {
 
 Collision_Hull_Record :: struct {
 	entity_lookup: Entity_Lookup,
-	hull: Collision_Hull,
+	hull: ^Collision_Hull,
+	query_run: u32,
 }
 
 reset_collision_hull_grid :: proc(using collision_hull_grid: ^Collision_Hull_Grid, half_size: f32) {
@@ -48,9 +49,14 @@ reset_collision_hull_grid :: proc(using collision_hull_grid: ^Collision_Hull_Gri
 	}
 }
 
-insert_into_collision_hull_grid :: proc(using collision_hull_grid: ^Collision_Hull_Grid, lookup: Entity_Lookup, hull: Collision_Hull) -> int {
-	append(&hull_records, Collision_Hull_Record { lookup, hull });
-	append(&query_flags, 0);
+insert_into_collision_hull_grid :: proc(using collision_hull_grid: ^Collision_Hull_Grid, entity_lookup: Entity_Lookup, hull: ^Collision_Hull) -> int {
+	record := Collision_Hull_Record {
+		entity_lookup,
+		hull,
+		0,
+	};
+
+	append(&hull_records, record);
 	record_index := len(hull_records) - 1;
 
 	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(half_cell_count, CELL_SIZE, hull.global_bounds);
@@ -65,16 +71,12 @@ insert_into_collision_hull_grid :: proc(using collision_hull_grid: ^Collision_Hu
 	return record_index;
 }
 
-collision_hull_grid_get_collision_hull :: proc(using collision_hull_grid: ^Collision_Hull_Grid, record_index: int) -> ^Collision_Hull {
-	return &hull_records[record_index].hull;
-}
-
 // This proc gets called with a tentative transform. That might seem wrong but it's actually correct. We want to move the entities tentatively such that they are
 // actually penetrating one another. The next time the proc gets called the collision hull is removed from the cells wich comprise the old tentative position and
 // then the cells get the hull of the new tentative position. Hulls in this grid are always at tentative positions.
 collision_hull_grid_transform_entity :: proc(using collision_hull_grid: ^Collision_Hull_Grid, hull_record_indices: []int, global_entity_transform: linalg.Matrix4f32) {
 	for record_index in hull_record_indices {
-		hull := &hull_records[record_index].hull;
+		hull := hull_records[record_index].hull;
 
 		// Remove the hull reference from the old cells which this hull spans
 		grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(half_cell_count, CELL_SIZE, hull.global_bounds);
@@ -109,7 +111,10 @@ collision_hull_grid_find_nearby_hulls :: proc(using collision_hull_grid: ^Collis
 	@(static) query_run: u32 = 0;
 
 	if query_run == max(u32) {
-		slice.fill(query_flags[:], 0);
+		for record in &hull_records {
+			record.query_run = 0;
+		}
+
 		query_run = 0;
 	}
 
@@ -122,9 +127,11 @@ collision_hull_grid_find_nearby_hulls :: proc(using collision_hull_grid: ^Collis
 	for x in grid_min_x..<grid_max_x {
 		for y in grid_min_y..<grid_max_y {
 			for index in &grid[x][y] {
-				if query_flags[index] != query_run {
+				record := &hull_records[index];
+
+				if record.query_run != query_run {
 					append(&indices, index);
-					query_flags[index] = query_run;
+					record.query_run = query_run;
 				}
 			}
 		}

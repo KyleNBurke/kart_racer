@@ -7,7 +7,7 @@ Entity :: struct {
 	orientation: linalg.Quaternionf32,
 	size: linalg.Vector3f32,
 	transform: linalg.Matrix4x4f32,
-	collision_hull_record_indices: [dynamic]int,
+	collision_hulls: [dynamic]Collision_Hull,
 	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity, ^Car_Entity},
 }
 
@@ -17,6 +17,8 @@ Inanimate_Entity :: struct {
 
 Rigid_Body_Entity :: struct {
 	using entity: Entity,
+	// This is only used for updating collision hulls within the collision hull grid which only rigid bodies do since they move.
+	collision_hull_record_indices: [dynamic]int,
 	mass: f32,
 	inv_local_inertia_tensor: linalg.Matrix3f32,
 	inv_global_inertia_tensor: linalg.Matrix3f32,
