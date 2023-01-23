@@ -41,6 +41,8 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 	clear_constraints(&constraints);
 	find_spring_constraints(game, dt);
+	
+	entities_woken_up := make([dynamic]Entity_Lookup, context.temp_allocator);
 
 	// Car collisions
 	for provoking_hull in &car.collision_hulls {
@@ -68,7 +70,8 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 				switch e in nearby_entity.variant {
 					case ^Rigid_Body_Entity:
-						unimplemented();
+						add_car_movable_constraint_set(&constraints, car, nearby_lookup, e, &manifold, dt);
+						car_collision_maybe_wake_island(&islands, &entities_woken_up, e);
 					case ^Inanimate_Entity:
 						// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
 						// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
@@ -82,7 +85,6 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 	// Other rigid body collisions
 	checked_hulls := make([dynamic]bool, len(collision_hull_grid.hull_records), context.temp_allocator);
-	entities_woken_up := make([dynamic]Entity_Lookup, context.temp_allocator);
 
 	for provoking_lookup in awake_rigid_body_lookups {
 		provoking_entity := get_entity(&entities_geos, provoking_lookup).variant.(^Rigid_Body_Entity);
@@ -124,7 +126,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 					switch e in nearby_entity.variant {
 						case ^Rigid_Body_Entity:
 							add_movable_constraint_set(&constraints, provoking_lookup, nearby_lookup, provoking_entity, e, &manifold, dt);
-							merge_islands(&islands, &entities_geos, &entities_woken_up, provoking_entity, e);
+							rigid_body_collision_merge_islands(&islands, &entities_geos, &entities_woken_up, provoking_lookup, provoking_entity, e);
 						case ^Inanimate_Entity:
 							add_fixed_constraint_set(&constraints, provoking_lookup, provoking_entity, &manifold, dt);
 						case ^Car_Entity:
@@ -137,8 +139,8 @@ simulate :: proc(using game: ^Game, dt: f32) {
 		}
 	}
 
+	update_island_helpers(&islands, &entities_geos);
 	solve_constraints(&constraints, &entities_geos, car);
-	append(&awake_rigid_body_lookups, ..entities_woken_up[:]);
 
 	{
 		car.position += car.velocity * dt;
@@ -146,6 +148,8 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 		update_entity_transform(car);
 	}
+	
+	append(&awake_rigid_body_lookups, ..entities_woken_up[:]);
 
 	for lookup in awake_rigid_body_lookups {
 		rigid_body := get_entity(&entities_geos, lookup).variant.(^Rigid_Body_Entity);

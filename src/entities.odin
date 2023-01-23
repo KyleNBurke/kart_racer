@@ -26,8 +26,7 @@ Rigid_Body_Entity :: struct {
 	angular_velocity: linalg.Vector3f32,
 	new_position: linalg.Vector3f32,
 	collision_exclude: bool,
-	node_index: int,
-	asleep_island_index: int,
+	island_index: int,
 	sleep_duration: f32,
 }
 
@@ -106,7 +105,7 @@ new_rigid_body_entity :: proc(
 	e.mass = mass;
 	e.inv_local_inertia_tensor = inv_local_inertia_tensor;
 	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
-	e.asleep_island_index = -1;
+	e.island_index = -1;
 
 	return e;
 }

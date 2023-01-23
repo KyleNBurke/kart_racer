@@ -138,7 +138,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 	{ // Rigid body islands
 		island_count := read_u32(&bytes, &pos);
-		islands.asleep_islands = make([dynamic][dynamic]Entity_Lookup, island_count);
+		init_islands(&islands, island_count);
 		
 		for island_index in 0..<island_count {
 			bodies_count := read_u32(&bytes, &pos);
@@ -171,7 +171,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 					append(&rigid_body.collision_hull_record_indices, hull_record);
 				}
 
-				// append(&islands.asleep_islands[island_index], entity_lookup);
+				// add_rigid_body_to_island(&islands, int(island_index), entity_lookup, rigid_body);
 				append(&awake_rigid_body_lookups, entity_lookup);
 
 				assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);

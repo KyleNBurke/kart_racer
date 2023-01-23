@@ -169,7 +169,6 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	move_camera(&game.camera, window, game.car, dt);
 
 	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
-	update_island_helpers(&game.islands, &game.collision_hull_grid, &game.entities_geos);
 
 	free_all(context.temp_allocator);
 }
