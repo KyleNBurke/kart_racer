@@ -52,11 +52,13 @@ main :: proc() {
 	glfw.SetKeyCallback(window, key_callback);
 
 	content_scale_x, content_scale_y := glfw.GetWindowContentScale(window);
-	// font := init_font("roboto", 20, content_scale_x);
+	font := init_font("roboto", 20, content_scale_x);
 	vulkan := vk2.init_vulkan(window);
 
 	camera_aspect := f32(vulkan.extent.width) / f32(vulkan.extent.height);
 	game := init_game(camera_aspect, window);
+
+	free_all(context.temp_allocator);
 
 	callback_state := Callback_State {
 		game = &game,

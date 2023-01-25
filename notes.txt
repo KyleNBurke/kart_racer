@@ -1,7 +1,6 @@
 Todo
 - Instead of exporting two files, it would be better if I just made an interpreter of the .kgl file. Could be written in odin. We could totally call it from python too.
 - Some fence posts fall through the ground. They might not have collision hulls or something.
-- Car collision hull physics
 
 I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting
 the impulse but they don't do anything. Maybe this is correct behavior and I need to put a lower bound on delta time, maybe the clamping logic is incorrect, need to investigate.

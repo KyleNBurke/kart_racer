@@ -7,12 +7,12 @@ import "core:c";
 import "core:slice";
 import tt "vendor:stb/truetype";
 
-CODE_POINTS_COUNT :: 126 - 33;
+CODE_POINTS_COUNT :: 40 - 33;
+CURSOR_CHECK: u32le : 0b10101010_10101010_10101010_10101010;
 
 Font :: struct {
 	name: string,
 	base_size: u32,
-	fnt_path: string,
 	ascent: f32,
 	descent: f32,
 	space_advance: f32,
@@ -31,88 +31,82 @@ Glyph :: struct {
 }
 
 init_font :: proc(name: string, base_size: u32, content_scale: f32) -> Font {
-	scaled_size := cast(u32) (f32(base_size) * content_scale);
-	path := fmt.tprintf("build/fonts/%v%v.cfont", name, scaled_size);
+	scaled_size := f32(base_size) * content_scale;
+	cached_file_path := fmt.tprintf("build/fonts/%v-%v.cfont", name, scaled_size);
 
-	if os.exists(path) {
+	if os.exists(cached_file_path) {
 		fmt.printf("Loading font %v at scaled size %v\n", name, scaled_size);
-		return Font{};
+		return load_cached(name, base_size, cached_file_path);
 	} else {
 		fmt.printf("Generating font %v at scaled size %v\n", name, scaled_size);
-		return generate_and_save(name, scaled_size);
+		return generate_and_save(name, base_size, scaled_size, cached_file_path);
 	}
 }
 
-generate_and_save :: proc(name: string, scaled_size: u32) -> Font {
-	TempGlyph :: struct {
-		code_point: rune,
+generate_and_save :: proc(name: string, base_size: u32, scaled_size: f32, cached_file_path: string) -> Font {
+	Temp_Glyph :: struct {
+		using glyph: Glyph,
 		bitmap: [^]byte,
-		width: u32,
-		height: u32,
-		offset_x: i32,
-		offset_y: i32,
-		atlas_pos_x: u32,
-		atlas_pos_y: u32,
-		advance: f32,
 	}
 
 	ascent, descent, space_advance: f32;
-	temp_glyphs: [CODE_POINTS_COUNT]TempGlyph; // Cleanup
+	temp_glyphs: [CODE_POINTS_COUNT]Temp_Glyph;
 
 	{ // Gather glyph metrics and render bitmaps
 		ttf_path := fmt.tprintf("res/%v.ttf", name);
-		// file, error := os.open(ttf_path, os.O_WRONLY | os.O_CREATE);
-		// defer os.close(file);
-		buffer, success := os.read_entire_file_from_filename(ttf_path);
-
-		if !success {
-			panic("Failed to open .ttf file\n");
-		}
+		data, success := os.read_entire_file_from_filename(ttf_path);
+		defer delete(data);
+		assert(success);
 
 		font_info: tt.fontinfo;
-		tt.InitFont(&font_info, &buffer[0], 0);
+		tt.InitFont(&font_info, &data[0], 0);
+
+		scale := tt.ScaleForPixelHeight(&font_info, scaled_size);
 
 		unscaled_ascent, unscaled_descent, unscaled_line_gap: i32;
-		scale := tt.ScaleForPixelHeight(&font_info, f32(scaled_size));
 		tt.GetFontVMetrics(&font_info, &unscaled_ascent, &unscaled_descent, &unscaled_line_gap);
 
 		ascent = f32(unscaled_ascent) * scale;
 		descent = f32(unscaled_descent) * scale;
-		// space_advance...
+		
+		unscaled_space_advance_x: c.int;
+		tt.GetCodepointHMetrics(&font_info, 32, &unscaled_space_advance_x, nil);
+		space_advance = scale * f32(unscaled_space_advance_x);
 
 		for i in 0..<CODE_POINTS_COUNT {
 			code_point := rune(i + 33);
 			width, height, offset_x, offset_y: c.int;
-			bitmap := tt.GetCodepointBitmap(&font_info, 0, scale, code_point, &width, &height, &offset_x, &offset_y); // Cleanup (eventually)
+			bitmap := tt.GetCodepointBitmap(&font_info, 0, scale, code_point, &width, &height, &offset_x, &offset_y);
 
-			advance, bearing: c.int;
-			tt.GetCodepointHMetrics(&font_info, rune(i), &advance, &bearing);
+			unscaled_advance_x: c.int;
+			tt.GetCodepointHMetrics(&font_info, rune(i), &unscaled_advance_x, nil);
 
-			temp_glyphs[i] = TempGlyph {
-				code_point = code_point,
+			temp_glyphs[i] = Temp_Glyph {
+				glyph = Glyph {
+					code_point = code_point,
+					width = u32(width),
+					height = u32(height),
+					offset_x = offset_x,
+					offset_y = offset_y,
+					advance = scale * f32(unscaled_advance_x),
+				},
 				bitmap = bitmap,
-				width = u32(width),
-				height = u32(height),
-				offset_x = offset_x,
-				offset_y = offset_y,
-				advance = f32(advance) * scale,
 			};
 		}
 	}
 
-	atlas: [dynamic]i16;
+	atlas := make([dynamic]i16, context.temp_allocator);
 	atlas_width: u32 = 0;
 	atlas_height: u32 = 0;
 
 	{ // Create atlas
-		ordered :: proc(a, b: TempGlyph) -> bool {
-			return (a.width * a.height) <= (b.width * b.height);
+		ordered :: proc(a, b: Temp_Glyph) -> bool {
+			return (a.width * a.height) >= (b.width * b.height);
 		}
 		
 		slice.sort_by(temp_glyphs[:], ordered);
-		slice.reverse(temp_glyphs[:]); // Couldn't get reverse_sort_by() to work
 
-		place :: proc(atlas: ^[dynamic]i16, atlas_width: u32, atlas_row: u32, atlas_col: u32, glyph: ^TempGlyph) {
+		place :: proc(atlas: ^[dynamic]i16, atlas_width: u32, atlas_row: u32, atlas_col: u32, glyph: ^Temp_Glyph) {
 			for glyph_row in 0..<glyph.height {
 				for glyph_col in 0..<glyph.width {
 					current_atlas_row := atlas_width * (atlas_row + glyph_row);
@@ -126,11 +120,10 @@ generate_and_save :: proc(name: string, scaled_size: u32) -> Font {
 		}
 
 		expand :: proc(atlas: ^[dynamic]i16, atlas_width, atlas_height: ^u32, additional_rows, additional_cols: u32) {
-			old_atlas := slice.clone(atlas[:]);
+			old_atlas := slice.clone(atlas[:], context.temp_allocator);
 			additional_items_count := (additional_rows * atlas_width^) + (additional_cols * atlas_height^) + (additional_rows * additional_cols);
-			additional_items := make([]i16, additional_items_count);
+			additional_items := make([]i16, additional_items_count, context.temp_allocator);
 			append(atlas, ..additional_items);
-			delete(additional_items);
 			
 			new_atlas_width := atlas_width^ + additional_cols;
 			new_atlas_height := atlas_height^ + additional_rows;
@@ -220,7 +213,7 @@ generate_and_save :: proc(name: string, scaled_size: u32) -> Font {
 		*/
 	}
 
-	final_atlas := make([]u8, atlas_width * atlas_height); // Cleanup
+	final_atlas := make([]u8, atlas_width * atlas_height, context.temp_allocator);
 	glyphs: [CODE_POINTS_COUNT]Glyph;
 
 	{ // Create the final atlas and glyphs
@@ -229,15 +222,7 @@ generate_and_save :: proc(name: string, scaled_size: u32) -> Font {
 		}
 
 		for temp_glyph, i in &temp_glyphs {
-			glyphs[i] = Glyph {
-				code_point = temp_glyph.code_point,
-				atlas_pos_x = temp_glyph.atlas_pos_x,
-				atlas_pos_y = temp_glyph.atlas_pos_y,
-				width = temp_glyph.width,
-				height = temp_glyph.height,
-				offset_x = temp_glyph.offset_x,
-				offset_y = temp_glyph.offset_y,
-			};
+			glyphs[i] = temp_glyph.glyph;
 		}
 
 		ordered :: proc(a, b: Glyph) -> bool {
@@ -248,10 +233,112 @@ generate_and_save :: proc(name: string, scaled_size: u32) -> Font {
 	}
 
 	{ // Save to file
+		err := os.make_directory("build/fonts");
+		assert(err == os.ERROR_NONE || err == os.ERROR_ALREADY_EXISTS);
 		
+		atlas_width_bytes := transmute([4]u8) u32le(atlas_width);
+		atlas_height_bytes := transmute([4]u8) u32le(atlas_height);
+		ascent_bytes := transmute([4]byte) f32le(ascent);
+		descent_bytes := transmute([4]byte) f32le(descent);
+		space_advance_bytes := transmute([4]byte) f32le(space_advance);
+		glyph_count_bytes := transmute([4]byte) u32le(CODE_POINTS_COUNT);
+		cursor_check_bytes := transmute([4]u8) CURSOR_CHECK;
+
+		data := make([dynamic]u8, context.temp_allocator);
+
+		append(&data, ..atlas_width_bytes[:]);
+		append(&data, ..atlas_height_bytes[:]);
+		append(&data, ..final_atlas[:]);
+		append(&data, ..cursor_check_bytes[:]);
+		append(&data, ..ascent_bytes[:]);
+		append(&data, ..descent_bytes[:]);
+		append(&data, ..space_advance_bytes[:]);
+		append(&data, ..glyph_count_bytes[:]);
+
+		for glyph in &glyphs {
+			code_point_bytes  := transmute([4]byte) i32le(glyph.code_point);
+			atlas_pos_x_bytes := transmute([4]byte) u32le(glyph.atlas_pos_x);
+			atlas_pos_y_bytes := transmute([4]byte) u32le(glyph.atlas_pos_y);
+			width_bytes       := transmute([4]byte) u32le(glyph.width);
+			height_bytes      := transmute([4]byte) u32le(glyph.height);
+			offset_x_bytes    := transmute([4]byte) i32le(glyph.offset_x);
+			offset_y_bytes    := transmute([4]byte) i32le(glyph.offset_y);
+			advance_bytes     := transmute([4]byte) f32le(glyph.advance);
+
+			append(&data, ..code_point_bytes[:]);
+			append(&data, ..atlas_pos_x_bytes[:]);
+			append(&data, ..atlas_pos_y_bytes[:]);
+			append(&data, ..width_bytes[:]);
+			append(&data, ..height_bytes[:]);
+			append(&data, ..offset_x_bytes[:]);
+			append(&data, ..offset_y_bytes[:]);
+			append(&data, ..advance_bytes[:]);
+		}
+
+		append(&data, ..cursor_check_bytes[:]);
+
+		success := os.write_entire_file(cached_file_path, data[:]);
+		assert(success);
 	}
 
 	return Font {
+		name = name,
+		base_size = base_size,
+		ascent = ascent,
+		descent = descent,
+		space_advance = space_advance,
+		glyphs = glyphs,
+	};
+}
+
+load_cached :: proc(name: string, base_size: u32, cached_file_path: string) -> Font {
+	data, success := os.read_entire_file_from_filename(cached_file_path, context.temp_allocator);
+	assert(success);
+
+	pos := 0;
+
+	atlas_width  := cast(int) (cast(^u32le) &data[pos])^; pos += 4;
+	atlas_height := cast(int) (cast(^u32le) &data[pos])^; pos += 4;
+	pos += atlas_width * atlas_height;
+
+	cursor_check := cast(^u32le) &data[pos]; pos += 4;
+	assert(cursor_check^ == CURSOR_CHECK);
+
+	ascent        := cast(f32) (cast(^f32le) &data[pos])^; pos += 4;
+	descent       := cast(f32) (cast(^f32le) &data[pos])^; pos += 4;
+	space_advance := cast(f32) (cast(^f32le) &data[pos])^; pos += 4;
+	glyph_count   := cast(^u32le) &data[pos]; pos += 4;
+
+	glyphs: [CODE_POINTS_COUNT]Glyph;
+
+	for i in 0..<glyph_count^ {
+		code_point  := cast(rune) (cast(^i32le) &data[pos])^; pos += 4;
+		atlas_pos_x := cast(u32) (cast(^u32le) &data[pos])^; pos += 4;
+		atlas_pos_y := cast(u32) (cast(^u32le) &data[pos])^; pos += 4;
+		width       := cast(u32) (cast(^u32le) &data[pos])^; pos += 4;
+		height      := cast(u32) (cast(^u32le) &data[pos])^; pos += 4;
+		offset_x    := cast(i32) (cast(^i32le) &data[pos])^; pos += 4;
+		offset_y    := cast(i32) (cast(^i32le) &data[pos])^; pos += 4;
+		advance     := cast(f32) (cast(^f32le) &data[pos])^; pos += 4;
+
+		glyphs[i] = Glyph {
+			code_point = code_point,
+			atlas_pos_x = atlas_pos_x,
+			atlas_pos_y = atlas_pos_y,
+			width = width,
+			height = height,
+			offset_x = offset_x,
+			offset_y = offset_y,
+			advance = advance,
+		};
+	}
+
+	cursor_check = cast(^u32le) &data[pos]; pos += 4;
+	assert(cursor_check^ == CURSOR_CHECK);
+
+	return Font {
+		name = name,
+		base_size = base_size,
 		ascent = ascent,
 		descent = descent,
 		space_advance = space_advance,
