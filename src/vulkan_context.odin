@@ -1,4 +1,5 @@
-package vk2;
+//+private file
+package main;
 
 import "core:fmt";
 import "core:os";
@@ -11,6 +12,7 @@ REQUIRED_DEBUG_INSTANCE_EXTENSIONS := [?]cstring {"VK_EXT_debug_utils"};
 REQUIRED_DEBUG_LAYERS := [?]cstring {"VK_LAYER_KHRONOS_validation"};
 REQUIRED_DEVICE_EXTENSIONS := [?]cstring {"VK_KHR_swapchain"};
 
+@(private)
 init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 	vulkan_context: VulkanContext;
 	using vulkan_context;
@@ -284,6 +286,7 @@ debug_message_callback : vk.ProcDebugUtilsMessengerCallbackEXT : proc "system" (
 	return false;
 }
 
+@(private)
 cleanup_vulkan_context :: proc(using vulkan_context: ^VulkanContext) {
 	vk.DestroyDevice(logical_device, nil);
 	vk.DestroySurfaceKHR(instance, window_surface, nil);

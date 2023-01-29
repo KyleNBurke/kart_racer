@@ -1,4 +1,5 @@
-package vk2;
+//+private file
+package main;
 
 import "core:fmt";
 import "core:c";
@@ -10,16 +11,27 @@ import "core:strings";
 import vk "vendor:vulkan";
 import "vendor:glfw";
 
+import "math2";
+
+@(private)
 IFFC :: 2; // In flight frames count
-PIPELINES_COUNT :: 3;
+
+PIPELINES_COUNT :: 4;
 
 INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE :: 5_000_000;
 
+@(private)
 MAX_ENTITIES :: 1000;
+
 INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE :: 64 * MAX_ENTITIES;
 
+@(private)
+TEXT_PUSH_CONSTANTS_SIZE :: 16;
+
+@(private)
 MESH_INSTANCE_ELEMENT_SIZE :: 64;
 
+@(private)
 Vulkan :: struct {
 	vulkan_context: VulkanContext,
 	surface_format: vk.SurfaceFormatKHR,
@@ -37,8 +49,10 @@ Vulkan :: struct {
 	primary_command_buffers: [IFFC]vk.CommandBuffer,
 	frame_resources: FrameResources,
 	mesh_resources: MeshResources,
+	ui_resources: UiResources,
 }
 
+@(private)
 VulkanContext :: struct {
 	instance: vk.Instance,
 	debug_messenger_ext: vk.DebugUtilsMessengerEXT,
@@ -89,18 +103,25 @@ MeshResources :: struct {
 	lambert_pipeline: vk.Pipeline,
 }
 
-LineResources :: struct {
-
-}
-
 ParticleResources :: struct {
 
 }
 
 UiResources :: struct {
-	
+	text_secondary_command_buffer: [IFFC]vk.CommandBuffer,
+	sampler_descriptor_set_layout: vk.DescriptorSetLayout,
+	atlas_description_set_layout: vk.DescriptorSetLayout,
+	sampler_descriptor_set: vk.DescriptorSet,
+	atlas_descriptor_set: vk.DescriptorSet,
+	text_pipeline_layout: vk.PipelineLayout,
+	text_pipeline: vk.Pipeline,
+	sampler: vk.Sampler,
+	atlas_image: vk.Image,
+	atlas_image_view: vk.ImageView,
+	atlas_memory: vk.DeviceMemory,
 }
 
+@(private)
 init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 	framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(window);
 	
@@ -138,8 +159,15 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 	update_mesh_instance_descriptor_sets(logical_device, mesh_instance_descriptor_sets, per_instance_buffers, per_instance_buffer_instance_block_offset);
 	mesh_descriptor_set_layouts := [?]vk.DescriptorSetLayout {frame_descriptor_set_layout, mesh_instance_descriptor_set_layout};
 	mesh_pipeline_layout := create_mesh_pipeline_layout(logical_device, &mesh_descriptor_set_layouts);
+
+	sampler_descriptor_set_layout, sampler_descriptor_set := create_sampler_descriptor_set(logical_device, descriptor_pool);
+	atlas_descriptor_set_layout, atlas_descriptor_set := create_atlas_descriptor_set(logical_device, descriptor_pool);
+	text_descriptor_set_layouts := [?]vk.DescriptorSetLayout {sampler_descriptor_set_layout, atlas_descriptor_set_layout};
+	text_pipeline_layout := create_text_pipeline_layout(logical_device, &text_descriptor_set_layouts);
 	
-	pipelines := create_pipelines(logical_device, render_pass, extent, mesh_pipeline_layout);
+	pipelines := create_pipelines(logical_device, render_pass, extent, mesh_pipeline_layout, text_pipeline_layout);
+
+	sampler := create_sampler(logical_device, sampler_descriptor_set);
 
 	mesh_resources := MeshResources {
 		per_instance_buffer_instance_block_offset = per_instance_buffer_instance_block_offset,
@@ -152,6 +180,17 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		line_pipeline = pipelines[0],
 		basic_pipeline = pipelines[1],
 		lambert_pipeline = pipelines[2],
+	};
+
+	ui_resources := UiResources {
+		text_secondary_command_buffer = secondary_command_buffers.text,
+		sampler_descriptor_set_layout = sampler_descriptor_set_layout,
+		atlas_description_set_layout = atlas_descriptor_set_layout,
+		sampler_descriptor_set = sampler_descriptor_set,
+		atlas_descriptor_set = atlas_descriptor_set,
+		text_pipeline_layout = text_pipeline_layout,
+		text_pipeline = pipelines[3],
+		sampler = sampler,
 	};
 
 	return Vulkan {
@@ -171,12 +210,23 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		primary_command_buffers,
 		frame_resources,
 		mesh_resources,
+		ui_resources,
 	};
 }
 
+@(private)
 cleanup_vulkan :: proc(using vulkan: ^Vulkan) {
 	logical_device := vulkan_context.logical_device;
 	vk.DeviceWaitIdle(logical_device);
+
+	vk.FreeMemory(logical_device, ui_resources.atlas_memory, nil);
+	vk.DestroyImageView(logical_device, ui_resources.atlas_image_view, nil);
+	vk.DestroyImage(logical_device, ui_resources.atlas_image, nil);
+	vk.DestroySampler(logical_device, ui_resources.sampler, nil);
+	vk.DestroyPipeline(logical_device, ui_resources.text_pipeline, nil);
+	vk.DestroyPipelineLayout(logical_device, ui_resources.text_pipeline_layout, nil);
+	vk.DestroyDescriptorSetLayout(logical_device, ui_resources.atlas_description_set_layout, nil);
+	vk.DestroyDescriptorSetLayout(logical_device, ui_resources.sampler_descriptor_set_layout, nil);
 	
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
@@ -214,10 +264,12 @@ cleanup_vulkan :: proc(using vulkan: ^Vulkan) {
 	cleanup_vulkan_context(&vulkan_context);
 }
 
+@(private)
 recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer_height: u32) {
 	logical_device := vulkan_context.logical_device;
 
 	vk.DeviceWaitIdle(logical_device);
+	vk.DestroyPipeline(logical_device, ui_resources.text_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.line_pipeline, nil);
@@ -237,10 +289,11 @@ recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer
 	depth_image = create_depth_image(logical_device, vulkan_context.physical_device, depth_format, extent);
 	swapchain, swapchain_frames = create_swapchain(&vulkan_context, surface_format, extent, render_pass, depth_image.image_view);
 
-	pipelines := create_pipelines(logical_device, render_pass, extent, mesh_resources.pipeline_layout);
+	pipelines := create_pipelines(logical_device, render_pass, extent, mesh_resources.pipeline_layout, ui_resources.text_pipeline_layout);
 	mesh_resources.line_pipeline = pipelines[0];
 	mesh_resources.basic_pipeline = pipelines[1];
 	mesh_resources.lambert_pipeline = pipelines[2];
+	ui_resources.text_pipeline = pipelines[3];
 
 	fmt.println("Swapchain recreated");
 }
@@ -256,16 +309,6 @@ find_memory_type_index :: proc(physical_device: vk.PhysicalDevice, requirements:
 	}
 
 	panic("Failed to find suitable memory type index\n");
-}
-
-align_forward :: proc(unaligned_offset: int, alignment: int) -> int {
-	under := (alignment - unaligned_offset % alignment) % alignment;
-	return unaligned_offset + under;
-}
-
-align_backward :: proc(unaligned_offset: int, alignment: int) -> int {
-	over := unaligned_offset % alignment;
-	return unaligned_offset - over;
 }
 
 find_color_surface_format :: proc(physical_device: vk.PhysicalDevice, surface: vk.SurfaceKHR) -> vk.SurfaceFormatKHR {
@@ -657,9 +700,7 @@ create_primary_command_buffers :: proc(logical_device: vk.Device, command_pool: 
 }
 
 SecondaryCommandBuffers :: struct {
-	line: [IFFC]vk.CommandBuffer,
-	basic: [IFFC]vk.CommandBuffer,
-	lambert: [IFFC]vk.CommandBuffer,
+	line, basic, lambert, text: [IFFC]vk.CommandBuffer,
 }
 
 create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool: vk.CommandPool) -> SecondaryCommandBuffers {
@@ -676,19 +717,16 @@ create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool
 	r := vk.AllocateCommandBuffers(logical_device, &allocate_info, &command_buffers_array[0]);
 	assert(r == .SUCCESS);
 
-	line, basic, lambert: [IFFC]vk.CommandBuffer;
+	line, basic, lambert, text: [IFFC]vk.CommandBuffer;
 	
 	for i in 0..<IFFC {
 		line[i]    = command_buffers_array[PIPELINES_COUNT * i];
 		basic[i]   = command_buffers_array[PIPELINES_COUNT * i + 1];
 		lambert[i] = command_buffers_array[PIPELINES_COUNT * i + 2];
+		text[i]    = command_buffers_array[PIPELINES_COUNT * i + 3];
 	}
 
-	return SecondaryCommandBuffers {
-		line,
-		basic,
-		lambert,
-	};
+	return SecondaryCommandBuffers { line, basic, lambert, text };
 }
 
 create_frame_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool: vk.DescriptorPool) -> (vk.DescriptorSetLayout, [IFFC]vk.DescriptorSet) {
@@ -796,7 +834,7 @@ update_frame_descriptor_sets :: proc(logical_device: vk.Device, descriptor_sets:
 		};
 	}
 
-	vk.UpdateDescriptorSets(logical_device, IFFC, &write_descriptor_sets[0], 0, {});
+	vk.UpdateDescriptorSets(logical_device, IFFC, &write_descriptor_sets[0], 0, nil);
 }
 
 create_per_instance_buffers :: proc(physical_device: vk.PhysicalDevice, logical_device: vk.Device, total_size: int) -> ([IFFC]vk.Buffer, [IFFC]vk.DeviceMemory) {
@@ -818,7 +856,7 @@ calculate_per_instance_buffer_metrics :: proc(physical_device: vk.PhysicalDevice
 	alignment := physical_device_properties.limits.minStorageBufferOffsetAlignment;
 
 	unaligned_offset := INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE;
-	instance_block_offset = align_forward(unaligned_offset, int(alignment));
+	instance_block_offset = math2.align_forward(unaligned_offset, int(alignment));
 
 	total_size = instance_block_offset + INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE;
 
@@ -882,7 +920,7 @@ update_mesh_instance_descriptor_sets :: proc(logical_device: vk.Device, descript
 		};
 	}
 
-	vk.UpdateDescriptorSets(logical_device, IFFC, &write_descriptor_sets[0], 0, {});
+	vk.UpdateDescriptorSets(logical_device, IFFC, &write_descriptor_sets[0], 0, nil);
 }
 
 create_mesh_pipeline_layout :: proc(logical_device: vk.Device, descriptor_set_layouts: ^[2]vk.DescriptorSetLayout) -> vk.PipelineLayout {
@@ -899,11 +937,105 @@ create_mesh_pipeline_layout :: proc(logical_device: vk.Device, descriptor_set_la
 	return pipeline_layout;
 }
 
+create_sampler_descriptor_set :: proc(logical_device: vk.Device, descriptor_pool: vk.DescriptorPool) -> (vk.DescriptorSetLayout, vk.DescriptorSet) {
+	layout_binding := vk.DescriptorSetLayoutBinding {
+		binding = 0,
+		descriptorType = .SAMPLER,
+		descriptorCount = 1,
+		stageFlags = {.FRAGMENT},
+	};
+
+	layout_create_info := vk.DescriptorSetLayoutCreateInfo {
+		sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		pBindings = &layout_binding,
+		bindingCount = 1,
+	};
+
+	descriptor_set_layout: vk.DescriptorSetLayout;
+	r := vk.CreateDescriptorSetLayout(logical_device, &layout_create_info, nil, &descriptor_set_layout);
+	assert(r == .SUCCESS);
+
+	allocate_info := vk.DescriptorSetAllocateInfo {
+		sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
+		descriptorPool = descriptor_pool,
+		pSetLayouts = &descriptor_set_layout,
+		descriptorSetCount = 1,
+	};
+
+	descriptor_set: vk.DescriptorSet;
+	r = vk.AllocateDescriptorSets(logical_device, &allocate_info, &descriptor_set);
+	assert(r == .SUCCESS);
+
+	return descriptor_set_layout, descriptor_set;
+}
+
+create_atlas_descriptor_set :: proc(logical_device: vk.Device, descriptor_pool: vk.DescriptorPool) -> (vk.DescriptorSetLayout, vk.DescriptorSet) {
+	layout_binding := vk.DescriptorSetLayoutBinding {
+		binding = 0,
+		descriptorType = .SAMPLED_IMAGE,
+		descriptorCount = 1,
+		stageFlags = {.FRAGMENT},
+	};
+
+	layout_create_info := vk.DescriptorSetLayoutCreateInfo {
+		sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		pBindings = &layout_binding,
+		bindingCount = 1,
+	};
+
+	descriptor_set_layout: vk.DescriptorSetLayout;
+	r := vk.CreateDescriptorSetLayout(logical_device, &layout_create_info, nil, &descriptor_set_layout);
+	assert(r == .SUCCESS);
+
+	allocate_info := vk.DescriptorSetAllocateInfo {
+		sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
+		descriptorPool = descriptor_pool,
+		pSetLayouts = &descriptor_set_layout,
+		descriptorSetCount = 1,
+	};
+
+	descriptor_set: vk.DescriptorSet;
+	r = vk.AllocateDescriptorSets(logical_device, &allocate_info, &descriptor_set);
+	assert(r == .SUCCESS);
+
+	return descriptor_set_layout, descriptor_set;
+}
+
+create_text_pipeline_layout :: proc(logical_device: vk.Device, descriptor_set_layouts: ^[2]vk.DescriptorSetLayout) -> vk.PipelineLayout {
+	/*
+	Push constants layout  Offset
+	vec2 half_extent       0
+	vec2 position          8
+	Total size = 16
+	*/
+
+	push_constant_range := vk.PushConstantRange {
+		stageFlags = {.VERTEX},
+		offset = 0,
+		size = TEXT_PUSH_CONSTANTS_SIZE,
+	};
+
+	create_info := vk.PipelineLayoutCreateInfo {
+		sType = .PIPELINE_LAYOUT_CREATE_INFO,
+		pSetLayouts = &descriptor_set_layouts[0],
+		setLayoutCount = len(descriptor_set_layouts),
+		pPushConstantRanges = &push_constant_range,
+		pushConstantRangeCount = 1,
+	};
+
+	pipeline_layout: vk.PipelineLayout;
+	r := vk.CreatePipelineLayout(logical_device, &create_info, nil, &pipeline_layout);
+	assert(r == .SUCCESS);
+
+	return pipeline_layout;
+}
+
 create_pipelines :: proc(
 	logical_device: vk.Device,
 	render_pass: vk.RenderPass,
 	extent: vk.Extent2D,
 	mesh_pipeline_layout: vk.PipelineLayout,
+	text_pipeline_layout: vk.PipelineLayout,
 ) -> [PIPELINES_COUNT]vk.Pipeline {
 	// Shared
 	create_shader_module :: proc(logical_device: vk.Device, file_name: string) -> vk.ShaderModule {
@@ -1028,23 +1160,19 @@ create_pipelines :: proc(
 		inputRate = .VERTEX,
 	};
 
-	line_input_attribute_description_position := vk.VertexInputAttributeDescription {
-		binding = 0,
-		location = 0,
-		format = .R32G32B32_SFLOAT,
-		offset = 0,
-	};
-
-	line_input_attribute_description_color := vk.VertexInputAttributeDescription {
-		binding = 0,
-		location = 1,
-		format = .R32G32B32_SFLOAT,
-		offset = 12,
-	};
-
 	line_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
-		line_input_attribute_description_position,
-		line_input_attribute_description_color,
+		vk.VertexInputAttributeDescription { // Position
+			binding = 0,
+			location = 0,
+			format = .R32G32B32_SFLOAT,
+			offset = 0,
+		},
+		vk.VertexInputAttributeDescription { // Color
+			binding = 0,
+			location = 1,
+			format = .R32G32B32_SFLOAT,
+			offset = 12,
+		},
 	};
 
 	line_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
@@ -1085,14 +1213,14 @@ create_pipelines :: proc(
 		subpass = 0,
 	};
 
-	// Triangle mesh
-	tri_mesh_input_assembly_state_create_info := vk.PipelineInputAssemblyStateCreateInfo {
+	// Triangle
+	triangle_input_assembly_state_create_info := vk.PipelineInputAssemblyStateCreateInfo {
 		sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 		topology = .TRIANGLE_LIST,
 		primitiveRestartEnable = false,
 	};
 
-	tri_mesh_rasterization_state_create_info := vk.PipelineRasterizationStateCreateInfo {
+	triangle_rasterization_state_create_info := vk.PipelineRasterizationStateCreateInfo {
 		sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 		depthClampEnable = false,
 		rasterizerDiscardEnable = false,
@@ -1103,34 +1231,31 @@ create_pipelines :: proc(
 		depthBiasEnable = false,
 	};
 
-	tri_mesh_input_binding_description := vk.VertexInputBindingDescription {
+	// Basic
+	basic_input_binding_description := vk.VertexInputBindingDescription {
 		binding = 0,
 		stride = 36,
 		inputRate = .VERTEX,
 	};
 
-	tri_mesh_input_attribute_description_position := vk.VertexInputAttributeDescription {
-		binding = 0,
-		location = 0,
-		format = .R32G32B32_SFLOAT,
-		offset = 0,
-	};
-
-	basic_input_attribute_description_color := vk.VertexInputAttributeDescription {
-		binding = 0,
-		location = 1,
-		format = .R32G32B32_SFLOAT,
-		offset = 24,
-	};
-
 	basic_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
-		tri_mesh_input_attribute_description_position,
-		basic_input_attribute_description_color,
+		vk.VertexInputAttributeDescription { // Position
+			binding = 0,
+			location = 0,
+			format = .R32G32B32_SFLOAT,
+			offset = 0,
+		},
+		vk.VertexInputAttributeDescription { // Color
+			binding = 0,
+			location = 1,
+			format = .R32G32B32_SFLOAT,
+			offset = 24,
+		},
 	};
 
 	basic_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
 		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		pVertexBindingDescriptions = &tri_mesh_input_binding_description,
+		pVertexBindingDescriptions = &basic_input_binding_description,
 		vertexBindingDescriptionCount = 1,
 		pVertexAttributeDescriptions = &basic_input_attribute_descriptions[0],
 		vertexAttributeDescriptionCount = len(basic_input_attribute_descriptions),
@@ -1141,9 +1266,9 @@ create_pipelines :: proc(
 		pStages = &basic_stage_create_infos[0],
 		stageCount = len(basic_stage_create_infos),
 		pVertexInputState = &basic_vertex_input_state_create_info,
-		pInputAssemblyState = &tri_mesh_input_assembly_state_create_info,
+		pInputAssemblyState = &triangle_input_assembly_state_create_info,
 		pViewportState = &viewport_state_create_info,
-		pRasterizationState = &tri_mesh_rasterization_state_create_info,
+		pRasterizationState = &triangle_rasterization_state_create_info,
 		pMultisampleState = &multisample_state_create_info,
 		pDepthStencilState = &depth_stencil_state_create_info,
 		pColorBlendState = &color_blend_state_create_info,
@@ -1173,29 +1298,36 @@ create_pipelines :: proc(
 
 	lambert_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {lambert_vert_stage_create_info, lambert_frag_stage_create_info};
 
-	lambert_input_attribute_description_normal := vk.VertexInputAttributeDescription {
+	lambert_input_binding_description := vk.VertexInputBindingDescription {
 		binding = 0,
-		location = 1,
-		format = .R32G32B32_SFLOAT,
-		offset = 12,
-	};
-
-	lambert_input_attribute_description_color := vk.VertexInputAttributeDescription {
-		binding = 0,
-		location = 2,
-		format = .R32G32B32_SFLOAT,
-		offset = 24,
+		stride = 36,
+		inputRate = .VERTEX,
 	};
 
 	lambert_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
-		tri_mesh_input_attribute_description_position,
-		lambert_input_attribute_description_normal,
-		lambert_input_attribute_description_color,
+		vk.VertexInputAttributeDescription { // Position
+			binding = 0,
+			location = 0,
+			format = .R32G32B32_SFLOAT,
+			offset = 0,
+		},
+		vk.VertexInputAttributeDescription { // Normal
+			binding = 0,
+			location = 1,
+			format = .R32G32B32_SFLOAT,
+			offset = 12,
+		},
+		vk.VertexInputAttributeDescription { // Color
+			binding = 0,
+			location = 2,
+			format = .R32G32B32_SFLOAT,
+			offset = 24,
+		},
 	};
 
 	lambert_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
 		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		pVertexBindingDescriptions = &tri_mesh_input_binding_description,
+		pVertexBindingDescriptions = &lambert_input_binding_description,
 		vertexBindingDescriptionCount = 1,
 		pVertexAttributeDescriptions = &lambert_input_attribute_descriptions[0],
 		vertexAttributeDescriptionCount = len(lambert_input_attribute_descriptions),
@@ -1206,13 +1338,105 @@ create_pipelines :: proc(
 		pStages = &lambert_stage_create_infos[0],
 		stageCount = len(lambert_stage_create_infos),
 		pVertexInputState = &lambert_vertex_input_state_create_info,
-		pInputAssemblyState = &tri_mesh_input_assembly_state_create_info,
+		pInputAssemblyState = &triangle_input_assembly_state_create_info,
 		pViewportState = &viewport_state_create_info,
-		pRasterizationState = &tri_mesh_rasterization_state_create_info,
+		pRasterizationState = &triangle_rasterization_state_create_info,
 		pMultisampleState = &multisample_state_create_info,
 		pDepthStencilState = &depth_stencil_state_create_info,
 		pColorBlendState = &color_blend_state_create_info,
 		layout = mesh_pipeline_layout,
+		renderPass = render_pass,
+		subpass = 0,
+	};
+
+	// Text
+	text_vert_module := create_shader_module(logical_device, "text.vert");
+	defer vk.DestroyShaderModule(logical_device, text_vert_module, nil);
+	text_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
+		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage = {.VERTEX},
+		module = text_vert_module,
+		pName = shader_entry_point,
+	};
+
+	text_frag_module := create_shader_module(logical_device, "text.frag");
+	defer vk.DestroyShaderModule(logical_device, text_frag_module, nil);
+	text_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
+		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage = {.FRAGMENT},
+		module = text_frag_module,
+		pName = shader_entry_point,
+	};
+
+	text_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {text_vert_stage_create_info, text_frag_stage_create_info};
+
+	text_input_binding_description := vk.VertexInputBindingDescription {
+		binding = 0,
+		stride = 16,
+		inputRate = .VERTEX,
+	};
+
+	text_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
+		vk.VertexInputAttributeDescription { // Position
+			binding = 0,
+			location = 0,
+			format = .R32G32_SFLOAT,
+			offset = 0,
+		},
+		vk.VertexInputAttributeDescription { // Texture position
+			binding = 0,
+			location = 1,
+			format = .R32G32_SFLOAT,
+			offset = 8,
+		},
+	};
+
+	text_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
+		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		pVertexBindingDescriptions = &text_input_binding_description,
+		vertexBindingDescriptionCount = 1,
+		pVertexAttributeDescriptions = &text_input_attribute_descriptions[0],
+		vertexAttributeDescriptionCount = len(text_input_attribute_descriptions),
+	};
+
+	text_depth_stencil_state_create_info := vk.PipelineDepthStencilStateCreateInfo {
+		sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+		depthTestEnable = false,
+		depthWriteEnable = false,
+		depthBoundsTestEnable = false,
+		stencilTestEnable = false,
+	};
+
+	text_color_blend_attachment_state := vk.PipelineColorBlendAttachmentState {
+		colorWriteMask = {.R, .G, .B, .A},
+		blendEnable = true,
+		srcColorBlendFactor = .SRC_ALPHA,
+		dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
+		colorBlendOp = .ADD,
+		srcAlphaBlendFactor = .ONE,
+		dstAlphaBlendFactor = .ZERO,
+		alphaBlendOp = .ADD,
+	};
+
+	text_color_blend_state_create_info := vk.PipelineColorBlendStateCreateInfo {
+		sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		logicOpEnable = false,
+		pAttachments = &text_color_blend_attachment_state,
+		attachmentCount = 1,
+	};
+
+	text_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
+		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
+		pStages = &text_stage_create_infos[0],
+		stageCount = len(text_stage_create_infos),
+		pVertexInputState = &text_vertex_input_state_create_info,
+		pInputAssemblyState = &triangle_input_assembly_state_create_info,
+		pViewportState = &viewport_state_create_info,
+		pRasterizationState = &triangle_rasterization_state_create_info,
+		pMultisampleState = &multisample_state_create_info,
+		pDepthStencilState = &text_depth_stencil_state_create_info,
+		pColorBlendState = &text_color_blend_state_create_info,
+		layout = text_pipeline_layout,
 		renderPass = render_pass,
 		subpass = 0,
 	};
@@ -1222,6 +1446,7 @@ create_pipelines :: proc(
 		line_pipeline_create_info,
 		basic_pipeline_create_info,
 		lambert_pipeline_create_info,
+		text_pipeline_create_info,
 	};
 
 	pipelines: [PIPELINES_COUNT]vk.Pipeline;
@@ -1229,4 +1454,323 @@ create_pipelines :: proc(
 	assert(r == .SUCCESS);
 
 	return pipelines;
+}
+
+create_sampler :: proc(logical_device: vk.Device, sampler_descriptor_set: vk.DescriptorSet) -> vk.Sampler {
+	sampler_create_info := vk.SamplerCreateInfo {
+		sType = .SAMPLER_CREATE_INFO,
+		magFilter = .LINEAR,
+		minFilter = .LINEAR,
+		addressModeU = .CLAMP_TO_BORDER,
+		addressModeV = .CLAMP_TO_BORDER,
+		addressModeW = .CLAMP_TO_BORDER,
+		anisotropyEnable = false,
+		borderColor = .FLOAT_OPAQUE_BLACK,
+		unnormalizedCoordinates = true,
+		compareEnable = false,
+		mipmapMode = .NEAREST,
+		mipLodBias = 0,
+		minLod = 0,
+		maxLod = 0,
+	};
+
+	sampler: vk.Sampler;
+	r := vk.CreateSampler(logical_device, &sampler_create_info, nil, &sampler);
+	assert(r == .SUCCESS);
+
+	descriptor_image_info := vk.DescriptorImageInfo {
+		sampler = sampler,
+	};
+
+	write_descriptor_set := vk.WriteDescriptorSet {
+		sType = .WRITE_DESCRIPTOR_SET,
+		dstSet = sampler_descriptor_set,
+		dstBinding = 0,
+		dstArrayElement = 0,
+		descriptorCount = 1,
+		descriptorType = .SAMPLER,
+		pImageInfo = &descriptor_image_info,
+	};
+
+	vk.UpdateDescriptorSets(logical_device, 1, &write_descriptor_set, 0, nil);
+
+	return sampler;
+}
+
+@(private)
+submit_font :: proc(vulkan: ^Vulkan, font: ^Font) {
+	logical_device := vulkan.vulkan_context.logical_device;
+	ui_resources := &vulkan.ui_resources;
+
+	// Wait for current render to finish and clean up existing resources
+	{
+		// Commented out because untested.
+		// vk.DeviceWaitIdle(logical_device);
+		// vk.FreeMemory(logical_device, ui_resources.atlas_memory, nil);
+		// vk.DestroyImageView(logical_device, ui_resources.atlas_image_view, nil);
+		// vk.DestroyImage(logical_device, ui_resources.atlas_image, nil);
+	}
+
+	// Open cached font file and get atlas dimensions
+	file: os.Handle;
+	atlas_width, atlas_height: u32;
+
+	{
+		errno: os.Errno;
+		file, errno = os.open(font.cached_file_path);
+		assert(errno == os.ERROR_NONE);
+
+		data: [8]u8;
+		n: int;
+		n, errno = os.read(file, data[:]);
+		assert(errno == os.ERROR_NONE);
+
+		atlas_width = cast(u32) (cast(^u32le) &data[0])^;
+		atlas_height = cast(u32) (cast(^u32le) &data[4])^;
+	}
+
+	// Create image
+	{
+		image_create_info := vk.ImageCreateInfo {
+			sType = .IMAGE_CREATE_INFO,
+			imageType = .D2,
+			extent = vk.Extent3D {atlas_width, atlas_height, 1},
+			mipLevels = 1,
+			arrayLayers = 1,
+			format = .R8_UNORM,
+			tiling = .OPTIMAL,
+			initialLayout = .UNDEFINED,
+			usage = {.TRANSFER_DST, .SAMPLED},
+			sharingMode = .EXCLUSIVE,
+			samples = {._1},
+		};
+
+		r := vk.CreateImage(logical_device, &image_create_info, nil, &ui_resources.atlas_image);
+		assert(r == .SUCCESS);
+	}
+
+	// Create device local memory
+	size: vk.DeviceSize;
+
+	{
+		memory_requirements: vk.MemoryRequirements;
+		vk.GetImageMemoryRequirements(logical_device, ui_resources.atlas_image, &memory_requirements);
+		size = memory_requirements.size;
+
+		memory_type_index := find_memory_type_index(vulkan.vulkan_context.physical_device, memory_requirements, {.DEVICE_LOCAL});
+
+		memory_allocate_info := vk.MemoryAllocateInfo {
+			sType = .MEMORY_ALLOCATE_INFO,
+			allocationSize = size,
+			memoryTypeIndex = memory_type_index,
+		};
+
+		r := vk.AllocateMemory(logical_device, &memory_allocate_info, nil, &ui_resources.atlas_memory);
+		assert(r == .SUCCESS);
+	}
+
+	// Bind image to device local memory
+	r := vk.BindImageMemory(logical_device, ui_resources.atlas_image, ui_resources.atlas_memory, 0);
+	assert(r == .SUCCESS);
+
+	// Create image view
+	image_view_create_info := vk.ImageViewCreateInfo {
+		sType = .IMAGE_VIEW_CREATE_INFO,
+		image = ui_resources.atlas_image,
+		viewType = .D2,
+		format = .R8_UNORM,
+		subresourceRange = vk.ImageSubresourceRange {
+			aspectMask = {.COLOR},
+			baseMipLevel = 0,
+			levelCount = 1,
+			baseArrayLayer = 0,
+			layerCount = 1,
+		},
+	};
+
+	r = vk.CreateImageView(logical_device, &image_view_create_info, nil, &ui_resources.atlas_image_view);
+	assert(r == .SUCCESS);
+
+	// Create staging buffer
+	staging_buffer: vk.Buffer;
+	staging_buffer_memory: vk.DeviceMemory;
+
+	{
+		buffer_create_info := vk.BufferCreateInfo {
+			sType = .BUFFER_CREATE_INFO,
+			size = size,
+			usage = {.TRANSFER_SRC},
+			sharingMode = .EXCLUSIVE,
+		};
+
+		r = vk.CreateBuffer(logical_device, &buffer_create_info, nil, &staging_buffer); // prob use temp allocator here
+		assert(r == .SUCCESS);
+
+		memory_requirements: vk.MemoryRequirements;
+		vk.GetBufferMemoryRequirements(logical_device, staging_buffer, &memory_requirements);
+		memory_type_index := find_memory_type_index(vulkan.vulkan_context.physical_device, memory_requirements, {.HOST_VISIBLE});
+
+		allocate_info := vk.MemoryAllocateInfo {
+			sType = .MEMORY_ALLOCATE_INFO,
+			allocationSize = memory_requirements.size,
+			memoryTypeIndex = memory_type_index,
+		};
+
+		r = vk.AllocateMemory(logical_device, &allocate_info, nil, &staging_buffer_memory);
+		assert(r == .SUCCESS);
+
+		r = vk.BindBufferMemory(logical_device, staging_buffer, staging_buffer_memory, 0);
+		assert(r == .SUCCESS);
+	}
+
+	// Copy atlas into staging buffer
+	{
+		staging_buffer_ptr: rawptr;
+		r = vk.MapMemory(logical_device, staging_buffer_memory, 0, transmute(vk.DeviceSize) vk.WHOLE_SIZE, {}, &staging_buffer_ptr); // do this in other places?
+		assert(r == .SUCCESS);
+
+		data := make([dynamic]u8, atlas_width * atlas_height, context.temp_allocator);
+		n, errno := os.read(file, data[:])
+		assert(errno == os.ERROR_NONE);
+
+		mem.copy_non_overlapping(staging_buffer_ptr, raw_data(data), int(atlas_width * atlas_height));
+
+		range := vk.MappedMemoryRange {
+			sType = .MAPPED_MEMORY_RANGE,
+			memory = staging_buffer_memory,
+			offset = 0,
+			size = transmute(vk.DeviceSize) vk.WHOLE_SIZE,
+		};
+
+		r = vk.FlushMappedMemoryRanges(logical_device, 1, &range);
+		assert(r == .SUCCESS);
+
+		vk.UnmapMemory(logical_device, staging_buffer_memory);
+	}
+
+	// Record commands to copy staging buffer to device local memory
+	command_buffer: vk.CommandBuffer;
+
+	{
+		command_buffer_allocate_info := vk.CommandBufferAllocateInfo {
+			sType = .COMMAND_BUFFER_ALLOCATE_INFO,
+			level = .PRIMARY,
+			commandPool = vulkan.command_pool,
+			commandBufferCount = 1,
+		};
+
+		r = vk.AllocateCommandBuffers(logical_device, &command_buffer_allocate_info, &command_buffer);
+		assert(r == .SUCCESS);
+
+		command_buffer_begin_info := vk.CommandBufferBeginInfo {
+			sType = .COMMAND_BUFFER_BEGIN_INFO,
+			flags = {.ONE_TIME_SUBMIT},
+		};
+
+		r = vk.BeginCommandBuffer(command_buffer, &command_buffer_begin_info);
+		assert(r == .SUCCESS);
+
+		transfer_image_memory_barrier := vk.ImageMemoryBarrier {
+			sType = .IMAGE_MEMORY_BARRIER,
+			oldLayout = .UNDEFINED,
+			newLayout = .TRANSFER_DST_OPTIMAL,
+			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			image = ui_resources.atlas_image,
+			subresourceRange = vk.ImageSubresourceRange {
+				aspectMask = {.COLOR},
+				baseMipLevel = 0,
+				levelCount = 1,
+				baseArrayLayer = 0,
+				layerCount = 1,
+			},
+			srcAccessMask = {},
+			dstAccessMask = {.TRANSFER_WRITE},
+		};
+
+		vk.CmdPipelineBarrier(command_buffer, {.TOP_OF_PIPE}, {.TRANSFER}, {}, 0, nil, 0, nil, 1, &transfer_image_memory_barrier);
+
+		region := vk.BufferImageCopy {
+			bufferOffset = 0,
+			bufferRowLength = 0,
+			bufferImageHeight = 0,
+			imageSubresource = vk.ImageSubresourceLayers {
+				aspectMask = {.COLOR},
+				mipLevel = 0,
+				baseArrayLayer = 0,
+				layerCount = 1,
+			},
+			imageOffset = vk.Offset3D {0, 0, 0},
+			imageExtent = vk.Extent3D {atlas_width, atlas_height, 1},
+		};
+
+		vk.CmdCopyBufferToImage(command_buffer, staging_buffer, ui_resources.atlas_image, .TRANSFER_DST_OPTIMAL, 1, &region);
+
+		shader_read_image_memory_barrier := vk.ImageMemoryBarrier {
+			sType = .IMAGE_MEMORY_BARRIER,
+			oldLayout = .TRANSFER_DST_OPTIMAL,
+			newLayout = .SHADER_READ_ONLY_OPTIMAL,
+			srcQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			dstQueueFamilyIndex = vk.QUEUE_FAMILY_IGNORED,
+			image = ui_resources.atlas_image,
+			subresourceRange = vk.ImageSubresourceRange {
+				aspectMask = {.COLOR},
+				baseMipLevel = 0,
+				levelCount = 1,
+				baseArrayLayer = 0,
+				layerCount = 1,
+			},
+			srcAccessMask = {.TRANSFER_WRITE},
+			dstAccessMask = {.SHADER_READ},
+		};
+
+		vk.CmdPipelineBarrier(command_buffer, {.TRANSFER}, {.FRAGMENT_SHADER}, {}, 0, nil, 0, nil, 1, &shader_read_image_memory_barrier);
+		
+		r = vk.EndCommandBuffer(command_buffer);
+		assert(r == .SUCCESS);
+	}
+
+	// Submit command buffer
+	{
+		submit_info := vk.SubmitInfo {
+			sType = .SUBMIT_INFO,
+			pCommandBuffers = &command_buffer,
+			commandBufferCount = 1,
+		};
+
+		r = vk.QueueSubmit(vulkan.vulkan_context.graphics_queue, 1, &submit_info, vk.Fence {});
+		assert(r == .SUCCESS);
+	}
+
+	// Update atlas descriptor set
+	{
+		descriptor_image_info := vk.DescriptorImageInfo {
+			imageLayout = .SHADER_READ_ONLY_OPTIMAL,
+			imageView = ui_resources.atlas_image_view,
+		};
+
+		write_descriptor_set := vk.WriteDescriptorSet {
+			sType = .WRITE_DESCRIPTOR_SET,
+			dstSet = ui_resources.atlas_descriptor_set,
+			dstBinding = 0,
+			dstArrayElement = 0,
+			descriptorCount = 1,
+			descriptorType = .SAMPLED_IMAGE,
+			pImageInfo = &descriptor_image_info,
+		};
+
+		vk.UpdateDescriptorSets(logical_device, 1, &write_descriptor_set, 0, nil);
+	}
+
+	// Cleanup
+	{
+		os.close(file);
+
+		r = vk.DeviceWaitIdle(logical_device);
+		assert(r == .SUCCESS);
+
+		vk.FreeCommandBuffers(logical_device, vulkan.command_pool, 1, &command_buffer);
+		vk.FreeMemory(logical_device, staging_buffer_memory, nil);
+		vk.DestroyBuffer(logical_device, staging_buffer, nil);
+	}
 }

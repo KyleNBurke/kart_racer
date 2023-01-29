@@ -5,7 +5,6 @@ import "core:c";
 import "core:time";
 import "core:runtime";
 import "vendor:glfw";
-import "vk2";
 
 when ODIN_DEBUG {
 	import "core:mem";
@@ -23,6 +22,8 @@ Callback_State :: struct {
 Game :: struct {
 	camera: Camera,
 	entities_geos: Entities_Geos,
+	font: Font,
+	texts: [dynamic]Text,
 	ground_grid: Ground_Grid,
 	collision_hull_grid: Collision_Hull_Grid,
 	awake_rigid_body_lookups: [dynamic]Entity_Lookup,
@@ -30,6 +31,7 @@ Game :: struct {
 	constraints: Constraints,
 	car: ^Car_Entity,
 	car_helpers: Car_Helpers,
+	frame_metrics: Frame_Metrics,
 }
 
 main :: proc() {
@@ -51,12 +53,8 @@ main :: proc() {
 	glfw.SetWindowContentScaleCallback(window, content_scale_callback);
 	glfw.SetKeyCallback(window, key_callback);
 
-	content_scale_x, content_scale_y := glfw.GetWindowContentScale(window);
-	font := init_font("roboto", 20, content_scale_x);
-	vulkan := vk2.init_vulkan(window);
-
-	camera_aspect := f32(vulkan.extent.width) / f32(vulkan.extent.height);
-	game := init_game(camera_aspect, window);
+	vulkan := init_vulkan(window);
+	game := init_game(&vulkan, window);
 
 	free_all(context.temp_allocator);
 
@@ -85,7 +83,7 @@ main :: proc() {
 			height := u32(height_i32);
 
 			if width != vulkan.extent.width || height != vulkan.extent.height {
-				vk2.recreate_swapchain(&vulkan, width, height);
+				recreate_swapchain(&vulkan, width, height);
 				update_aspect_ratio(&game.camera, f32(vulkan.extent.width) / f32(vulkan.extent.height));
 			}
 		}
@@ -105,10 +103,10 @@ main :: proc() {
 			updates += 1;
 		}
 
-		suboptimal_swapchain = render(&vulkan, &game.camera, &game.entities_geos);
+		suboptimal_swapchain = render(&vulkan, &game.camera, &game.entities_geos, &game.texts);
 	}
 
-	vk2.cleanup_vulkan(&vulkan);
+	cleanup_vulkan(&vulkan);
 	glfw.DestroyWindow(window);
 	glfw.Terminate();
 
@@ -153,10 +151,18 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 	}
 }
 
-init_game :: proc(camera_aspect: f32, window: glfw.WindowHandle) -> Game {
+init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
+	camera_aspect := f32(vulkan.extent.width) / f32(vulkan.extent.height);
+
 	game := Game {
 		camera = init_camera(camera_aspect, 75.0, window),
 	};
+
+	content_scale_x, _ := glfw.GetWindowContentScale(window);
+	game.font = init_font("roboto", 20, content_scale_x);
+	submit_font(vulkan, &game.font);
+
+	game.frame_metrics = init_frame_metrics(&game.font, &game.texts);
 
 	spawn_position, spawn_orientation := load_level(&game);
 	load_car(&game, spawn_position, spawn_orientation);
@@ -170,6 +176,8 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	simulate(game, dt);
 	move_camera(&game.camera, window, game.car, dt);
 
+	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
+
 	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
 
 	free_all(context.temp_allocator);
@@ -177,10 +185,16 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 
 cleanup_game :: proc(game: ^Game) {
 	cleanup_entities_geos(&game.entities_geos);
+	cleanup_font(&game.font);
 	ground_grid_cleanup(&game.ground_grid);
 	collision_hull_grid_cleanup(&game.collision_hull_grid);
 	cleanup_constraints(&game.constraints);
 	cleanup_islands(&game.islands);
 
+	for text in &game.texts {
+		cleanup_text(&text);
+	}
+
+	delete(game.texts);
 	delete(game.awake_rigid_body_lookups);
 }

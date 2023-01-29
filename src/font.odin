@@ -6,21 +6,29 @@ import "core:os";
 import "core:c";
 import "core:slice";
 import tt "vendor:stb/truetype";
+import "core:math";
 
-CODE_POINTS_COUNT :: 40 - 33;
+/*
+In the future we could implement sub pixel rendering, possibly with this oversampling approach.
+https://github.com/nothings/stb/tree/master/tests/oversample
+
+There is also no kerning currently, however this truetype package does have a kerning table we can use.
+*/
+
+CODE_POINTS_COUNT :: 126 - 33;
 CURSOR_CHECK: u32le : 0b10101010_10101010_10101010_10101010;
 
 Font :: struct {
 	name: string,
 	base_size: u32,
+	cached_file_path: string,
 	ascent: f32,
 	descent: f32,
 	space_advance: f32,
-	glyphs: [CODE_POINTS_COUNT]Glyph,
+	glyphs: map[rune]Glyph,
 }
 
 Glyph :: struct {
-	code_point: rune,
 	atlas_pos_x: u32,
 	atlas_pos_y: u32,
 	width: u32,
@@ -31,20 +39,22 @@ Glyph :: struct {
 }
 
 init_font :: proc(name: string, base_size: u32, content_scale: f32) -> Font {
-	scaled_size := f32(base_size) * content_scale;
-	cached_file_path := fmt.tprintf("build/fonts/%v-%v.cfont", name, scaled_size);
+	scaled_size := math.round(f32(base_size) * content_scale);
+	scaled_size_u32 := u32(scaled_size);
+	cached_file_path := fmt.tprintf("build/fonts/%v%v.cfont", name, scaled_size_u32);
 
 	if os.exists(cached_file_path) {
-		fmt.printf("Loading font %v at scaled size %v\n", name, scaled_size);
+		fmt.printf("Loading font %v at scaled size %v\n", name, scaled_size_u32);
 		return load_cached(name, base_size, cached_file_path);
 	} else {
-		fmt.printf("Generating font %v at scaled size %v\n", name, scaled_size);
+		fmt.printf("Generating font %v at scaled size %v\n", name, scaled_size_u32);
 		return generate_and_save(name, base_size, scaled_size, cached_file_path);
 	}
 }
 
 generate_and_save :: proc(name: string, base_size: u32, scaled_size: f32, cached_file_path: string) -> Font {
 	Temp_Glyph :: struct {
+		code_point: rune,
 		using glyph: Glyph,
 		bitmap: [^]byte,
 	}
@@ -79,11 +89,11 @@ generate_and_save :: proc(name: string, base_size: u32, scaled_size: f32, cached
 			bitmap := tt.GetCodepointBitmap(&font_info, 0, scale, code_point, &width, &height, &offset_x, &offset_y);
 
 			unscaled_advance_x: c.int;
-			tt.GetCodepointHMetrics(&font_info, rune(i), &unscaled_advance_x, nil);
+			tt.GetCodepointHMetrics(&font_info, code_point, &unscaled_advance_x, nil);
 
 			temp_glyphs[i] = Temp_Glyph {
+				code_point = code_point,
 				glyph = Glyph {
-					code_point = code_point,
 					width = u32(width),
 					height = u32(height),
 					offset_x = offset_x,
@@ -214,22 +224,16 @@ generate_and_save :: proc(name: string, base_size: u32, scaled_size: f32, cached
 	}
 
 	final_atlas := make([]u8, atlas_width * atlas_height, context.temp_allocator);
-	glyphs: [CODE_POINTS_COUNT]Glyph;
+	glyphs: map[rune]Glyph;
 
 	{ // Create the final atlas and glyphs
 		for texel, i in &atlas {
 			final_atlas[i] = texel == -1 ? 0 : u8(texel);
 		}
 
-		for temp_glyph, i in &temp_glyphs {
-			glyphs[i] = temp_glyph.glyph;
+		for temp_glyph in &temp_glyphs {
+			glyphs[temp_glyph.code_point] = temp_glyph.glyph;
 		}
-
-		ordered :: proc(a, b: Glyph) -> bool {
-			return a.code_point < b.code_point;
-		}
-
-		slice.sort_by(glyphs[:], ordered);
 	}
 
 	{ // Save to file
@@ -255,8 +259,8 @@ generate_and_save :: proc(name: string, base_size: u32, scaled_size: f32, cached
 		append(&data, ..space_advance_bytes[:]);
 		append(&data, ..glyph_count_bytes[:]);
 
-		for glyph in &glyphs {
-			code_point_bytes  := transmute([4]byte) i32le(glyph.code_point);
+		for code_point, glyph in &glyphs {
+			code_point_bytes  := transmute([4]byte) i32le(code_point);
 			atlas_pos_x_bytes := transmute([4]byte) u32le(glyph.atlas_pos_x);
 			atlas_pos_y_bytes := transmute([4]byte) u32le(glyph.atlas_pos_y);
 			width_bytes       := transmute([4]byte) u32le(glyph.width);
@@ -284,6 +288,7 @@ generate_and_save :: proc(name: string, base_size: u32, scaled_size: f32, cached
 	return Font {
 		name = name,
 		base_size = base_size,
+		cached_file_path = cached_file_path,
 		ascent = ascent,
 		descent = descent,
 		space_advance = space_advance,
@@ -309,7 +314,7 @@ load_cached :: proc(name: string, base_size: u32, cached_file_path: string) -> F
 	space_advance := cast(f32) (cast(^f32le) &data[pos])^; pos += 4;
 	glyph_count   := cast(^u32le) &data[pos]; pos += 4;
 
-	glyphs: [CODE_POINTS_COUNT]Glyph;
+	glyphs: map[rune]Glyph;
 
 	for i in 0..<glyph_count^ {
 		code_point  := cast(rune) (cast(^i32le) &data[pos])^; pos += 4;
@@ -321,8 +326,7 @@ load_cached :: proc(name: string, base_size: u32, cached_file_path: string) -> F
 		offset_y    := cast(i32) (cast(^i32le) &data[pos])^; pos += 4;
 		advance     := cast(f32) (cast(^f32le) &data[pos])^; pos += 4;
 
-		glyphs[i] = Glyph {
-			code_point = code_point,
+		glyphs[code_point] = Glyph {
 			atlas_pos_x = atlas_pos_x,
 			atlas_pos_y = atlas_pos_y,
 			width = width,
@@ -339,9 +343,14 @@ load_cached :: proc(name: string, base_size: u32, cached_file_path: string) -> F
 	return Font {
 		name = name,
 		base_size = base_size,
+		cached_file_path = cached_file_path,
 		ascent = ascent,
 		descent = descent,
 		space_advance = space_advance,
 		glyphs = glyphs,
 	};
+}
+
+cleanup_font :: proc(using font: ^Font) {
+	delete(font.glyphs);
 }

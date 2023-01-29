@@ -5,9 +5,10 @@ import "core:fmt";
 import "core:mem";
 import vk "vendor:vulkan";
 import "core:math/linalg";
-import "vk2";
 
-render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities_geos: ^Entities_Geos) -> bool {
+import "math2";
+
+render :: proc(using vulkan: ^Vulkan, camera: ^Camera, entities_geos: ^Entities_Geos, texts: ^[dynamic]Text) -> bool {
 	@(static) logical_frame_index := 0;
 	logical_device := vulkan_context.logical_device;
 
@@ -27,7 +28,7 @@ render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities_geos: ^Entit
 	assert(r == .SUCCESS);
 
 	// Copy data and record draw commands
-	handle_scene(vulkan, logical_frame_index, framebuffer, camera, entities_geos);
+	handle_scene(vulkan, logical_frame_index, framebuffer, camera, entities_geos, texts);
 
 	// Record primary command buffer
 	command_buffer_begin_info := vk.CommandBufferBeginInfo {
@@ -68,6 +69,7 @@ render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities_geos: ^Entit
 		mesh_resources.line_secondary_command_buffers[logical_frame_index],
 		mesh_resources.basic_secondary_command_buffers[logical_frame_index],
 		mesh_resources.lambert_secondary_command_buffers[logical_frame_index],
+		ui_resources.text_secondary_command_buffer[logical_frame_index],
 	};
 
 	r = vk.BeginCommandBuffer(primary_command_buffers[logical_frame_index], &command_buffer_begin_info);
@@ -116,12 +118,12 @@ render :: proc(using vulkan: ^vk2.Vulkan, camera: ^Camera, entities_geos: ^Entit
 		panic("Failed to present swapchain image");
 	}
 
-	logical_frame_index = (logical_frame_index + 1) % vk2.IFFC;
+	logical_frame_index = (logical_frame_index + 1) % IFFC;
 	
 	return suboptimal;
 }
 
-handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, framebuffer: vk.Framebuffer, camera: ^Camera, entities_geos: ^Entities_Geos) {
+handle_scene :: proc(using vulkan: ^Vulkan, logical_frame_index: int, framebuffer: vk.Framebuffer, camera: ^Camera, entities_geos: ^Entities_Geos, texts: ^[dynamic]Text) {
 	logical_device := vulkan_context.logical_device;
 
 	{ // Copy matrices into per frame buffer
@@ -174,6 +176,7 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 	line_secondary_command_buffer := mesh_resources.line_secondary_command_buffers[logical_frame_index];
 	basic_secondary_command_buffer := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
 	lambert_secondary_command_buffer := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
+	text_secondary_command_buffer := ui_resources.text_secondary_command_buffer[logical_frame_index];
 
 	frame_descriptor_set := frame_resources.descriptor_sets[logical_frame_index];
 	mesh_instance_descriptor_set := mesh_resources.instance_descriptor_sets[logical_frame_index];
@@ -196,6 +199,12 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
 	vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
 
+	r = vk.BeginCommandBuffer(text_secondary_command_buffer, &command_buffer_begin_info);
+	assert(r == .SUCCESS);
+	vk.CmdBindPipeline(text_secondary_command_buffer, .GRAPHICS, ui_resources.text_pipeline);
+	vk.CmdBindDescriptorSets(text_secondary_command_buffer, .GRAPHICS, ui_resources.text_pipeline_layout, 0, 1, &ui_resources.sampler_descriptor_set, 0, {});
+	vk.CmdBindDescriptorSets(text_secondary_command_buffer, .GRAPHICS, ui_resources.text_pipeline_layout, 1, 1, &ui_resources.atlas_descriptor_set, 0, {});
+
 	// Copy mesh data and record draw commands
 	geometry_offset := 0;
 	instance_offset := mesh_resources.per_instance_buffer_instance_block_offset;
@@ -208,12 +217,12 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 		attribute_array_size := size_of(f32) * len(record.geometry.attributes);
 
 		index_array_offset := geometry_offset;
-		attribute_array_offset := vk2.align_forward(index_array_offset + index_array_size, 4);
+		attribute_array_offset := math2.align_forward(index_array_offset + index_array_size, 4);
 		geometry_offset = attribute_array_offset + attribute_array_size;
 
 		when ODIN_DEBUG {
 			assert(geometry_offset <= instance_offset);
-			assert(int(first_instance) <= vk2.MAX_ENTITIES);
+			assert(int(first_instance) <= MAX_ENTITIES);
 			if record.on_no_entities == .Render do assert(len(record.entity_lookups) == 0);
 		}
 
@@ -227,21 +236,20 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 		if len(record.entity_lookups) == 0 {
 			transform := linalg.MATRIX4F32_IDENTITY;
 			mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, instance_offset), &transform, size_of(transform));
-			instance_offset += vk2.MESH_INSTANCE_ELEMENT_SIZE;
+			instance_offset += MESH_INSTANCE_ELEMENT_SIZE;
 			instance_count = 1;
 		} else {
 			for entity_lookup in &record.entity_lookups {
 				entity := entities_geos.entity_records[entity_lookup.index].entity;
 				mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, instance_offset), &entity.transform, size_of(entity.transform));
-				instance_offset += vk2.MESH_INSTANCE_ELEMENT_SIZE;
+				instance_offset += MESH_INSTANCE_ELEMENT_SIZE;
 			}
 
 			instance_count = cast(u32) len(record.entity_lookups);
 		}
 
-		// Record draw command
-		vertex_buffers := [?]vk.Buffer {per_instance_buffer};
-		offsets := [?]vk.DeviceSize {cast(vk.DeviceSize) attribute_array_offset};
+		// Record draw commandcd
+		offset := cast(vk.DeviceSize) attribute_array_offset;
 
 		secondary_command_buffer: vk.CommandBuffer;
 		switch record.geometry.pipeline {
@@ -254,10 +262,44 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 		}
 
 		vk.CmdBindIndexBuffer(secondary_command_buffer, per_instance_buffer, cast(vk.DeviceSize) index_array_offset, .UINT16);
-		vk.CmdBindVertexBuffers(secondary_command_buffer, 0, 1, &vertex_buffers[0], &offsets[0]);
+		vk.CmdBindVertexBuffers(secondary_command_buffer, 0, 1, &per_instance_buffer, &offset);
 		vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(record.geometry.indices), instance_count, 0, 0, first_instance);
 
 		first_instance += instance_count;
+	}
+
+	// Copy text data and record draw commands
+	push_constants: [TEXT_PUSH_CONSTANTS_SIZE]u8;
+	half_screen_size_x := f32(extent.width) / 2;
+	half_screen_size_y := f32(extent.height) / 2;
+	mem.copy_non_overlapping(&push_constants[0], cast(rawptr) &half_screen_size_x, 4);
+	mem.copy_non_overlapping(&push_constants[4], cast(rawptr) &half_screen_size_y, 4);
+
+	for text in texts {
+		index_array_size := size_of(u16) * len(text.indices);
+		attribute_array_size := size_of(f32) * len(text.attributes);
+
+		index_array_offset := geometry_offset;
+		attribute_array_offset := math2.align_forward(index_array_offset + index_array_size, 4);
+		geometry_offset = attribute_array_offset + attribute_array_size;
+		
+		when ODIN_DEBUG do assert(geometry_offset <= instance_offset);
+
+		// Copy text data
+		mem.copy_non_overlapping(&push_constants[8], cast(rawptr) &text.position_x, 4);
+		mem.copy_non_overlapping(&push_constants[12], cast(rawptr) &text.position_y, 4);
+
+		mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, index_array_offset), raw_data(text.indices), index_array_size);
+		mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, attribute_array_offset), raw_data(text.attributes), attribute_array_size);
+
+		// Record draw command
+		vk.CmdPushConstants(text_secondary_command_buffer, ui_resources.text_pipeline_layout, {.VERTEX}, 0, TEXT_PUSH_CONSTANTS_SIZE, &push_constants[0]);
+
+		offset := cast(vk.DeviceSize) attribute_array_offset;
+
+		vk.CmdBindIndexBuffer(text_secondary_command_buffer, per_instance_buffer, cast(vk.DeviceSize) index_array_offset, .UINT16);
+		vk.CmdBindVertexBuffers(text_secondary_command_buffer, 0, 1, &per_instance_buffer, &offset);
+		vk.CmdDrawIndexed(text_secondary_command_buffer, cast(u32) len(text.indices), 1, 0, 0, 0);
 	}
 
 	// End secondary command buffers
@@ -268,6 +310,9 @@ handle_scene :: proc(using vulkan: ^vk2.Vulkan, logical_frame_index: int, frameb
 	assert(r == .SUCCESS);
 
 	r = vk.EndCommandBuffer(lambert_secondary_command_buffer);
+	assert(r == .SUCCESS);
+
+	r = vk.EndCommandBuffer(text_secondary_command_buffer);
 	assert(r == .SUCCESS);
 
 	// Flush and unmap per instance buffer
