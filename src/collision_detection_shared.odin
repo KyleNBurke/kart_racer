@@ -30,7 +30,7 @@ Polytope :: struct {
 Face :: struct {a, b, c: int, normal: linalg.Vector3f32 }
 
 furthest_point_hull :: proc(hull: ^Collision_Hull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
-	d := math2.matrix3_transform_direction(hull.inv_global_transform, direction);
+	d := math2.matrix4_transform_direction(hull.inv_global_transform, direction);
 	point: linalg.Vector3f32;
 
 	switch hull.kind {
@@ -203,7 +203,7 @@ develop_unique_edges :: proc(edges: ^[dynamic][2]int, a_index, b_index: int) {
 }
 
 find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: linalg.Vector3f32) -> (plane_normal: linalg.Vector3f32, polygon: [dynamic]linalg.Vector3f32) {
-	d := math2.matrix3_transform_direction(hull.inv_global_transform, collision_normal);
+	d := math2.matrix4_transform_direction(hull.inv_global_transform, collision_normal);
 	polygon = make([dynamic]linalg.Vector3f32, context.temp_allocator);
 	
 	switch hull.kind {

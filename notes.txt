@@ -1,4 +1,32 @@
+Ideas
+- Boost
+	- Player has a boost meter.
+	- Player can use boost to hit other players.
+	- Player can hit/collect things to get more boost.
+	- When a player collects boost, players in higher positions get less.
+- Player can hit/collect a certain amount of things to unlock a shortcut only they can use.
+- Status affects
+	- Fire: top speed and acceleration are lowered.
+	- Shock: steering disabled.
+	- Ice: car essentially becomes a block of ice. Steering and engine are disabled, friction is greatly reduced.
+- Cube which can withstand a couple hits then explode into fire and shock status effects. The ground is covered with the status effect where the cube exploded and it remains for the rest of the level. (Intead of cubes, do I want to use barrels?)
+- Side/cylinder bumpers which fire off when the player gets close.
+- Giant fans which can blow your car sideways or up.
+- Hitting a normal rigid body slows down the player.
+- Surface types: friction is changed.
+	- Concrete/asphalt, mud, ice, oil slicks.
+- Boost pad/jet
+	- Gives a bigger boost than using boost meter would give.
+	- All rigid bodies can be accelerated by this.
+- Oil drum that breaks into an oil slick.
+- Short cut which opens up once the player has collected a key.
+- Moving conveyor belts that can carry things
+
 Todo
+- Spring vs hull collisions
+- Export/import mesh hulls
+- Figure out how to export/import wheel data
+- Get wheel visualization cracking
 - Instead of exporting two files, it would be better if I just made an interpreter of the .kgl file. Could be written in odin. We could totally call it from python too.
 - Some fence posts fall through the ground. They might not have collision hulls or something.
 

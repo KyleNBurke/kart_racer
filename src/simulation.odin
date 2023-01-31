@@ -182,6 +182,7 @@ Spring_Contact :: struct {
 }
 
 SPRING_BODY_POINT_Z: f32 : 1.1;
+SPRING_MAX_LENGTH: f32 : 0.8;
 
 find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 	extension_dir := -math2.matrix4_up(car.new_transform);
@@ -198,8 +199,6 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 	spring_body_point_fr := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_FR);
 	spring_body_point_bl := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_BL);
 	spring_body_point_br := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_BR);
-
-	SPRING_MAX_LENGTH: f32 : 0.8;
 
 	spring_wheel_point_fl := spring_body_point_fl + extension_dir * SPRING_MAX_LENGTH;
 	spring_wheel_point_fr := spring_body_point_fr + extension_dir * SPRING_MAX_LENGTH;
@@ -221,6 +220,7 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 	};
 
 	spring_body_points := [?]linalg.Vector3f32 {spring_body_point_fl, spring_body_point_fr, spring_body_point_bl, spring_body_point_br};
+	MAX_COLLISION_NORMAL_ANGLE: f32 : math.PI / 4;
 
 	for spring_index in 0..<4 {
 		best_spring_contact := Spring_Contact_Intermediary {
@@ -241,8 +241,24 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 			b := linalg.Vector3f32 {positions[b_index], positions[b_index + 1], positions[b_index + 2]};
 			c := linalg.Vector3f32 {positions[c_index], positions[c_index + 1], positions[c_index + 2]};
 
-			if contact, ok := spring_intersects_triangle(spring_body_point, extension_dir, SPRING_MAX_LENGTH, a, b, c).?; ok {
-				if math.acos(linalg.dot(-extension_dir, contact.normal)) > math.PI / 4 {
+			if contact, ok := spring_intersects_triangle(spring_body_point, extension_dir, a, b, c).?; ok {
+				if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
+					continue;
+				}
+
+				if contact.length < best_spring_contact.length {
+					best_spring_contact = contact;
+				}
+			}
+		}
+
+		for hull_index in hull_indices {
+			hull := collision_hull_grid.hull_records[hull_index].hull;
+
+			if !math2.box_intersects(spring_bounds, hull.global_bounds) do continue;
+
+			if contact, ok := spring_intersects_hull(spring_body_point, extension_dir, hull).?; ok {
+				if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
 					continue;
 				}
 
@@ -282,7 +298,7 @@ Spring_Contact_Intermediary :: struct {
 	length: f32,
 }
 
-spring_intersects_triangle :: proc(origin: linalg.Vector3f32, direction: linalg.Vector3f32, length: f32, a, b, c: linalg.Vector3f32) -> Maybe(Spring_Contact_Intermediary) {
+spring_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, a, b, c: linalg.Vector3f32) -> Maybe(Spring_Contact_Intermediary) {
 	ab := b - a;
 	ac := c - a;
 
@@ -309,10 +325,85 @@ spring_intersects_triangle :: proc(origin: linalg.Vector3f32, direction: linalg.
 
 	dist := (1 / det) * linalg.dot(q, ac);
 
-	if dist > length {
+	if dist > SPRING_MAX_LENGTH {
 		return nil;
 	}
 
 	n := linalg.normalize(linalg.cross(ab, ac));
 	return Spring_Contact_Intermediary {n, dist};
+}
+
+spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Collision_Hull) -> Maybe(Spring_Contact_Intermediary) {
+	switch hull.kind {
+	case .Box:
+		local_origin := math2.matrix4_transform_point(hull.inv_global_transform, origin);
+		local_direction := math2.matrix4_transform_direction(hull.inv_global_transform, direction);
+
+		best_normal: linalg.Vector3f32;
+		best_length := max(f32);
+		
+		face_normals :: [6]linalg.Vector3f32 {
+			linalg.Vector3f32 {  1,  0,  0 },
+			linalg.Vector3f32 { -1,  0,  0 },
+			linalg.Vector3f32 {  0,  1,  0 },
+			linalg.Vector3f32 {  0, -1,  0 },
+			linalg.Vector3f32 {  0,  0,  1 },
+			linalg.Vector3f32 {  0,  0, -1 },
+		};
+
+		for face_normal in face_normals {
+			dot := linalg.dot(local_direction, face_normal);
+
+			// If the dot product is greator than zero, the ray would pass through the backside.
+			if dot >= 0 do continue;
+
+			face_point := face_normal;
+			t := linalg.dot((face_point - local_origin), face_normal) / dot;
+			if abs(t) > SPRING_MAX_LENGTH do continue;
+			p := local_origin + local_direction * t;
+			intersecting := false;
+
+			switch face_normal {
+			case linalg.Vector3f32 { 1, 0, 0 }, linalg.Vector3f32 { -1, 0, 0 }:
+				if p.z < 1 && p.z > -1 && p.y < 1 && p.y > -1 {
+					intersecting = true;
+				}
+			
+			case linalg.Vector3f32 { 0, 1, 0 }, linalg.Vector3f32 { 0, -1, 0 }:
+				if p.x < 1 && p.x > -1 && p.z < 1 && p.z > -1 {
+					intersecting = true;
+				}
+			
+			case linalg.Vector3f32 { 0, 0, 1 }, linalg.Vector3f32 { 0, 0, -1 }:
+				if p.x < 1 && p.x > -1 && p.y < 1 && p.y > -1 {
+					intersecting = true;
+				}
+
+			case:
+				unreachable();
+			}
+
+			if intersecting && t < best_length {
+				best_normal = face_normal;
+				best_length = t;
+			}
+		}
+
+		if best_length != max(f32) {
+			global_normal := math2.matrix4_transform_direction(hull.global_transform, best_normal);
+
+			return Spring_Contact_Intermediary {
+				global_normal,
+				best_length,
+			};
+		}
+
+	case .Cylinder:
+		unimplemented();
+
+	case .Mesh:
+		unimplemented();
+	}
+
+	return nil;
 }

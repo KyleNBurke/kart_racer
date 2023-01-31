@@ -4,11 +4,11 @@ import "core:math/linalg";
 import "math2";
 
 Collision_Hull :: struct {
-	local_transform: linalg.Matrix4f32,
-	global_transform: linalg.Matrix4f32,
-	inv_global_transform: linalg.Matrix3f32,
+	local_transform,
+	global_transform,
+	inv_global_transform: linalg.Matrix4f32,
 	kind: Hull_Kind,
-	local_bounds: math2.Box3f32,
+	local_bounds,
 	global_bounds: math2.Box3f32,
 }
 
@@ -29,7 +29,7 @@ init_collision_hull :: proc(local_transform, entity_global_transform: linalg.Mat
 	hull := Collision_Hull {
 		local_transform,
 		linalg.MATRIX4F32_IDENTITY,
-		linalg.MATRIX3F32_IDENTITY,
+		linalg.MATRIX4F32_IDENTITY,
 		kind,
 		local_bounds,
 		math2.BOX3F32_ZERO,
@@ -44,7 +44,7 @@ init_collision_hull :: proc(local_transform, entity_global_transform: linalg.Mat
 // not be able to find the correct grid cells to remove the hulls. This can, of course be changed, it's just currently implemented this way.
 update_collision_hull_global_transform_and_bounds :: proc(using hull: ^Collision_Hull, entity_global_transform: linalg.Matrix4f32) {
 	global_transform = entity_global_transform * local_transform;
-	inv_global_transform = linalg.matrix3_inverse(linalg.matrix3_from_matrix4(global_transform));
+	inv_global_transform = linalg.matrix4_inverse(global_transform);
 
 	// We can ignore the translation components and use a matrix 3 because we're transforming the extent with this which is a direction vector
 	global_transform_abs := linalg.Matrix3f32 {
