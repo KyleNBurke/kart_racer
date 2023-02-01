@@ -81,8 +81,8 @@ calculate_inv_global_inertia_tensor :: proc(orientation: linalg.Quaternionf32, i
 	return m * inv_local_inertia_tensor * linalg.transpose(m);
 }
 
-matrix4_left :: proc() {
-	unimplemented();
+matrix4_left :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
+	return linalg.Vector3f32 {m[0][0], m[0][1], m[0][2]};
 }
 
 matrix4_up :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {

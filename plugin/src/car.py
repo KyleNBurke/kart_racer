@@ -8,6 +8,7 @@ def export(operator, context):
 	file = open(operator.filepath, 'wb')
 
 	export_car(file, instance_objs)
+	export_wheel(file, instance_objs)
 
 	file.close()
 	print("Exported", operator.filepath)
@@ -35,3 +36,14 @@ def export_car(file, instance_objs):
 			break
 	
 	file.write(struct.pack("<I", util.POSITION_CHECK_VALUE))
+
+def export_wheel(file, instance_objs):
+	for instance_obj in instance_objs:
+		if instance_obj.object.name == "wheel":
+			obj = instance_obj.object
+
+			indices, attributes = util.get_indices_local_positions_normals_colors(obj.data)
+			util.write_indices_attributes(file, indices, attributes)
+
+			radius = obj.dimensions[1] / 2
+			util.write_f32(file, radius)

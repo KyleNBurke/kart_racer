@@ -28,6 +28,9 @@ def vec3_to_string(v):
 def quat_to_string(q):
 	return "(" + str(q[0]) + ", " + str(q[1]) + ", " + str(q[2]) + ", " + str(q[3]) + ")"
 
+def write_f32(file, v):
+	file.write(struct.pack("<f", v))
+
 def write_vec3(kgl_file, v):
 	kgl_file.write(struct.pack("<f", v[0]))
 	kgl_file.write(struct.pack("<f", v[1]))

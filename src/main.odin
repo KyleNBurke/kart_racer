@@ -174,6 +174,7 @@ init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
 update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	move_car(window, game.car, dt, &game.entities_geos, &game.car_helpers);
 	simulate(game, dt);
+	position_and_orient_wheels(game.car, &game.entities_geos, dt);
 	move_camera(&game.camera, window, game.car, dt);
 
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);

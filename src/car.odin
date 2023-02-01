@@ -70,11 +70,11 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 	global_inv_inertia_tensor := math2.calculate_inv_global_inertia_tensor(car.orientation, INV_LOCAL_INERTIA_TENSOR);
 	MAX_FRICTION: f32 : 30;
 
-	front_left_contact, front_left_contact_ok := car.wheels[0].contact.?;
-	front_right_contact, front_right_contact_ok := car.wheels[1].contact.?;
+	front_left_contact_normal, front_left_contact_normal_ok := car.wheels[0].contact_normal.?;
+	front_right_contact_normal, front_right_contact_normal_ok := car.wheels[1].contact_normal.?;
 
-	if front_left_contact_ok || front_right_contact_ok {
-		front_surface_normal := linalg.normalize(front_left_contact.normal + front_right_contact.normal);
+	if front_left_contact_normal_ok || front_right_contact_normal_ok {
+		front_surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
 
 		car.steer_angle = steer_multiplier * 0.2;
 		front_tire_dir := math2.vector_rotate(body_forward, body_up, car.steer_angle);
@@ -90,11 +90,11 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 		set_line_helper(front_tire_dir_helper_geo,car.position, front_tire_dir * 3);
 	}
 
-	back_left_contact, back_left_contact_ok := car.wheels[2].contact.?;
-	back_right_contact, back_right_contact_ok := car.wheels[3].contact.?;
+	back_left_contact_normal, back_left_contact_normal_ok := car.wheels[2].contact_normal.?;
+	back_right_contact_normal, back_right_contact_normal_ok := car.wheels[3].contact_normal.?;
 
-	if back_left_contact_ok || back_right_contact_ok {
-		back_surface_normal := linalg.normalize(back_left_contact.normal + back_right_contact.normal);
+	if back_left_contact_normal_ok || back_right_contact_normal_ok {
+		back_surface_normal := linalg.normalize(back_left_contact_normal + back_right_contact_normal);
 
 		back_tire_lat_dir := linalg.normalize(linalg.cross(back_surface_normal, body_forward));
 		back_tire_vel := body_velocity + linalg.cross(body_angular_velocity, -body_forward * SPRING_BODY_POINT_Z);
@@ -109,4 +109,51 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 
 	forward_helper_geo := get_geometry(entities_geos, car_helpers.forward_geo_lookup);
 	set_line_helper(forward_helper_geo, car.position, body_forward * 3);
+}
+
+position_and_orient_wheels :: proc(car: ^Car_Entity, entities_geos: ^Entities_Geos, dt: f32) {
+	// Calculate wheel orientations
+	body_left := math2.matrix4_left(car.transform);
+
+	front_left_contact_normal, front_left_contact_normal_ok := car.wheels[0].contact_normal.?;
+	front_right_contact_normal, front_right_contact_normal_ok := car.wheels[1].contact_normal.?;
+
+	if front_left_contact_normal_ok || front_right_contact_normal_ok {
+		surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
+		surface_forward := linalg.normalize(linalg.cross(body_left, surface_normal));
+		surface_forward_vel := linalg.dot(surface_forward, car.velocity);
+		car.front_wheel_angular_velocity = surface_forward_vel / car.wheel_radius;
+	}
+
+	car.front_wheel_orientation = math.mod(car.front_wheel_orientation + car.front_wheel_angular_velocity * dt, math.TAU);
+
+	back_left_contact_normal, back_left_contact_normal_ok := car.wheels[2].contact_normal.?;
+	back_right_contact_normal, back_right_contact_normal_ok := car.wheels[3].contact_normal.?;
+
+	if back_left_contact_normal_ok || back_right_contact_normal_ok {
+		surface_normal := linalg.normalize(back_left_contact_normal + back_right_contact_normal);
+		surface_forward := linalg.normalize(linalg.cross(body_left, surface_normal));
+		surface_forward_vel := linalg.dot(surface_forward, car.velocity);
+		car.back_wheel_angular_velocity = surface_forward_vel / car.wheel_radius;
+	}
+
+	car.back_wheel_orientation = math.mod(car.back_wheel_orientation + car.back_wheel_angular_velocity * dt, math.TAU);
+
+	// Position and orient wheels
+	body_down := -math2.matrix4_up(car.transform);
+
+	for wheel, wheel_index in &car.wheels {
+		wheel_entity := get_entity(entities_geos, wheel.entity_lookup);
+		wheel_entity.position = wheel.body_point + body_down * (wheel.spring_length - car.wheel_radius);
+		
+		body_euler_y, body_euler_z, body_euler_x := linalg.euler_angles_yzx_from_quaternion(car.orientation);
+
+		if wheel_index == 0 || wheel_index == 1 {
+			wheel_entity.orientation = linalg.quaternion_from_euler_angles(body_euler_y + car.steer_angle, body_euler_z, car.front_wheel_orientation, .YZX);
+		} else {
+			wheel_entity.orientation = linalg.quaternion_from_euler_angles(body_euler_y, body_euler_z, car.back_wheel_orientation, .YZX);
+		}
+
+		update_entity_transform(wheel_entity); 
+	}
 }

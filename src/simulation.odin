@@ -268,24 +268,21 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 			}
 		}
 
-		wheel := Wheel {
-			spring_body_point,
-			nil,
-		};
+		wheel := &car.wheels[spring_index];
+		wheel.body_point = spring_body_point;
 
-		if best_spring_contact.length != max(f32) {
+		if best_spring_contact.length == max(f32) {
+			wheel.contact_normal = nil;
+			wheel.spring_length = SPRING_MAX_LENGTH;
+		} else {
 			small_array.append(&manifold.contacts, Spring_Contact {
 				spring_body_point,
 				best_spring_contact.length,
 			});
 
-			wheel.contact = Wheel_Contact {
-				best_spring_contact.normal,
-				best_spring_contact.length,
-			};
+			wheel.contact_normal = best_spring_contact.normal;
+			wheel.spring_length = best_spring_contact.length;
 		}
-
-		car.wheels[spring_index] = wheel;
 	}
 
 	if small_array.len(manifold.contacts) > 0 {

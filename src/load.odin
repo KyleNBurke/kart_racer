@@ -222,4 +222,18 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 	
 	position_check := read_u32(&bytes, &pos);
 	assert(position_check == POSITION_CHECK_VALUE);
+
+	{ // Wheels
+		indices, attributes := read_indices_attributes(&bytes, &pos);
+		geometry := init_triangle_geometry(indices, attributes);
+		geometry_lookup := add_geometry(&entities_geos, geometry);
+
+		for i in 0..<4 {
+			entity := new_inanimate_entity();
+			entity_lookup := add_entity(&entities_geos, geometry_lookup, entity);
+			car.wheels[i].entity_lookup = entity_lookup;
+		}
+
+		car.wheel_radius = read_f32(&bytes, &pos);
+	}
 }
