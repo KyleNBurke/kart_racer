@@ -39,7 +39,7 @@ Car_Entity :: struct {
 	new_transform: linalg.Matrix4f32,
 	wheel_radius: f32,
 	wheels: [4]Wheel,
-	steer_angle: f32,
+	current_steer_angle: f32,
 	front_wheel_angular_velocity,
 	back_wheel_angular_velocity,
 	front_wheel_orientation,

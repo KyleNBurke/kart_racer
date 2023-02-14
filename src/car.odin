@@ -9,7 +9,9 @@ import "core:fmt"; //
 
 Car_Helpers :: struct {
 	forward_geo_lookup,
-	front_tire_dir_geo_lookup: Geometry_Lookup,
+	front_tire_dir_geo_lookup,
+	front_tire_left_geo_lookup,
+	back_tire_left_geo_lookup: Geometry_Lookup,
 }
 
 init_car_helpers :: proc(entities_geos: ^Entities_Geos) -> Car_Helpers {
@@ -21,10 +23,17 @@ init_car_helpers :: proc(entities_geos: ^Entities_Geos) -> Car_Helpers {
 	front_tire_dir_geo: Geometry;
 	front_tire_dir_geo_lookup = add_geometry(entities_geos, front_tire_dir_geo, .Render);
 
+	front_tire_left_geo: Geometry;
+	front_tire_left_geo_lookup = add_geometry(entities_geos, front_tire_left_geo, .Render);
+
+	back_tire_left_geo: Geometry;
+	back_tire_left_geo_lookup = add_geometry(entities_geos, back_tire_left_geo, .Render);
+
 	return car_helpers;
 }
 
-move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_geos: ^Entities_Geos, car_helpers: ^Car_Helpers) {
+@(private="file")
+calculate_car_inertia_tensor :: proc(orientation: linalg.Quaternionf32) -> linalg.Matrix3f32 {
 	M :: 1.0 / 12.0;
 	CAR_W :: M * (CAR_DEPTH * CAR_DEPTH + CAR_HEIGHT * CAR_HEIGHT);
 	CAR_H :: M * (CAR_WIDTH * CAR_WIDTH + CAR_DEPTH * CAR_DEPTH);
@@ -36,6 +45,10 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 		0.0, 0.0, 1.0 / CAR_D,
 	};
 
+	return math2.calculate_inv_global_inertia_tensor(orientation, INV_LOCAL_INERTIA_TENSOR);
+}
+
+move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_geos: ^Entities_Geos, car_helpers: ^Car_Helpers) {
 	axes := glfw.GetJoystickAxes(glfw.JOYSTICK_1);
 	accel_multiplier: f32 = 0;
 	steer_multiplier: f32 = 0;
@@ -65,50 +78,126 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 
 	body_forward := math2.matrix4_forward(car.transform);
 	body_up := math2.matrix4_up(car.transform);
+	body_left := math2.matrix4_left(car.transform);
+
 	body_velocity := car.velocity;
 	body_angular_velocity := car.angular_velocity;
-	global_inv_inertia_tensor := math2.calculate_inv_global_inertia_tensor(car.orientation, INV_LOCAL_INERTIA_TENSOR);
-	MAX_FRICTION: f32 : 30;
+	body_tensor := calculate_car_inertia_tensor(car.orientation);
 
 	front_left_contact_normal, front_left_contact_normal_ok := car.wheels[0].contact_normal.?;
 	front_right_contact_normal, front_right_contact_normal_ok := car.wheels[1].contact_normal.?;
-
-	if front_left_contact_normal_ok || front_right_contact_normal_ok {
-		front_surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
-
-		car.steer_angle = steer_multiplier * 0.2;
-		front_tire_dir := math2.vector_rotate(body_forward, body_up, car.steer_angle);
-		front_tire_lat_dir := linalg.normalize(linalg.cross(front_surface_normal, front_tire_dir));
-		front_tire_vel := body_velocity + linalg.cross(body_angular_velocity, body_forward * SPRING_BODY_POINT_Z);
-		front_tire_lat_vel := linalg.dot(front_tire_vel, front_tire_lat_dir);
-		front_tire_fric := clamp(-front_tire_lat_vel / 2 / dt, -MAX_FRICTION, MAX_FRICTION) * dt;
-
-		car.velocity += front_tire_lat_dir * front_tire_fric;
-		car.angular_velocity += global_inv_inertia_tensor * body_up * front_tire_fric;
-		
-		front_tire_dir_helper_geo := get_geometry(entities_geos, car_helpers.front_tire_dir_geo_lookup);
-		set_line_helper(front_tire_dir_helper_geo,car.position, front_tire_dir * 3);
-	}
-
 	back_left_contact_normal, back_left_contact_normal_ok := car.wheels[2].contact_normal.?;
 	back_right_contact_normal, back_right_contact_normal_ok := car.wheels[3].contact_normal.?;
 
-	if back_left_contact_normal_ok || back_right_contact_normal_ok {
-		back_surface_normal := linalg.normalize(back_left_contact_normal + back_right_contact_normal);
+	if front_left_contact_normal_ok || front_right_contact_normal_ok || back_left_contact_normal_ok || back_right_contact_normal_ok {
+		surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal + back_left_contact_normal + back_right_contact_normal);
+		
+		ang_vel := linalg.dot(body_angular_velocity, surface_normal);
+		
+		body_surface_lat_dir := linalg.normalize(linalg.cross(surface_normal, body_forward));
+		lat_vel := linalg.dot(body_velocity, body_surface_lat_dir);
 
-		back_tire_lat_dir := linalg.normalize(linalg.cross(back_surface_normal, body_forward));
-		back_tire_vel := body_velocity + linalg.cross(body_angular_velocity, -body_forward * SPRING_BODY_POINT_Z);
-		back_tire_lat_vel := linalg.dot(back_tire_vel, back_tire_lat_dir);
-		back_tire_fric := clamp(-back_tire_lat_vel / 2 / dt, -MAX_FRICTION, MAX_FRICTION) * dt;
+		slipping := false;
 
-		car.velocity += back_tire_lat_dir * back_tire_fric;
-		car.angular_velocity += global_inv_inertia_tensor * -body_up * back_tire_fric;
+		buttons := glfw.GetJoystickButtons(glfw.JOYSTICK_1);
+		if len(buttons) > 0 {
+			if buttons[0] == glfw.PRESS {
+				slipping = true;
+			}
+		}
+
+		if abs(lat_vel) > 2 || ang_vel > 5 {
+			slipping = true;
+		}
+
+		FULL_GRIP_TOP_SPEED: f32 : 35;
+		top_speed: f32;
+
+		if slipping {
+			car.current_steer_angle = 0;
+
+			MAX_ANG_FRIC: f32 : 2;
+			ang_fric := -clamp(ang_vel, -MAX_ANG_FRIC * dt, MAX_ANG_FRIC * dt);
+			ang_fric += 3.0 * steer_multiplier * dt;
+			car.angular_velocity += surface_normal * ang_fric;
+
+			MAX_LAT_FRIC: f32 : 20;
+			fric := clamp(lat_vel, -MAX_LAT_FRIC * dt, MAX_LAT_FRIC * dt);
+			car.velocity -= body_surface_lat_dir * fric;
+
+			top_speed_multiplier := max((20 - abs(lat_vel)) / 20, 0);
+			top_speed = (FULL_GRIP_TOP_SPEED - 10) * top_speed_multiplier + 10;
+
+			front_tire_left_geo := get_geometry(entities_geos, car_helpers.front_tire_left_geo_lookup);
+			set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
+
+			back_tire_left_geo := get_geometry(entities_geos, car_helpers.back_tire_left_geo_lookup);
+			set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
+		} else {
+			if front_left_contact_normal_ok || front_right_contact_normal_ok {
+				surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
+				body_surface_long_dir := linalg.normalize(linalg.cross(body_left, surface_normal));
+				body_surface_long_vel := linalg.dot(body_velocity, body_surface_long_dir);
+				max_steer_angle := 0.05 + 0.195 * max(FULL_GRIP_TOP_SPEED - body_surface_long_vel, 0) / FULL_GRIP_TOP_SPEED;
+	
+				target_steer_angle := max_steer_angle * steer_multiplier;
+				car.current_steer_angle += clamp(target_steer_angle - car.current_steer_angle, -0.8 * dt, 0.8 * dt);
+				tire_long_dir := math2.vector_rotate(body_forward, body_up, car.current_steer_angle);
+				tire_lat_dir := linalg.normalize(linalg.cross(surface_normal, tire_long_dir));
+				tire_vel := body_velocity + linalg.cross(body_angular_velocity, body_forward * SPRING_BODY_POINT_Z);
+				tire_lat_vel := linalg.dot(tire_vel, tire_lat_dir);
+				tire_fric := tire_lat_vel / 2;
+	
+				car.velocity -= tire_lat_dir * tire_fric;
+				car.angular_velocity -= body_tensor * body_up * tire_fric;
+	
+				front_tire_left_geo := get_geometry(entities_geos, car_helpers.front_tire_left_geo_lookup);
+				set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, tire_lat_dir * 2, GREEN);
+			}
+
+			if back_left_contact_normal_ok || back_right_contact_normal_ok {
+				surface_normal := linalg.normalize(back_left_contact_normal + back_right_contact_normal);
+				body_surface_lat_dir := linalg.normalize(linalg.cross(surface_normal, body_forward));
+				tire_vel := body_velocity + linalg.cross(body_angular_velocity, -body_forward * SPRING_BODY_POINT_Z);
+				tire_lat_vel := linalg.dot(tire_vel, body_surface_lat_dir);
+				tire_fric := tire_lat_vel / 2;
+	
+				car.velocity -= body_surface_lat_dir * tire_fric;
+				car.angular_velocity -= body_tensor * -body_up * tire_fric;
+
+				back_tire_left_geo := get_geometry(entities_geos, car_helpers.back_tire_left_geo_lookup);
+				set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, GREEN);
+			}
+
+			top_speed = FULL_GRIP_TOP_SPEED;
+		}
+
+		body_surface_long_dir := linalg.normalize(linalg.cross(body_left, surface_normal));
+		body_surface_long_vel := linalg.dot(body_velocity, body_surface_long_dir);
+
+		DRAG: f32 : 5;
+		REVERSE_TOP_SPEED: f32 : 20;
+
+		drag_accel := clamp(body_surface_long_vel, -DRAG * dt, DRAG * dt);
+		long_vel := body_surface_long_vel - drag_accel;
+		accel := -drag_accel;
+
+		if accel_multiplier > 0 {
+			if long_vel < top_speed {
+				accel += min(top_speed - long_vel, 50 * dt);
+			}
+		} else if accel_multiplier < 0 {
+			if long_vel > 1e-4 {
+				accel -= min(long_vel, -accel_multiplier * 20 * dt);
+			} else {
+				if abs(long_vel) < REVERSE_TOP_SPEED {
+					accel -= min(REVERSE_TOP_SPEED - abs(long_vel), 40 * dt);
+				}
+			}
+		}
+
+		car.velocity += body_surface_long_dir * accel;
 	}
-
-	car.velocity += body_forward * accel_multiplier * 20.0 * dt;
-
-	forward_helper_geo := get_geometry(entities_geos, car_helpers.forward_geo_lookup);
-	set_line_helper(forward_helper_geo, car.position, body_forward * 3);
 }
 
 position_and_orient_wheels :: proc(car: ^Car_Entity, entities_geos: ^Entities_Geos, dt: f32) {
@@ -149,7 +238,7 @@ position_and_orient_wheels :: proc(car: ^Car_Entity, entities_geos: ^Entities_Ge
 		body_euler_y, body_euler_z, body_euler_x := linalg.euler_angles_yzx_from_quaternion(car.orientation);
 
 		if wheel_index == 0 || wheel_index == 1 {
-			wheel_entity.orientation = linalg.quaternion_from_euler_angles(body_euler_y + car.steer_angle, body_euler_z, car.front_wheel_orientation, .YZX);
+			wheel_entity.orientation = linalg.quaternion_from_euler_angles(body_euler_y + car.current_steer_angle, body_euler_z, car.front_wheel_orientation, .YZX);
 		} else {
 			wheel_entity.orientation = linalg.quaternion_from_euler_angles(body_euler_y, body_euler_z, car.back_wheel_orientation, .YZX);
 		}

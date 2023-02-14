@@ -1,5 +1,6 @@
 {
 	"editor.detectIndentation": false,
 	"editor.insertSpaces": false,
-	"editor.autoClosingBrackets": "never"
+	"editor.autoClosingBrackets": "never",
+	"editor.bracketPairColorization.enabled": false
 }

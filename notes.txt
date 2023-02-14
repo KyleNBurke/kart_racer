@@ -26,7 +26,7 @@ A note about the car wheel positioning. When the car is in the air such that the
 we could pick a different maximum length. It's intentionally designed such that the ray length is pretty long to provide better stability so we'll probably want to use a different max length for the visual position of the wheel.
 
 Todo
-- Get car controls feeling good
+- Fix issue when car drives under that jump
 
 I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting
 the impulse but they don't do anything. Maybe this is correct behavior and I need to put a lower bound on delta time, maybe the clamping logic is incorrect, need to investigate.

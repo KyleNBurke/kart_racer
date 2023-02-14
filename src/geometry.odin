@@ -6,8 +6,9 @@ import "core:math/linalg";
 NEG_ONE :: linalg.Vector3f32 {-1, -1, -1};
 POS_ONE :: linalg.Vector3f32 {1, 1, 1};
 
-GREY :: [?]f32 {0.3, 0.3, 0.3};
-YELLOW :: [?]f32 {1, 1, 0};
+GREEN :: [3]f32 {0, 1, 0};
+GREY :: [3]f32 {0.3, 0.3, 0.3};
+YELLOW :: [3]f32 {1, 1, 0};
 
 Geometry :: struct {
 	indices: [dynamic]u16,
