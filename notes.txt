@@ -10,6 +10,7 @@ Ideas
 	- Shock: steering disabled.
 	- Ice: car essentially becomes a block of ice. Steering and engine are disabled, friction is greatly reduced.
 - Cube which can withstand a couple hits then explode into fire and shock status effects. The ground is covered with the status effect where the cube exploded and it remains for the rest of the level. (Intead of cubes, do I want to use barrels?)
+	- Could have cubes which do not explode and barrels which do.
 - Side/cylinder bumpers which fire off when the player gets close.
 - Giant fans which can blow your car sideways or up.
 - Hitting a normal rigid body slows down the player.
@@ -27,6 +28,10 @@ we could pick a different maximum length. It's intentionally designed such that 
 
 Todo
 - Fix issue when car drives under that jump
+- Side bouncy rails
+	- Think of design
+	- Implement it
+- Non exploding shock cubes
 
 I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting
 the impulse but they don't do anything. Maybe this is correct behavior and I need to put a lower bound on delta time, maybe the clamping logic is incorrect, need to investigate.
