@@ -5,6 +5,8 @@ import "core:math/linalg";
 import "core:container/small_array";
 import "math2";
 
+import "core:fmt";
+
 GRAVITY: f32 : -20.0;
 
 simulate :: proc(using game: ^Game, dt: f32) {
@@ -245,8 +247,11 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 				if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
 					continue;
 				}
+				
 
 				if contact.length < best_spring_contact.length {
+					// fmt.println(-extension_dir, contact.normal);
+					// fmt.println(math.acos(linalg.dot(-extension_dir, contact.normal)), contact.length);
 					best_spring_contact = contact;
 				}
 			}
@@ -322,7 +327,7 @@ spring_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, a, b, c
 
 	dist := (1 / det) * linalg.dot(q, ac);
 
-	if dist > SPRING_MAX_LENGTH {
+	if dist <= 0 || dist > SPRING_MAX_LENGTH {
 		return nil;
 	}
 
