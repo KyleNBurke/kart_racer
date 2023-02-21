@@ -154,9 +154,15 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 				mass := read_f32(&bytes, &pos);
 				dimensions := read_vec3(&bytes, &pos);
 				collision_exclude := read_bool(&bytes, &pos);
-				status_effect := read_u32(&bytes, &pos);
+				status_effect_u32 := read_u32(&bytes, &pos);
 
-				rigid_body := new_rigid_body_entity(position, orientation, scale, mass, dimensions);
+				status_effect: Status_Effect;
+				switch status_effect_u32 {
+					case 0: status_effect = .None;
+					case 1: status_effect = .Shock;
+				}
+
+				rigid_body := new_rigid_body_entity(position, orientation, scale, mass, dimensions, status_effect);
 				rigid_body.collision_exclude = collision_exclude;
 				entity_lookup := add_entity(&entities_geos, geometry_lookups[geometry_index], rigid_body);
 

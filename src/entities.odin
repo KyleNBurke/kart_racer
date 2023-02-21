@@ -15,6 +15,11 @@ Inanimate_Entity :: struct {
 	using entity: Entity,
 }
 
+Status_Effect :: enum {
+	None,
+	Shock,
+}
+
 Rigid_Body_Entity :: struct {
 	using entity: Entity,
 	// This is only used for updating collision hulls within the collision hull grid which only rigid bodies do since they move.
@@ -28,6 +33,7 @@ Rigid_Body_Entity :: struct {
 	collision_exclude: bool,
 	island_index: int,
 	sleep_duration: f32,
+	status_effect: Status_Effect,
 }
 
 Car_Entity :: struct {
@@ -37,6 +43,8 @@ Car_Entity :: struct {
 	angular_velocity: linalg.Vector3f32,
 	new_position: linalg.Vector3f32,
 	new_transform: linalg.Matrix4f32,
+	status_effect: Status_Effect,
+	status_effect_remaining_time: f32,
 	wheel_radius: f32,
 	wheels: [4]Wheel,
 	current_steer_angle: f32,
@@ -81,6 +89,7 @@ new_rigid_body_entity :: proc(
 	size := linalg.Vector3f32 {1.0, 1.0, 1.0},
 	mass: f32,
 	dimensions: linalg.Vector3f32,
+	status_effect: Status_Effect,
 ) -> ^Rigid_Body_Entity {
 	k := mass / 12.0;
 	
@@ -108,6 +117,7 @@ new_rigid_body_entity :: proc(
 	e.inv_local_inertia_tensor = inv_local_inertia_tensor;
 	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
 	e.island_index = -1;
+	e.status_effect = status_effect;
 
 	return e;
 }

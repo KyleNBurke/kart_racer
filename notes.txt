@@ -48,7 +48,7 @@ Todo
 	- [done] Blender asset creation
 	- [done] Exporting it
 	- [done] Importing it
-	- Implementation
+	- [dont] Implementation
 	- Particle system
 
 I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting

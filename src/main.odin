@@ -172,6 +172,8 @@ init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
 }
 
 update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
+	update_car_status_effect_remaining_time(game.car, dt);
+
 	if game.camera.state != .First_Person {
 		move_car(window, game.car, dt, &game.entities_geos, &game.car_helpers);
 	}

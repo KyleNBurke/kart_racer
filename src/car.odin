@@ -32,6 +32,25 @@ init_car_helpers :: proc(entities_geos: ^Entities_Geos) -> Car_Helpers {
 	return car_helpers;
 }
 
+set_car_status_effect :: proc(car: ^Car_Entity, status_effect: Status_Effect) {
+	car.status_effect = status_effect;
+
+	#partial switch status_effect {
+	case .Shock:
+		car.status_effect_remaining_time = 3;
+	}
+}
+
+update_car_status_effect_remaining_time :: proc(car: ^Car_Entity, dt: f32) {
+	if car.status_effect != .None {
+		car.status_effect_remaining_time -= dt;
+
+		if car.status_effect_remaining_time <= 0 {
+			car.status_effect = .None;
+		}
+	}
+}
+
 @(private="file")
 calculate_car_inertia_tensor :: proc(orientation: linalg.Quaternionf32) -> linalg.Matrix3f32 {
 	M :: 1.0 / 12.0;
@@ -63,7 +82,11 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 		}
 	}
 
-	{ // Calculate a value between -1 and 1 to determine the desired cornering angle
+	cornering_angle: { // Calculate a value between -1 and 1 to determine the desired cornering angle
+		if car.status_effect == .Shock {
+			break cornering_angle;
+		}
+
 		if glfw.GetKey(window, glfw.KEY_A) == glfw.PRESS do steer_multiplier += 1;
 		if glfw.GetKey(window, glfw.KEY_D) == glfw.PRESS do steer_multiplier -= 1;
 

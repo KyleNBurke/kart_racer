@@ -74,6 +74,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 					case ^Rigid_Body_Entity:
 						add_car_movable_constraint_set(&constraints, car, nearby_lookup, e, &manifold, dt);
 						car_collision_maybe_wake_island(&islands, &entities_woken_up, e);
+						handle_status_effects(car, e);
 					case ^Inanimate_Entity:
 						// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
 						// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
@@ -408,4 +409,12 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 	}
 
 	return nil;
+}
+
+@(private="file")
+handle_status_effects :: proc(car: ^Car_Entity, rigid_body: ^Rigid_Body_Entity) {
+	#partial switch rigid_body.status_effect {
+	case .Shock:
+		set_car_status_effect(car, .Shock);
+	}
 }
