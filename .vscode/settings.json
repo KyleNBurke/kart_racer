@@ -2,5 +2,8 @@
 	"editor.detectIndentation": false,
 	"editor.insertSpaces": false,
 	"editor.autoClosingBrackets": "never",
-	"editor.bracketPairColorization.enabled": false
+	"editor.bracketPairColorization.enabled": false,
+	"python.analysis.extraPaths": [
+		"C:/Users/kylen/Development/fake_bpy_modules_3.3-20221006"
+	]
 }

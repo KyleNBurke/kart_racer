@@ -3,7 +3,7 @@
 	"tasks": [
 		{
 			"type": "process",
-			"command": "debug_build.bat",
+			"command": "${workspaceFolder}/build.bat",
 			"group": {
 				"kind": "build",
 				"isDefault": true

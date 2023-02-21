@@ -1,8 +1,13 @@
+POSITION_CHECK: u32 = 10101010_10101010_10101010_10101010
+
+---
+
 Spawn point
 	position: vec3
 	rotation: quat
 
-Ground grid size: f32
+Grid size: f32
+
 Ground collision meshes count: u32
 	indices count: u32
 	indices: [u16]
@@ -29,7 +34,7 @@ Inanimate entities count:  u32
 		indices:          [u16] (if hull type is mesh)
 		attributes_count:  u32  (if hull type is mesh)
 		attributes:       [u32] (if hull type is mesh)
-	position check         u32 10101010_10101010_10101010_10101010
+	position check         u32
 
 Rigid body islands count: u32
 	Entities count: u32
@@ -39,7 +44,8 @@ Rigid body islands count: u32
 		geometry index:        u32
 		mass:                  f32
 		dimensions:            vec3
-		collision exclude      u8
+		collision exclude      b8
+		status effect:         u32  (0 = none, 1 = shock)
 		hull count:            u32
 			local position:    vec3
 			local rotation:    quat
@@ -49,5 +55,5 @@ Rigid body islands count: u32
 			indices:          [u16] (if hull type is mesh)
 			attributes_count:  u32  (if hull type is mesh)
 			attributes:       [u32] (if hull type is mesh)
-		position check         u32 10101010_10101010_10101010_10101010
+		position check         u32
 	...

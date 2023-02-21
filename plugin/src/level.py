@@ -1,318 +1,337 @@
-import struct
+from bpy.types import Context, Depsgraph, Object, Mesh
+import bpy
 from . import util
 
-def export(operator, context):
-	depsgraph = context.evaluated_depsgraph_get()
-	instance_objs = depsgraph.object_instances
+class WObject:
+	def __init__(self):
+		self.depth: int = None
+		self.parent_w_object: WObject = None
+		self.object: Object = None
+		self.children_w_objects = []
+		self.instance_w_object: WObject = None
+		self.unique_name = None
+		self.final_world_matrix = None
 
-	# print("Instance objects:")
-	# for instance_obj in instance_objs:
-	# 	print(util.instance_obj_name(instance_obj))
-	# print("-------------------------")
+def export(operator, context: Context):
+	depsgraph: Depsgraph = context.evaluated_depsgraph_get()
+	graph = create_scene_graph(depsgraph)
+	debug_export_graph(graph, operator.filepath)
 
-	kgl_filepath = operator.filepath
-	txt_filepath = operator.filepath + ".txt"
+	file = open(operator.filepath, 'wb')
 
-	kgl_file = open(kgl_filepath, 'wb')
-	txt_file = open(txt_filepath, 'w')
+	export_spawn_point(graph, file)
+	export_ground_collision_meshes(depsgraph, graph, file)
+	mesh_name_to_index_max = export_geometries(depsgraph, graph, file)
+	export_inanimate_entities(graph, file, mesh_name_to_index_max)
+	export_rigid_bodies(graph, file, mesh_name_to_index_max)
 
-	export_spawn_point(kgl_file, txt_file, instance_objs)
-	export_ground_collision_meshes(kgl_file, txt_file, instance_objs)
-	mesh_name_to_index_map = export_geometries(kgl_file, txt_file, instance_objs)
-	export_inanimate_entities(kgl_file, txt_file, instance_objs, mesh_name_to_index_map)
-	export_rigid_body_islands(kgl_file, txt_file, instance_objs, mesh_name_to_index_map)
-
-	kgl_file.close()
-	print("Exported", kgl_filepath)
-
-	txt_file.close()
-	print("Exported", txt_filepath)
-
+	file.close()
+	print("Exported", operator.filepath)
 	return {'FINISHED'}
 
-def export_spawn_point(kgl_file, txt_file, instance_objs):
-	name = None
-	position_game = [0.0, 5.0, 0.0]
-	rotation_game = [0.0, 0.0, 0.0, 1.0]
+def create_scene_graph(depsgraph: Depsgraph):
+	graph = []
 
-	for instance_obj in instance_objs:
-		if instance_obj.object.kg_type == 'spawn_point':
-			name = util.instance_obj_name(instance_obj)
+	# Find root nodes
+	for object in depsgraph.scene.objects:
+		if object.parent is None:
+			root_w_object = WObject()
+			root_w_object.depth = 0
+			root_w_object.object = object
+			root_w_object.unique_name = object.name_full
+			root_w_object.final_world_matrix = object.matrix_world
+			graph.append(root_w_object)
+	
+	# Process root nodes to find the rest of the graph
+	w_objects_to_process = graph.copy()
 
-			position = instance_obj.matrix_world.to_translation()
-			position_game = [position[0], position[2], -position[1]]
+	while w_objects_to_process:
+		w_object: WObject = w_objects_to_process.pop()
+		object = w_object.object
 
-			rotation = instance_obj.matrix_world.to_quaternion()
-			rotation_game = [rotation[1], rotation[3], -rotation[2], rotation[0]]
+		# Find the children of this object
+		child_objects = None
+		instance_collection = object.instance_collection
 
+		if instance_collection is None:
+			child_objects = object.children
+		else:
+			child_objects = []
+
+			for child_object in instance_collection.objects:
+				if child_object.parent is None:
+					child_objects.append(child_object)
+
+		# Add each child to the graph
+		for child_object in child_objects:
+			child_w_object: WObject = WObject()
+			child_w_object.depth = w_object.depth + 1
+			child_w_object.parent_w_object = w_object
+			child_w_object.object = child_object
+
+			if instance_collection is None:
+				child_w_object.instance_w_object = w_object.instance_w_object
+			else:
+				child_w_object.instance_w_object = w_object
+			
+			if child_w_object.instance_w_object is None:
+				child_w_object.unique_name = child_object.name_full
+				child_w_object.final_world_matrix = child_object.matrix_world
+			else:
+				child_w_object.unique_name = child_w_object.instance_w_object.object.name_full + " -> " + child_object.name_full
+				child_w_object.final_world_matrix = child_w_object.instance_w_object.final_world_matrix @ child_object.matrix_world
+
+			w_object.children_w_objects.append(child_w_object)
+			w_objects_to_process.append(child_w_object)
+
+	# Print graph
+	print("--- Graph ---")
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop()
+
+		for i in range(w_object.depth):
+			print("    ", end="")
+		
+		print(w_object.object.name_full, "(" + w_object.object.kg_type + ")")
+		to_visit.extend(w_object.children_w_objects)
+	
+	print()
+	
+	return graph
+
+def debug_export_graph(graph, filepath):
+	file = open(filepath + ".txt", 'w')
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop()
+
+		for i in range(w_object.depth):
+			file.write("    ")
+		
+		file.write(w_object.object.name_full + " (" + w_object.object.kg_type + ")" + "\n")
+		to_visit.extend(w_object.children_w_objects)
+
+	file.close()
+
+def export_spawn_point(graph, file):
+	spawn_point_w_object = None
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop(0)
+		to_visit.extend(w_object.children_w_objects)
+
+		if w_object.object.kg_type == 'spawn_point':
+			spawn_point_w_object = w_object
 			break
 	
-	txt_file.write("Spawn point: " + str(name) + "\n")
-	util.write_vec3(kgl_file, position_game)
-	util.write_quat(kgl_file, rotation_game)
+	position_game = [0.0, 5.0, 0.0]
+	orientation_game = [0.0, 0.0, 0.0, 1.0]
 	
-	txt_file.write("\tposition: " + util.vec3_to_string(position_game) + "\n")
-	txt_file.write("\trotation: " + util.quat_to_string(rotation_game) + "\n")
-	txt_file.write("\n")
+	if spawn_point_w_object is None:
+		print("No spawn point found")
+	else:
+		print("Spawn point object:", spawn_point_w_object.unique_name)
+		matrix = spawn_point_w_object.object.matrix_world
 
-def export_ground_collision_meshes(kgl_file, txt_file, instance_objs):
-	class Ground:
-		name = None
-		indices = None
-		positions = None
+		position_game = util.blender_position_to_game_position(matrix.to_translation())
+		orientation_game = util.blender_orientation_to_game_orientation(matrix.to_quaternion())
 	
+	print()
+	util.write_vec3(file, position_game)
+	util.write_quat(file, orientation_game)
+
+def export_ground_collision_meshes(depsgraph: Depsgraph, graph, file):
+	print("-- Ground collision meshes ---")
+
+	w_objects = []
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop(0)
+		to_visit.extend(w_object.children_w_objects)
+
+		if w_object.object.kg_type == 'ground_collision_mesh':
+			print(w_object.unique_name)
+			w_objects.append(w_object)
+	
+	print()
+	meshes_data = []
 	size = 0
-	grounds = []
-
-	for instance_obj in instance_objs:
-		if instance_obj.object.kg_type == 'ground_collision_mesh':
-			mesh = instance_obj.object.data
-			mesh.calc_loop_triangles()
-
-			vertex_map = {}
-			next_index = 0
-			indices = []
-
-			for triangle in mesh.loop_triangles:
-				for i in range(3):
-					vertex_index = triangle.vertices[i]
-					vertex = instance_obj.matrix_world @ mesh.vertices[vertex_index].co
-					vertex_game = (vertex[0], vertex[2], -vertex[1])
-
-					size = max(size, abs(vertex_game[0]))
-					size = max(size, abs(vertex_game[2]))
-
-					if vertex_game in vertex_map:
-						index = vertex_map[vertex_game]
-						indices.append(index)
-					else:
-						vertex_map[vertex_game] = next_index
-						indices.append(next_index)
-						next_index += 1
-			
-			positions = []
-
-			for vertex in vertex_map.keys():
-				for coord in vertex:
-					positions.append(coord)
-			
-			ground = Ground()
-			ground.name = util.instance_obj_name(instance_obj);
-			ground.indices = indices
-			ground.positions = positions
-			
-			grounds.append(ground)
 	
-	txt_file.write("Ground grid size: " + str(size) + "\n")
-	txt_file.write("Ground collision meshes: " + str(len(grounds)) + "\n")
+	for w_object in w_objects:
+		indices, positions = util.calculate_indices_global_positions(w_object.final_world_matrix, depsgraph, w_object.object) # Have this (and other) procs just take in the non-eval'd object?
+		meshes_data.append((indices, positions))
 
-	kgl_file.write(struct.pack("<f", size))
-	kgl_file.write(struct.pack("<I", len(grounds)))
+		for i in range(int(len(positions) / 3)):
+			x = positions[i * 3]
+			z = positions[i * 3 + 2]
 
-	for g in grounds:
-		txt_file.write("\t" + g.name + ": " + str(len(g.indices)) + " indices, " + str(len(g.positions)) + " attributes" + "\n")
-		util.write_indices_attributes(kgl_file, g.indices, g.positions)
+			size = max(size, abs(x))
+			size = max(size, abs(z))
+	
+	print("Grid size:", size)
+	print()
 
-	txt_file.write("\n")
+	util.write_f32(file, size)
+	util.write_u32(file, len(meshes_data))
 
-def export_geometries(kgl_file, txt_file, instance_objs):
-	class Geometry:
-		name = None
-		indices = None
-		attributes = None
+	for mesh_data in meshes_data:
+		indices, positions = mesh_data
+		util.write_indices_attributes(file, indices, positions)
+		util.write_cursor_check(file)
 
-	geometries = []
+def export_geometries(depsgraph: Depsgraph, graph, file):
+	print("-- Meshes ---")
+
+	w_objects = []
 	mesh_name_to_index_map = {}
 	mesh_index = 0
+	to_visit = graph.copy()
 
-	for instance_obj in instance_objs:
-		obj = instance_obj.object
-		kg_type = obj.kg_type
+	while to_visit:
+		w_object: WObject = to_visit.pop(0)
+		to_visit.extend(w_object.children_w_objects)
+		object: Object = w_object.object
 
-		if kg_type == 'inanimate' or kg_type == 'rigid_body' or kg_type == 'oil_slick' or kg_type == 'oil_barrel_mine' or kg_type == 'oil_barrel_mine_oil_slick':
-			assert obj.type == 'MESH', util.instance_obj_name(instance_obj) + " is marked to have it's mesh exported yet it's not a mesh object"
-
-			mesh = obj.data
+		kg_type = object.kg_type
+		if kg_type == 'inanimate' or kg_type == 'rigid_body':
+			mesh: Mesh = object.data
 
 			if mesh.name_full in mesh_name_to_index_map:
 				continue
 
-			indices, attributes = util.get_indices_local_positions_normals_colors(mesh)
+			print(mesh.name_full)
 
-			mesh_name_to_index_map.update({ mesh.name_full: mesh_index })
+			# We save the w_object and not the mesh because I guess you need to evalutate the object first then get the evalutated mesh from that.
+			# So if multiple w_objects all have the same mesh, we just save the first w_object
+			w_objects.append(w_object)
+
+			mesh_name_to_index_map[mesh.name_full] = mesh_index
 			mesh_index += 1
+	
+	print()
+	util.write_u32(file, len(w_objects))
+	
+	for w_object in w_objects:
+		indices, attributes = util.calculate_indices_local_positions_normals_colors(depsgraph, w_object.object)
+		util.write_indices_attributes(file, indices, attributes)
+		util.write_cursor_check(file)
 
-			geometry = Geometry()
-			geometry.name = mesh.name_full
-			geometry.indices = indices
-			geometry.attributes = attributes
-			geometries.append(geometry)
-	
-	txt_file.write("Geometries: " + str(mesh_index) + "\n")
-	kgl_file.write(struct.pack("<I", len(geometries)))
-
-	for g in geometries:
-		txt_file.write("\t" + g.name + ": " + str(len(g.indices)) + " indices, " + str(len(g.attributes)) + " attributes" + "\n")
-		util.write_indices_attributes(kgl_file, g.indices, g.attributes)
-	
-	txt_file.write("\n")
-	
 	return mesh_name_to_index_map
 
-def export_inanimate_entities(kgl_file, txt_file, instance_objs, mesh_name_to_index_map):
-	class Entity:
-		name = None
-		position = None
-		rotation = None
-		scale = None
-		mesh_index = None
-		hulls = None
+def export_inanimate_entities(graph, file, mesh_name_to_index_map):
+	print("--- Inanimate entities ---")
+
+	w_objects = []
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop(0)
+		to_visit.extend(w_object.children_w_objects)
+		object: Object = w_object.object
+
+		if object.kg_type == 'inanimate':
+			print(w_object.unique_name)
+			w_objects.append(w_object)
 	
-	entities = []
+	print()
+	util.write_u32(file, len(w_objects))
 
-	for instance_obj in instance_objs:
-		if instance_obj.object.kg_type == 'inanimate':
-			entity = Entity()
-			entity.name = util.instance_obj_name(instance_obj)
+	for w_object in w_objects:
+		util.write_game_pos_ori_scale_from_blender_matrix(file, w_object.final_world_matrix)
 
-			position, rotation, scale = util.get_position_rotation_scale(instance_obj.matrix_world)
-			entity.position = position
-			entity.rotation = rotation
-			entity.scale = scale
+		mesh_index = mesh_name_to_index_map[w_object.object.data.name_full]
+		util.write_u32(file, mesh_index)
 
-			entity.mesh_index = mesh_name_to_index_map[instance_obj.object.data.name_full]
-			entity.hulls = util.get_hulls(instance_obj, instance_objs)
+		export_hulls(file, w_object)
 
-			entities.append(entity)
+		util.write_cursor_check(file)
+
+def export_hulls(file, w_object: WObject):
+	hull_w_objects = []
+
+	for child_w_object in w_object.children_w_objects:
+		if child_w_object.object.kg_type == 'hull':
+			hull_w_objects.append(child_w_object)
 	
-	txt_file.write("Inanimate entities: " + str(len(entities)) + "\n")
-	kgl_file.write(struct.pack("<I", len(entities)))
+	util.write_u32(file, len(hull_w_objects))
 
-	for entity in entities:
-		txt_file.write("\t" + entity.name + "\n")
-		txt_file.write("\t\tposition: " + util.vec3_to_string(entity.position) + "\n")
-		txt_file.write("\t\trotation: " + util.quat_to_string(entity.rotation) + "\n")
-		txt_file.write("\t\tscale:    " + util.vec3_to_string(entity.scale) + "\n")
-		txt_file.write("\t\tgeometry index: " + str(entity.mesh_index) + "\n")
+	for hull_w_object in hull_w_objects:
+		object = hull_w_object.object
+		util.write_game_pos_ori_scale_from_blender_matrix(file, object.matrix_local)
+
+		assert object.kg_hull_type != 'mesh'
+		hull_type = None
+
+		match object.kg_hull_type:
+			case 'box':
+				hull_type = 0
+			case 'cylinder':
+				hull_type = 1
+			case 'mesh':
+				hull_type = 2
 		
-		util.write_vec3(kgl_file, entity.position)
-		util.write_quat(kgl_file, entity.rotation)
-		util.write_vec3(kgl_file, entity.scale)
-		kgl_file.write(struct.pack("<I", entity.mesh_index))
+		assert hull_type is not None
+		util.write_u32(file, hull_type)
 
-		txt_file.write("\t\thulls: " + str(len(entity.hulls)) + "\n")
-		kgl_file.write(struct.pack("<I", len(entity.hulls)))
-
-		for hull in entity.hulls:
-			txt_file.write("\t\t\t" + hull.name + "\n")
-			txt_file.write("\t\t\t\tlocal position: " + util.vec3_to_string(hull.local_position) + "\n")
-			txt_file.write("\t\t\t\tlocal rotation: " + util.quat_to_string(hull.local_rotation) + "\n")
-			txt_file.write("\t\t\t\tlocal scale:    " + util.vec3_to_string(hull.local_scale) + "\n")
-			txt_file.write("\t\t\t\ttype: " + str(hull.hull_type) + "\n")
-
-			if hull.hull_type == 2:
-				assert(False)
-
-			util.write_vec3(kgl_file, hull.local_position)
-			util.write_quat(kgl_file, hull.local_rotation)
-			util.write_vec3(kgl_file, hull.local_scale)
-			kgl_file.write(struct.pack("<I", hull.hull_type))
-		
-		txt_file.write("\t\t\tcursor check: " + str(util.POSITION_CHECK_VALUE) + "\n")
-		kgl_file.write(struct.pack("<I", util.POSITION_CHECK_VALUE))
-
-	txt_file.write("\n")
-
-def export_rigid_body_islands(kgl_file, txt_file, instance_objs, mesh_name_to_index_map):
-	class Island:
-		bodies = None
-	
-	class RigidBody:
-		name = None
-		position = None
-		rotation = None
-		scale = None
-		mesh_index = None
-		hulls = None
-		mass = None
-		dimensions = None
-		collision_exclude = None
+def export_rigid_bodies(graph, file, mesh_name_to_index_map):
+	print("--- Rigid body islands ---")
 	
 	islands = []
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop(0)
+		object: Object = w_object.object
+
+		if object.kg_type == 'rigid_body_island':
+			print(w_object.unique_name)
+
+			rigid_bodies = []
+			to_visit_in_island = w_object.children_w_objects.copy()
+
+			while to_visit_in_island:
+				w_object_in_island: WObject = to_visit_in_island.pop(0)
+				to_visit_in_island.extend(w_object_in_island.children_w_objects)
+				object_in_island: Object = w_object_in_island.object
+
+				if object_in_island.kg_type == 'rigid_body':
+					print("    " + w_object_in_island.unique_name)
+					rigid_bodies.append(w_object_in_island)
+			
+			assert len(rigid_bodies) > 0, "Rigid body island " + w_object.unique_name + " has no rigid bodies."
+			islands.append(rigid_bodies)
+
+		else:
+			to_visit.extend(w_object.children_w_objects)
 	
-	for instance_obj in instance_objs:
-		if instance_obj.object.kg_type == 'rigid_body_island':
-			island = Island()
-			island.bodies = []
-
-			for other_instance_obj in instance_objs:
-				if other_instance_obj.object.kg_type == 'rigid_body' and util.is_child(instance_obj, other_instance_obj):
-					body = RigidBody()
-					body.name = util.instance_obj_name(other_instance_obj)
-
-					position, rotation, scale = util.get_position_rotation_scale(other_instance_obj.matrix_world)
-					body.position = position
-					body.rotation = rotation
-					body.scale = scale
-					
-					body.mesh_index = mesh_name_to_index_map[other_instance_obj.object.data.name_full]
-					body.hulls = util.get_hulls(other_instance_obj, instance_objs)
-					
-					obj = other_instance_obj.object
-					body.mass = obj.kg_rigid_body_mass
-					dimensions = obj.dimensions
-					body.dimensions = [dimensions[0], dimensions[2], dimensions[1]]
-					body.collision_exclude = obj.kg_rigid_body_collision_exclude
-
-					island.bodies.append(body)
-
-			islands.append(island)
-	
-	txt_file.write("Rigid body islands: " + str(len(islands)) + "\n")
-	kgl_file.write(struct.pack("<I", len(islands)))
+	print()
+	util.write_u32(file, len(islands))
 
 	for island in islands:
-		txt_file.write("\tBodies: " + str(len(island.bodies)) + "\n")
-		kgl_file.write(struct.pack("<I", len(island.bodies)))
+		util.write_u32(file, len(island))
 
-		for body in island.bodies:
-			txt_file.write("\t\t" + body.name + "\n")
-			txt_file.write("\t\t\tposition: " + util.vec3_to_string(body.position) + "\n")
-			txt_file.write("\t\t\trotation: " + util.quat_to_string(body.rotation) + "\n")
-			txt_file.write("\t\t\tscale:    " + util.vec3_to_string(body.scale) + "\n")
-			txt_file.write("\t\t\tgeometry index: " + str(body.mesh_index) + "\n")
+		for w_object in island:
+			object: Object = w_object.object
+			mesh_index = mesh_name_to_index_map[object.data.name_full]
+			game_dimensions = util.blender_scale_to_game_scale(object.dimensions)
 
-			util.write_vec3(kgl_file, body.position)
-			util.write_quat(kgl_file, body.rotation)
-			util.write_vec3(kgl_file, body.scale)
-			kgl_file.write(struct.pack("<I", body.mesh_index))			
-			txt_file.write("\t\t\tmass: " + str(body.mass) + "\n")
-			txt_file.write("\t\t\tdimensions: " + util.vec3_to_string(body.dimensions) + "\n")
-			txt_file.write("\t\t\tcollision_exclude: " + str(body.collision_exclude) + "\n")
-
-			kgl_file.write(struct.pack("<f", body.mass))
-			util.write_vec3(kgl_file, body.dimensions)
-			kgl_file.write(struct.pack("<?", body.collision_exclude))
-
-			txt_file.write("\t\t\thulls: " + str(len(body.hulls)) + "\n")
-			kgl_file.write(struct.pack("<I", len(body.hulls)))
-
-			for hull in body.hulls:
-				txt_file.write("\t\t\t\t" + hull.name + "\n")
-				txt_file.write("\t\t\t\t\tlocal position: " + util.vec3_to_string(hull.local_position) + "\n")
-				txt_file.write("\t\t\t\t\tlocal rotation: " + util.quat_to_string(hull.local_rotation) + "\n")
-				txt_file.write("\t\t\t\t\tlocal scale:    " + util.vec3_to_string(hull.local_scale) + "\n")
-				txt_file.write("\t\t\t\t\ttype: " + str(hull.hull_type) + "\n")
-
-				if hull.hull_type == 2:
-					assert(False)
-
-				util.write_vec3(kgl_file, hull.local_position)
-				util.write_quat(kgl_file, hull.local_rotation)
-				util.write_vec3(kgl_file, hull.local_scale)
-				kgl_file.write(struct.pack("<I", hull.hull_type))
-
-			txt_file.write("\t\t\tcursor check: " + str(util.POSITION_CHECK_VALUE) + "\n")
-			kgl_file.write(struct.pack("<I", util.POSITION_CHECK_VALUE))
-	
-	txt_file.write("\n")
+			status_effect = None
+			match object.kg_rigid_body_status_effect:
+				case 'none':
+					status_effect = 0
+				case 'shock':
+					status_effect = 1
+			
+			util.write_game_pos_ori_scale_from_blender_matrix(file, w_object.final_world_matrix)
+			util.write_u32(file, mesh_index)
+			util.write_f32(file, object.kg_rigid_body_mass)
+			util.write_vec3(file, game_dimensions)
+			util.write_b8(file, object.kg_rigid_body_collision_exclude)
+			util.write_u32(file, status_effect)
+			export_hulls(file, w_object)
+			util.write_cursor_check(file)

@@ -37,11 +37,17 @@ Ideas
 A note about the car wheel positioning. When the car is in the air such that the suspension is not colliding with the ground, we max out the spring length to the same value as the maximum spring ray length. For the position of the wheel,
 we could pick a different maximum length. It's intentionally designed such that the ray length is pretty long to provide better stability so we'll probably want to use a different max length for the visual position of the wheel.
 
+Improvements
+- Instead of exporting multiple ground collision meshes, then loading in and inserting each one into the ground grid. Why don't we have the exporter do the work of combining the collision meshes into one big array of indices and positions.
+
 Todo
 - Side bouncy rails
 	- Think of design
 	- Implement it
 - Non exploding shock cubes
+	- [done] Blender asset creation
+	- [done] Exporting it
+	- [done] Importing it
 	- Implementation
 	- Particle system
 

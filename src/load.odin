@@ -91,6 +91,8 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 			
 			delete(indices);
 			delete(positions);
+
+			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 		}
 	}
 
@@ -103,6 +105,8 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 		indices, attributes := read_indices_attributes(&bytes, &pos);
 		geometry := init_triangle_geometry(indices, attributes);
 		geometry_lookups[i] = add_geometry(&entities_geos, geometry);
+
+		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 	}
 
 	{ // Inanimate entities
@@ -150,6 +154,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 				mass := read_f32(&bytes, &pos);
 				dimensions := read_vec3(&bytes, &pos);
 				collision_exclude := read_bool(&bytes, &pos);
+				status_effect := read_u32(&bytes, &pos);
 
 				rigid_body := new_rigid_body_entity(position, orientation, scale, mass, dimensions);
 				rigid_body.collision_exclude = collision_exclude;
