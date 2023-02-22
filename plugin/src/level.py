@@ -326,6 +326,8 @@ def export_rigid_bodies(graph, file, mesh_name_to_index_map):
 					status_effect = 0
 				case 'shock':
 					status_effect = 1
+				case 'fire':
+					status_effect = 2
 			
 			util.write_game_pos_ori_scale_from_blender_matrix(file, w_object.final_world_matrix)
 			util.write_u32(file, mesh_index)

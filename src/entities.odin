@@ -18,6 +18,7 @@ Inanimate_Entity :: struct {
 Status_Effect :: enum {
 	None,
 	Shock,
+	Fire,
 }
 
 Rigid_Body_Entity :: struct {
@@ -43,8 +44,10 @@ Car_Entity :: struct {
 	angular_velocity: linalg.Vector3f32,
 	new_position: linalg.Vector3f32,
 	new_transform: linalg.Matrix4f32,
-	status_effect: Status_Effect,
-	status_effect_remaining_time: f32,
+	shocked: bool,
+	shock_remaining_time: f32,
+	on_fire: bool,
+	on_fire_remaining_time: f32,
 	wheel_radius: f32,
 	wheels: [4]Wheel,
 	current_steer_angle: f32,

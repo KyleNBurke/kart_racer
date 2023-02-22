@@ -73,7 +73,8 @@ def register():
 	bpy.types.Object.kg_rigid_body_collision_exclude = bpy.props.BoolProperty()
 	bpy.types.Object.kg_rigid_body_status_effect = bpy.props.EnumProperty(items=[
 		('none', "None", "", 0),
-		('shock', "Shock", "", 1)
+		('shock', "Shock", "", 1),
+		('fire', "Fire", "", 2)
 	])
 
 def unregister():

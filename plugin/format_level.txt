@@ -45,7 +45,7 @@ Rigid body islands count: u32
 		mass:                  f32
 		dimensions:            vec3
 		collision exclude      b8
-		status effect:         u32  (0 = none, 1 = shock)
+		status effect:         u32  (0 = none, 1 = shock, 2 = fire)
 		hull count:            u32
 			local position:    vec3
 			local rotation:    quat

@@ -32,21 +32,30 @@ init_car_helpers :: proc(entities_geos: ^Entities_Geos) -> Car_Helpers {
 	return car_helpers;
 }
 
-set_car_status_effect :: proc(car: ^Car_Entity, status_effect: Status_Effect) {
-	car.status_effect = status_effect;
-
-	#partial switch status_effect {
-	case .Shock:
-		car.status_effect_remaining_time = 3;
-	}
+shock_car :: proc(car: ^Car_Entity) {
+	car.shocked = true;
+	car.shock_remaining_time = 3;
 }
 
-update_car_status_effect_remaining_time :: proc(car: ^Car_Entity, dt: f32) {
-	if car.status_effect != .None {
-		car.status_effect_remaining_time -= dt;
+light_car_on_fire :: proc(car: ^Car_Entity) {
+	car.on_fire = true;
+	car.on_fire_remaining_time = 10;
+}
 
-		if car.status_effect_remaining_time <= 0 {
-			car.status_effect = .None;
+update_car_status_effects_remaining_time :: proc(car: ^Car_Entity, dt: f32) {
+	if car.shocked {
+		car.shock_remaining_time -= dt;
+
+		if car.shock_remaining_time <= 0 {
+			car.shocked = false;
+		}
+	}
+
+	if car.on_fire {
+		car.on_fire_remaining_time -= dt;
+
+		if car.on_fire_remaining_time <= 0 {
+			car.on_fire = false;
 		}
 	}
 }
@@ -83,7 +92,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 	}
 
 	cornering_angle: { // Calculate a value between -1 and 1 to determine the desired cornering angle
-		if car.status_effect == .Shock {
+		if car.shocked {
 			break cornering_angle;
 		}
 
@@ -133,7 +142,8 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 			slipping = true;
 		}
 
-		FULL_GRIP_TOP_SPEED: f32 : 35;
+		full_grip_top_speed: f32 = 20 if car.on_fire else 35;
+
 		top_speed: f32;
 
 		if slipping {
@@ -149,7 +159,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 			car.velocity -= body_surface_lat_dir * fric;
 
 			top_speed_multiplier := max((20 - abs(lat_vel)) / 20, 0);
-			top_speed = (FULL_GRIP_TOP_SPEED - 10) * top_speed_multiplier + 10;
+			top_speed = (full_grip_top_speed - 10) * top_speed_multiplier + 10;
 
 			front_tire_left_geo := get_geometry(entities_geos, car_helpers.front_tire_left_geo_lookup);
 			set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
@@ -161,7 +171,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 				surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
 				body_surface_long_dir := linalg.normalize(linalg.cross(body_left, surface_normal));
 				body_surface_long_vel := linalg.dot(body_velocity, body_surface_long_dir);
-				max_steer_angle := 0.05 + 0.195 * max(FULL_GRIP_TOP_SPEED - body_surface_long_vel, 0) / FULL_GRIP_TOP_SPEED;
+				max_steer_angle := 0.05 + 0.195 * max(full_grip_top_speed - body_surface_long_vel, 0) / full_grip_top_speed;
 	
 				target_steer_angle := max_steer_angle * steer_multiplier;
 				car.current_steer_angle += clamp(target_steer_angle - car.current_steer_angle, -0.8 * dt, 0.8 * dt);
@@ -192,7 +202,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 				set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, GREEN);
 			}
 
-			top_speed = FULL_GRIP_TOP_SPEED;
+			top_speed = full_grip_top_speed;
 		}
 
 		body_surface_long_dir := linalg.normalize(linalg.cross(body_left, surface_normal));

@@ -415,6 +415,8 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 handle_status_effects :: proc(car: ^Car_Entity, rigid_body: ^Rigid_Body_Entity) {
 	#partial switch rigid_body.status_effect {
 	case .Shock:
-		set_car_status_effect(car, .Shock);
+		shock_car(car);
+	case .Fire:
+		light_car_on_fire(car);
 	}
 }

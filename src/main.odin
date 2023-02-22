@@ -45,7 +45,7 @@ main :: proc() {
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
 	glfw.WindowHint(glfw.MAXIMIZED, 1);
-	window := glfw.CreateWindow(1080, 720, "Kart Guys", nil, nil);
+	window := glfw.CreateWindow(1280, 720, "Kart Guys", nil, nil);
 	assert(window != nil, "Failed to create window");
 
 	glfw.SetFramebufferSizeCallback(window, framebuffer_size_callback);
@@ -172,7 +172,7 @@ init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
 }
 
 update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
-	update_car_status_effect_remaining_time(game.car, dt);
+	update_car_status_effects_remaining_time(game.car, dt);
 
 	if game.camera.state != .First_Person {
 		move_car(window, game.car, dt, &game.entities_geos, &game.car_helpers);

@@ -160,6 +160,8 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 				switch status_effect_u32 {
 					case 0: status_effect = .None;
 					case 1: status_effect = .Shock;
+					case 2: status_effect = .Fire;
+					case: unreachable()
 				}
 
 				rigid_body := new_rigid_body_entity(position, orientation, scale, mass, dimensions, status_effect);
