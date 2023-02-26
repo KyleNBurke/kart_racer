@@ -8,6 +8,7 @@ const vec3 directionalLightColor = vec3(0.5, 0.5, 0.5);
 layout(set = 0, binding = 0, std140) uniform FrameData {
 	mat4 projectionMat;
 	mat4 viewMat;
+	mat4 camera_mat;
 };
 
 layout(set = 1, binding = 0, std140) buffer InstanceData {

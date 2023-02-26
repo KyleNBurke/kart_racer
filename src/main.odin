@@ -103,7 +103,12 @@ main :: proc() {
 			updates += 1;
 		}
 
-		suboptimal_swapchain = render(&vulkan, &game.camera, &game.entities_geos, &game.texts);
+		suboptimal_swapchain = begin_render_frame(&vulkan, &game.camera, &game.entities_geos, &game.texts);
+
+		if !suboptimal_swapchain {
+			immediate_mode_render_game(&vulkan);
+			suboptimal_swapchain = end_render_frame(&vulkan);
+		}
 	}
 
 	cleanup_vulkan(&vulkan);
@@ -187,6 +192,10 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
 
 	free_all(context.temp_allocator);
+}
+
+immediate_mode_render_game :: proc(vulkan: ^Vulkan) {
+
 }
 
 cleanup_game :: proc(game: ^Game) {

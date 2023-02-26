@@ -8,6 +8,7 @@ import "core:slice";
 import "core:mem";
 import "core:c/libc";
 import "core:strings";
+import "core:math/linalg";
 import vk "vendor:vulkan";
 import "vendor:glfw";
 
@@ -16,20 +17,25 @@ import "math2";
 @(private)
 IFFC :: 2; // In flight frames count
 
-PIPELINES_COUNT :: 4;
+PIPELINES_COUNT :: 5;
 
-INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE :: 5_000_000;
+@(private)
+MESH_INSTANCE_ELEMENT_SIZE :: 64;
+
+@(private)
+PARTICLE_INSTANCE_ELEMENT_SIZE :: 32;
 
 @(private)
 MAX_ENTITIES :: 1000;
 
-INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE :: 64 * MAX_ENTITIES;
+MAX_PARTICLES :: 5000;
+
+INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE :: 5_000_000;
+INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE :: MESH_INSTANCE_ELEMENT_SIZE * MAX_ENTITIES;
+INSTANCE_BUFFER_PARTICLE_INSTANCE_BLOCK_SIZE :: PARTICLE_INSTANCE_ELEMENT_SIZE * MAX_PARTICLES; 
 
 @(private)
 TEXT_PUSH_CONSTANTS_SIZE :: 16;
-
-@(private)
-MESH_INSTANCE_ELEMENT_SIZE :: 64;
 
 @(private)
 Vulkan :: struct {
@@ -49,7 +55,10 @@ Vulkan :: struct {
 	primary_command_buffers: [IFFC]vk.CommandBuffer,
 	frame_resources: FrameResources,
 	mesh_resources: MeshResources,
+	particle_resources: ParticleResources,
 	ui_resources: UiResources,
+	logical_frame_index: int,
+	image_index: u32,
 }
 
 @(private)
@@ -88,6 +97,8 @@ FrameResources :: struct {
 	// E.g. mesh instance transformation matrix, particle instance position, size and color.
 	per_instance_buffers: [IFFC]vk.Buffer,
 	per_instance_buffers_memory: [IFFC]vk.DeviceMemory,
+
+	per_instance_buffer_ptr: ^u8,
 }
 
 MeshResources :: struct {
@@ -104,7 +115,14 @@ MeshResources :: struct {
 }
 
 ParticleResources :: struct {
-
+	per_instance_buffer_instance_block_offset: int,
+	secondary_command_buffers: [IFFC]vk.CommandBuffer,
+	instance_descriptor_set_layout: vk.DescriptorSetLayout,
+	instance_descriptor_sets: [IFFC]vk.DescriptorSet,
+	pipeline_layout: vk.PipelineLayout,
+	pipeline: vk.Pipeline,
+	instance_offset: int,
+	first_instance: u32,
 }
 
 UiResources :: struct {
@@ -119,6 +137,20 @@ UiResources :: struct {
 	atlas_image: vk.Image,
 	atlas_image_view: vk.ImageView,
 	atlas_memory: vk.DeviceMemory,
+}
+
+@(private)
+Frame_Data :: struct #align 4 {
+	projection_mat,
+	view_mat,
+	camera_mat: linalg.Matrix4f32,
+}
+
+@(private)
+Particle :: struct #align 4 {
+	position: linalg.Vector3f32,
+	size: f32,
+	color: [3]f32,
 }
 
 @(private)
@@ -143,8 +175,8 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 	frame_descriptor_set_layout, frame_descriptor_sets := create_frame_descriptor_sets(logical_device, descriptor_pool);
 	per_frame_buffers, per_frame_buffers_memory := create_per_frame_buffers(physical_device, logical_device);
 	update_frame_descriptor_sets(logical_device, frame_descriptor_sets, per_frame_buffers);
-	per_instance_buffer_instance_block_offset, per_instance_buffer_total_size := calculate_per_instance_buffer_metrics(physical_device);
-	per_instance_buffers, per_instance_buffers_memory := create_per_instance_buffers(physical_device, logical_device, per_instance_buffer_total_size);
+	per_instance_buffer_metrics := calculate_per_instance_buffer_metrics(physical_device);
+	per_instance_buffers, per_instance_buffers_memory := create_per_instance_buffers(physical_device, logical_device, per_instance_buffer_metrics.total_size);
 	
 	frame_resources := FrameResources {
 		descriptor_set_layout = frame_descriptor_set_layout,
@@ -156,21 +188,26 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 	};
 
 	mesh_instance_descriptor_set_layout, mesh_instance_descriptor_sets := create_mesh_descriptor_sets(logical_device, descriptor_pool);
-	update_mesh_instance_descriptor_sets(logical_device, mesh_instance_descriptor_sets, per_instance_buffers, per_instance_buffer_instance_block_offset);
-	mesh_descriptor_set_layouts := [?]vk.DescriptorSetLayout {frame_descriptor_set_layout, mesh_instance_descriptor_set_layout};
+	update_mesh_instance_descriptor_sets(logical_device, mesh_instance_descriptor_sets, per_instance_buffers, per_instance_buffer_metrics.mesh_instance_block_offset);
+	mesh_descriptor_set_layouts := [2]vk.DescriptorSetLayout {frame_descriptor_set_layout, mesh_instance_descriptor_set_layout};
 	mesh_pipeline_layout := create_mesh_pipeline_layout(logical_device, &mesh_descriptor_set_layouts);
+
+	particle_instance_descriptor_set_layout, particle_instance_descriptor_sets := create_particle_descriptor_sets(logical_device, descriptor_pool);
+	update_particle_descriptor_sets(logical_device, particle_instance_descriptor_sets, per_instance_buffers, per_instance_buffer_metrics.particle_instance_block_offset);
+	particle_descriptor_set_layouts := [2]vk.DescriptorSetLayout {frame_descriptor_set_layout, particle_instance_descriptor_set_layout};
+	particle_pipeline_layout := create_particle_pipeline_layout(logical_device, &particle_descriptor_set_layouts);
 
 	sampler_descriptor_set_layout, sampler_descriptor_set := create_sampler_descriptor_set(logical_device, descriptor_pool);
 	atlas_descriptor_set_layout, atlas_descriptor_set := create_atlas_descriptor_set(logical_device, descriptor_pool);
-	text_descriptor_set_layouts := [?]vk.DescriptorSetLayout {sampler_descriptor_set_layout, atlas_descriptor_set_layout};
+	text_descriptor_set_layouts := [2]vk.DescriptorSetLayout {sampler_descriptor_set_layout, atlas_descriptor_set_layout};
 	text_pipeline_layout := create_text_pipeline_layout(logical_device, &text_descriptor_set_layouts);
 	
-	pipelines := create_pipelines(logical_device, render_pass, extent, mesh_pipeline_layout, text_pipeline_layout);
+	pipelines := create_pipelines(logical_device, render_pass, extent, mesh_pipeline_layout, particle_pipeline_layout, text_pipeline_layout);
 
 	sampler := create_sampler(logical_device, sampler_descriptor_set);
 
 	mesh_resources := MeshResources {
-		per_instance_buffer_instance_block_offset = per_instance_buffer_instance_block_offset,
+		per_instance_buffer_instance_block_offset = per_instance_buffer_metrics.mesh_instance_block_offset, // this needs to be rename to per_instance_buffer_mesh_instance_block_offset
 		line_secondary_command_buffers = secondary_command_buffers.line,
 		basic_secondary_command_buffers = secondary_command_buffers.basic,
 		lambert_secondary_command_buffers = secondary_command_buffers.lambert,
@@ -182,6 +219,15 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		lambert_pipeline = pipelines[2],
 	};
 
+	particle_resources := ParticleResources {
+		per_instance_buffer_instance_block_offset = per_instance_buffer_metrics.particle_instance_block_offset,
+		secondary_command_buffers = secondary_command_buffers.particle,
+		instance_descriptor_set_layout = particle_instance_descriptor_set_layout,
+		instance_descriptor_sets = particle_instance_descriptor_sets,
+		pipeline_layout = particle_pipeline_layout,
+		pipeline = pipelines[3],
+	}
+
 	ui_resources := UiResources {
 		text_secondary_command_buffer = secondary_command_buffers.text,
 		sampler_descriptor_set_layout = sampler_descriptor_set_layout,
@@ -189,7 +235,7 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		sampler_descriptor_set = sampler_descriptor_set,
 		atlas_descriptor_set = atlas_descriptor_set,
 		text_pipeline_layout = text_pipeline_layout,
-		text_pipeline = pipelines[3],
+		text_pipeline = pipelines[4],
 		sampler = sampler,
 	};
 
@@ -210,7 +256,10 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		primary_command_buffers,
 		frame_resources,
 		mesh_resources,
-		ui_resources,
+		particle_resources,
+		ui_resources, 
+		0,
+		0,
 	};
 }
 
@@ -227,6 +276,10 @@ cleanup_vulkan :: proc(using vulkan: ^Vulkan) {
 	vk.DestroyPipelineLayout(logical_device, ui_resources.text_pipeline_layout, nil);
 	vk.DestroyDescriptorSetLayout(logical_device, ui_resources.atlas_description_set_layout, nil);
 	vk.DestroyDescriptorSetLayout(logical_device, ui_resources.sampler_descriptor_set_layout, nil);
+
+	vk.DestroyPipeline(logical_device, particle_resources.pipeline, nil);
+	vk.DestroyPipelineLayout(logical_device, particle_resources.pipeline_layout, nil);
+	vk.DestroyDescriptorSetLayout(logical_device, particle_resources.instance_descriptor_set_layout, nil);
 	
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
@@ -270,6 +323,7 @@ recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer
 
 	vk.DeviceWaitIdle(logical_device);
 	vk.DestroyPipeline(logical_device, ui_resources.text_pipeline, nil);
+	vk.DestroyPipeline(logical_device, particle_resources.pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.line_pipeline, nil);
@@ -289,11 +343,19 @@ recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer
 	depth_image = create_depth_image(logical_device, vulkan_context.physical_device, depth_format, extent);
 	swapchain, swapchain_frames = create_swapchain(&vulkan_context, surface_format, extent, render_pass, depth_image.image_view);
 
-	pipelines := create_pipelines(logical_device, render_pass, extent, mesh_resources.pipeline_layout, ui_resources.text_pipeline_layout);
+	pipelines := create_pipelines(
+		logical_device,
+		render_pass,
+		extent,
+		mesh_resources.pipeline_layout,
+		particle_resources.pipeline_layout,
+		ui_resources.text_pipeline_layout);
+	
 	mesh_resources.line_pipeline = pipelines[0];
 	mesh_resources.basic_pipeline = pipelines[1];
 	mesh_resources.lambert_pipeline = pipelines[2];
-	ui_resources.text_pipeline = pipelines[3];
+	particle_resources.pipeline = pipelines[3];
+	ui_resources.text_pipeline = pipelines[4];
 
 	fmt.println("Swapchain recreated");
 }
@@ -700,7 +762,7 @@ create_primary_command_buffers :: proc(logical_device: vk.Device, command_pool: 
 }
 
 SecondaryCommandBuffers :: struct {
-	line, basic, lambert, text: [IFFC]vk.CommandBuffer,
+	line, basic, lambert, particle, text: [IFFC]vk.CommandBuffer,
 }
 
 create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool: vk.CommandPool) -> SecondaryCommandBuffers {
@@ -717,16 +779,17 @@ create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool
 	r := vk.AllocateCommandBuffers(logical_device, &allocate_info, &command_buffers_array[0]);
 	assert(r == .SUCCESS);
 
-	line, basic, lambert, text: [IFFC]vk.CommandBuffer;
+	line, basic, lambert, particle, text: [IFFC]vk.CommandBuffer;
 	
 	for i in 0..<IFFC {
-		line[i]    = command_buffers_array[PIPELINES_COUNT * i];
-		basic[i]   = command_buffers_array[PIPELINES_COUNT * i + 1];
-		lambert[i] = command_buffers_array[PIPELINES_COUNT * i + 2];
-		text[i]    = command_buffers_array[PIPELINES_COUNT * i + 3];
+		line[i]     = command_buffers_array[PIPELINES_COUNT * i];
+		basic[i]    = command_buffers_array[PIPELINES_COUNT * i + 1];
+		lambert[i]  = command_buffers_array[PIPELINES_COUNT * i + 2];
+		particle[i] = command_buffers_array[PIPELINES_COUNT * i + 3];
+		text[i]     = command_buffers_array[PIPELINES_COUNT * i + 4];
 	}
 
-	return SecondaryCommandBuffers { line, basic, lambert, text };
+	return SecondaryCommandBuffers { line, basic, lambert, particle, text };
 }
 
 create_frame_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool: vk.DescriptorPool) -> (vk.DescriptorSetLayout, [IFFC]vk.DescriptorSet) {
@@ -765,13 +828,11 @@ create_frame_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool:
 }
 
 create_per_frame_buffers :: proc(physical_device: vk.PhysicalDevice, logical_device: vk.Device, ) -> ([IFFC]vk.Buffer, [IFFC]vk.DeviceMemory) {
-	PER_FRAME_BUFFER_SIZE :: 128;
-
 	buffers: [IFFC]vk.Buffer;
 	buffers_memory: [IFFC]vk.DeviceMemory;
 
 	for i in 0..<IFFC {
-		buffer, memory := create_allocate_and_bind_buffer_memory(physical_device, logical_device, {.UNIFORM_BUFFER}, {.HOST_VISIBLE}, PER_FRAME_BUFFER_SIZE);
+		buffer, memory := create_allocate_and_bind_buffer_memory(physical_device, logical_device, {.UNIFORM_BUFFER}, {.HOST_VISIBLE}, size_of(Frame_Data));
 		buffers[i] = buffer;
 		buffers_memory[i] = memory;
 	}
@@ -850,17 +911,30 @@ create_per_instance_buffers :: proc(physical_device: vk.PhysicalDevice, logical_
 	return buffers, buffers_memory;
 }
 
-calculate_per_instance_buffer_metrics :: proc(physical_device: vk.PhysicalDevice) -> (instance_block_offset, total_size: int) {
+Per_Instance_Buffer_Metrics :: struct {
+	mesh_instance_block_offset,
+	particle_instance_block_offset,
+	total_size: int,
+}
+
+calculate_per_instance_buffer_metrics :: proc(physical_device: vk.PhysicalDevice) -> Per_Instance_Buffer_Metrics {
 	physical_device_properties: vk.PhysicalDeviceProperties;
 	vk.GetPhysicalDeviceProperties(physical_device, &physical_device_properties);
-	alignment := physical_device_properties.limits.minStorageBufferOffsetAlignment;
+	alignment := cast(int) physical_device_properties.limits.minStorageBufferOffsetAlignment;
 
-	unaligned_offset := INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE;
-	instance_block_offset = math2.align_forward(unaligned_offset, int(alignment));
+	unaligned_mesh_instance_block_offset := INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE;
+	aligned_mesh_instance_block_offset := math2.align_forward(unaligned_mesh_instance_block_offset, alignment);
 
-	total_size = instance_block_offset + INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE;
+	unaligned_particle_instance_block_offset := aligned_mesh_instance_block_offset + INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE;
+	aligned_particle_instance_block_offset := math2.align_forward(unaligned_particle_instance_block_offset, alignment);
 
-	return instance_block_offset, total_size;
+	total_size := aligned_particle_instance_block_offset + INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE;
+
+	return Per_Instance_Buffer_Metrics {
+		mesh_instance_block_offset = aligned_mesh_instance_block_offset,
+		particle_instance_block_offset = aligned_particle_instance_block_offset,
+		total_size = total_size,
+	};
 }
 
 create_mesh_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool: vk.DescriptorPool) -> (vk.DescriptorSetLayout, [IFFC]vk.DescriptorSet) {
@@ -924,6 +998,80 @@ update_mesh_instance_descriptor_sets :: proc(logical_device: vk.Device, descript
 }
 
 create_mesh_pipeline_layout :: proc(logical_device: vk.Device, descriptor_set_layouts: ^[2]vk.DescriptorSetLayout) -> vk.PipelineLayout {
+	create_info := vk.PipelineLayoutCreateInfo {
+		sType = .PIPELINE_LAYOUT_CREATE_INFO,
+		pSetLayouts = &descriptor_set_layouts[0],
+		setLayoutCount = len(descriptor_set_layouts),
+	};
+
+	pipeline_layout: vk.PipelineLayout;
+	r := vk.CreatePipelineLayout(logical_device, &create_info, nil, &pipeline_layout);
+	assert(r == .SUCCESS);
+
+	return pipeline_layout;
+}
+
+create_particle_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool: vk.DescriptorPool) -> (vk.DescriptorSetLayout, [IFFC]vk.DescriptorSet) {
+	layout_binding := vk.DescriptorSetLayoutBinding {
+		binding = 0,
+		descriptorType = .STORAGE_BUFFER,
+		descriptorCount = 1,
+		stageFlags = {.VERTEX},
+	};
+
+	layout_create_info := vk.DescriptorSetLayoutCreateInfo {
+		sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		pBindings = &layout_binding,
+		bindingCount = 1,
+	};
+
+	descriptor_set_layout: vk.DescriptorSetLayout;
+	r := vk.CreateDescriptorSetLayout(logical_device, &layout_create_info, nil, &descriptor_set_layout);
+	assert(r == .SUCCESS);
+
+	descriptor_set_layouts: [IFFC]vk.DescriptorSetLayout;
+	slice.fill(descriptor_set_layouts[:], descriptor_set_layout);
+
+	allocate_info := vk.DescriptorSetAllocateInfo {
+		sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
+		descriptorPool = descriptor_pool,
+		pSetLayouts = &descriptor_set_layouts[0],
+		descriptorSetCount = len(descriptor_set_layouts),
+	};
+
+	descriptor_sets: [IFFC]vk.DescriptorSet;
+	r = vk.AllocateDescriptorSets(logical_device, &allocate_info, &descriptor_sets[0]);
+	assert(r == .SUCCESS);
+
+	return descriptor_set_layout, descriptor_sets;
+}
+
+update_particle_descriptor_sets :: proc(logical_device: vk.Device, descriptor_sets: [IFFC]vk.DescriptorSet, buffers: [IFFC]vk.Buffer, particle_instance_block_offset: int) {
+	descriptor_buffer_infos: [IFFC]vk.DescriptorBufferInfo;
+	write_descriptor_sets: [IFFC]vk.WriteDescriptorSet;
+	
+	for i in 0..<IFFC {
+		descriptor_buffer_infos[i] = vk.DescriptorBufferInfo {
+			buffer = buffers[i],
+			offset = cast(vk.DeviceSize) particle_instance_block_offset,
+			range = cast(vk.DeviceSize) vk.WHOLE_SIZE,
+		};
+
+		write_descriptor_sets[i] = vk.WriteDescriptorSet {
+			sType = .WRITE_DESCRIPTOR_SET,
+			dstSet = descriptor_sets[i],
+			dstBinding = 0,
+			dstArrayElement = 0,
+			descriptorCount = 1,
+			descriptorType = .STORAGE_BUFFER,
+			pBufferInfo = &descriptor_buffer_infos[i],
+		};
+	}
+
+	vk.UpdateDescriptorSets(logical_device, IFFC, &write_descriptor_sets[0], 0, nil);
+}
+
+create_particle_pipeline_layout :: proc(logical_device: vk.Device, descriptor_set_layouts: ^[2]vk.DescriptorSetLayout) -> vk.PipelineLayout {
 	create_info := vk.PipelineLayoutCreateInfo {
 		sType = .PIPELINE_LAYOUT_CREATE_INFO,
 		pSetLayouts = &descriptor_set_layouts[0],
@@ -1034,7 +1182,8 @@ create_pipelines :: proc(
 	logical_device: vk.Device,
 	render_pass: vk.RenderPass,
 	extent: vk.Extent2D,
-	mesh_pipeline_layout: vk.PipelineLayout,
+	mesh_pipeline_layout,
+	particle_pipeline_layout,
 	text_pipeline_layout: vk.PipelineLayout,
 ) -> [PIPELINES_COUNT]vk.Pipeline {
 	// Shared
@@ -1349,6 +1498,47 @@ create_pipelines :: proc(
 		subpass = 0,
 	};
 
+	// Particle
+	particle_vert_module := create_shader_module(logical_device, "particle.vert");
+	defer vk.DestroyShaderModule(logical_device, particle_vert_module, nil);
+	particle_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
+		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage = {.VERTEX},
+		module = particle_vert_module,
+		pName = shader_entry_point,
+	};
+
+	particle_frag_module := create_shader_module(logical_device, "particle.frag");
+	defer vk.DestroyShaderModule(logical_device, particle_frag_module, nil);
+	particle_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
+		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage = {.FRAGMENT},
+		module = particle_frag_module,
+		pName = shader_entry_point,
+	};
+
+	particle_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {particle_vert_stage_create_info, particle_frag_stage_create_info};
+
+	particle_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
+		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+	};
+
+	particle_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
+		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
+		pStages = &particle_stage_create_infos[0],
+		stageCount = len(particle_stage_create_infos),
+		pVertexInputState = &particle_vertex_input_state_create_info,
+		pInputAssemblyState = &triangle_input_assembly_state_create_info,
+		pViewportState = &viewport_state_create_info,
+		pRasterizationState = &triangle_rasterization_state_create_info,
+		pMultisampleState = &multisample_state_create_info,
+		pDepthStencilState = &depth_stencil_state_create_info,
+		pColorBlendState = &color_blend_state_create_info, // This should change if we want to support transparency
+		layout = particle_pipeline_layout,
+		renderPass = render_pass,
+		subpass = 0,
+	};
+
 	// Text
 	text_vert_module := create_shader_module(logical_device, "text.vert");
 	defer vk.DestroyShaderModule(logical_device, text_vert_module, nil);
@@ -1446,6 +1636,7 @@ create_pipelines :: proc(
 		line_pipeline_create_info,
 		basic_pipeline_create_info,
 		lambert_pipeline_create_info,
+		particle_pipeline_create_info,
 		text_pipeline_create_info,
 	};
 
