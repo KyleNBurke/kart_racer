@@ -146,6 +146,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 		
 		for island_index in 0..<island_count {
 			bodies_count := read_u32(&bytes, &pos);
+			
 			for body_index in 0..<bodies_count {
 				position := read_vec3(&bytes, &pos);
 				orientation := read_quat(&bytes, &pos);
@@ -187,19 +188,12 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 				// add_rigid_body_to_island(&islands, int(island_index), entity_lookup, rigid_body);
 				append(&awake_rigid_body_lookups, entity_lookup);
 
+				if status_effect == .Fire {
+					append(&fire_cubes, entity_lookup);
+				}
+
 				assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 			}
-		}
-	}
-
-	// Temporary until we've implemented everything missing from the old project.
-	// We need to remove the geometries which aren't tied to any entities. This is not allowed.
-	// The situation only happens because we have a geometry for an oil slick but don't create
-	// and entity for it yet.
-	for lookup in geometry_lookups {
-		geometry_record := &entities_geos.geometry_records[lookup.index];
-		if len(geometry_record.entity_lookups) == 0 {
-			remove_geometry(&entities_geos, lookup);
 		}
 	}
 

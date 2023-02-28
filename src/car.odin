@@ -6,9 +6,9 @@ import "core:math/linalg";
 import "core:math/rand";
 import "math2";
 
-FIRE_PARTICLE_LIFE_TIME: f32 : 0.2;
-MAX_FIRE_PARTICLES :: 100;
-TIME_BETWEEN_PARTILCE_EMISSION :: FIRE_PARTICLE_LIFE_TIME / MAX_FIRE_PARTICLES;
+@(private="file") FIRE_PARTICLE_LIFE_TIME: f32 : 0.2;
+@(private="file") MAX_FIRE_PARTICLES :: 100;
+@(private="file") TIME_BETWEEN_PARTILCE_EMISSION :: FIRE_PARTICLE_LIFE_TIME / MAX_FIRE_PARTICLES;
 
 Car_Helpers :: struct {
 	forward_geo_lookup,
@@ -35,6 +35,10 @@ init_car_helpers :: proc(entities_geos: ^Entities_Geos) -> Car_Helpers {
 	return car_helpers;
 }
 
+cleanup_car :: proc(car: ^Car_Entity) {
+	delete(car.fire_particles);
+}
+
 shock_car :: proc(car: ^Car_Entity) {
 	car.shocked = true;
 	car.shock_remaining_time = 3;
@@ -46,7 +50,7 @@ light_car_on_fire :: proc(car: ^Car_Entity) {
 	car.on_fire_elapsed_ramp_up_time = 0;
 }
 
-update_car_status_effects_remaining_time :: proc(car: ^Car_Entity, dt: f32) {
+update_car_status_effects_and_particles :: proc(car: ^Car_Entity, dt: f32) {
 	if car.shocked {
 		car.shock_remaining_time -= dt;
 
@@ -79,21 +83,7 @@ update_car_status_effects_remaining_time :: proc(car: ^Car_Entity, dt: f32) {
 	for i := len(car.fire_particles) - 1; i >= 0; i -= 1 {
 		particle := &car.fire_particles[i];
 
-		DRAG :: 20;
-		particle.velocity.x -= math.clamp(particle.velocity.x, -DRAG * dt, DRAG * dt);
-		particle.velocity.z -= math.clamp(particle.velocity.z, -DRAG * dt, DRAG * dt);
-		particle.position += particle.velocity * dt;
-
-		life_time_multiplier := min(particle.time_alive / particle.life_time, 1);
-
-		particle.size = max((1 - life_time_multiplier) * 0.2, 0.08);
-
-		h := math.lerp(f32(65), f32(10), life_time_multiplier);
-		s := math.lerp(f32(0.8), f32(1.0), life_time_multiplier);
-		v: f32 : 1;
-
-		r, g, b := math2.hsv_to_rgb(h, s, v);
-		particle.color = [3]f32 {r, g, b};
+		update_fire_particle(particle, dt);
 
 		if particle.time_alive >= particle.life_time {
 			if car.on_fire {
@@ -107,13 +97,15 @@ update_car_status_effects_remaining_time :: proc(car: ^Car_Entity, dt: f32) {
 	}
 }
 
+@(private="file")
 reset_fire_particle :: proc(car: ^Car_Entity, particle: ^Fire_Particle) {
 	left := math2.matrix4_left(car.transform);
 	forward := math2.matrix4_forward(car.transform);
 
 	offset_left := left * rand.float32_range(-1, 1);
 	offset_forward := forward * rand.float32_range(-2.2, 1.8);
-	particle.position = car.position + offset_left + offset_forward;
+	offset_up := linalg.Vector3f32 {0, -0.4, 0};
+	particle.position = car.position + offset_left + offset_forward + offset_up;
 
 	particle.velocity = car.velocity;
 	particle.velocity.y += 5;

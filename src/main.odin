@@ -32,6 +32,7 @@ Game :: struct {
 	car: ^Car_Entity,
 	car_helpers: Car_Helpers,
 	frame_metrics: Frame_Metrics,
+	fire_cubes: [dynamic]Entity_Lookup,
 }
 
 main :: proc() {
@@ -106,7 +107,7 @@ main :: proc() {
 		suboptimal_swapchain = begin_render_frame(&vulkan, &game.camera, &game.entities_geos, &game.texts);
 
 		if !suboptimal_swapchain {
-			immediate_mode_render_game(&vulkan, game.car);
+			immediate_mode_render_game(&vulkan, &game);
 			suboptimal_swapchain = end_render_frame(&vulkan);
 		}
 	}
@@ -173,6 +174,8 @@ init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
 	load_car(&game, spawn_position, spawn_orientation);
 	game.car_helpers = init_car_helpers(&game.entities_geos);
 
+	initialize_fire_particles(&game.entities_geos, game.fire_cubes[:]);
+
 	return game;
 }
 
@@ -186,18 +189,22 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	move_camera(&game.camera, window, game.car, dt);
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
 
-	update_car_status_effects_remaining_time(game.car, dt);
+	update_fire_cube_particles(&game.entities_geos, game.fire_cubes[:], dt);
+	update_car_status_effects_and_particles(game.car, dt);
 
 	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
 
 	free_all(context.temp_allocator);
 }
 
-immediate_mode_render_game :: proc(vulkan: ^Vulkan, car: ^Car_Entity) {
-	draw_car_status_effects(vulkan, car);
+immediate_mode_render_game :: proc(vulkan: ^Vulkan, game: ^Game) {
+	draw_fire_cube_particles(vulkan, &game.entities_geos, game.fire_cubes[:]);
+	draw_car_status_effects(vulkan, game.car);
 }
 
 cleanup_game :: proc(game: ^Game) {
+	cleanup_fire_particles(&game.entities_geos, game.fire_cubes[:]);
+	cleanup_car(game.car);
 	cleanup_entities_geos(&game.entities_geos);
 	cleanup_font(&game.font);
 	ground_grid_cleanup(&game.ground_grid);
@@ -209,6 +216,7 @@ cleanup_game :: proc(game: ^Game) {
 		cleanup_text(&text);
 	}
 
+	delete(game.fire_cubes);
 	delete(game.texts);
 	delete(game.awake_rigid_body_lookups);
 }
