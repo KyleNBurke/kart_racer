@@ -3,9 +3,12 @@ package main;
 import "vendor:glfw";
 import "core:math";
 import "core:math/linalg";
+import "core:math/rand";
 import "math2";
 
-import "core:fmt"; //
+FIRE_PARTICLE_LIFE_TIME: f32 : 0.2;
+MAX_FIRE_PARTICLES :: 100;
+TIME_BETWEEN_PARTILCE_EMISSION :: FIRE_PARTICLE_LIFE_TIME / MAX_FIRE_PARTICLES;
 
 Car_Helpers :: struct {
 	forward_geo_lookup,
@@ -40,6 +43,7 @@ shock_car :: proc(car: ^Car_Entity) {
 light_car_on_fire :: proc(car: ^Car_Entity) {
 	car.on_fire = true;
 	car.on_fire_remaining_time = 10;
+	car.on_fire_elapsed_ramp_up_time = 0;
 }
 
 update_car_status_effects_remaining_time :: proc(car: ^Car_Entity, dt: f32) {
@@ -52,11 +56,77 @@ update_car_status_effects_remaining_time :: proc(car: ^Car_Entity, dt: f32) {
 	}
 
 	if car.on_fire {
+		if car.on_fire_elapsed_ramp_up_time < FIRE_PARTICLE_LIFE_TIME {
+			desired_particles := cast(int) math.ceil(car.on_fire_elapsed_ramp_up_time / TIME_BETWEEN_PARTILCE_EMISSION);
+			particles_to_add := desired_particles - len(car.fire_particles);
+
+			for _ in 0..<particles_to_add {
+				particle: Fire_Particle;
+				reset_fire_particle(car, &particle);
+				append(&car.fire_particles, particle);
+			}
+
+			car.on_fire_elapsed_ramp_up_time += dt;
+		}
+
 		car.on_fire_remaining_time -= dt;
 
 		if car.on_fire_remaining_time <= 0 {
 			car.on_fire = false;
 		}
+	}
+
+	for i := len(car.fire_particles) - 1; i >= 0; i -= 1 {
+		particle := &car.fire_particles[i];
+
+		DRAG :: 20;
+		particle.velocity.x -= math.clamp(particle.velocity.x, -DRAG * dt, DRAG * dt);
+		particle.velocity.z -= math.clamp(particle.velocity.z, -DRAG * dt, DRAG * dt);
+		particle.position += particle.velocity * dt;
+
+		life_time_multiplier := min(particle.time_alive / particle.life_time, 1);
+
+		particle.size = max((1 - life_time_multiplier) * 0.2, 0.08);
+
+		h := math.lerp(f32(65), f32(10), life_time_multiplier);
+		s := math.lerp(f32(0.8), f32(1.0), life_time_multiplier);
+		v: f32 : 1;
+
+		r, g, b := math2.hsv_to_rgb(h, s, v);
+		particle.color = [3]f32 {r, g, b};
+
+		if particle.time_alive >= particle.life_time {
+			if car.on_fire {
+				reset_fire_particle(car, particle);
+			} else {
+				unordered_remove(&car.fire_particles, i);
+			}
+		}
+		
+		particle.time_alive += dt;
+	}
+}
+
+reset_fire_particle :: proc(car: ^Car_Entity, particle: ^Fire_Particle) {
+	left := math2.matrix4_left(car.transform);
+	forward := math2.matrix4_forward(car.transform);
+
+	offset_left := left * rand.float32_range(-1, 1);
+	offset_forward := forward * rand.float32_range(-2.2, 1.8);
+	particle.position = car.position + offset_left + offset_forward;
+
+	particle.velocity = car.velocity;
+	particle.velocity.y += 5;
+
+	life_time_offset := rand.float32_range(-0.2, 0.2);
+	particle.life_time = FIRE_PARTICLE_LIFE_TIME + life_time_offset;
+
+	particle.time_alive = 0;
+}
+
+draw_car_status_effects :: proc(vulkan: ^Vulkan, car: ^Car_Entity) {
+	for particle in &car.fire_particles {
+		draw_particle(vulkan, &particle);
 	}
 }
 

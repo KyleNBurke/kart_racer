@@ -47,6 +47,14 @@ quaternion_mul_f32 :: proc(q: linalg.Quaternionf32, f: f32) -> linalg.Quaternion
 	return quaternion(q.w * f, q.x * f, q.y * f, q.z * f);
 }
 
+// https://gamedev.stackexchange.com/a/50545/122527
+quaternion_transform_direction :: proc(q: linalg.Quaternionf32, d: linalg.Vector3f32) -> linalg.Vector3f32 {
+	u := linalg.Vector3f32 {q.x, q.y, q.z};
+	s := q.w;
+
+	return u * linalg.dot(u, d) * 2.0 + d * (s * s - linalg.dot(u, u)) + linalg.cross(u, d) * s * 2.0;
+}
+
 matrix3_transform_direction :: proc(m: linalg.Matrix3f32, p: linalg.Vector3f32) -> linalg.Vector3f32 {
 	return linalg.Vector3f32 {
 		m[0][0] * p.x + m[1][0] * p.y + m[2][0] * p.z,
@@ -91,6 +99,46 @@ matrix4_up :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
 
 matrix4_forward :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
 	return linalg.Vector3f32 {m[2][0], m[2][1], m[2][2]};
+}
+
+/*
+https://stackoverflow.com/a/36209005/3600203
+
+h: [0, 360)
+s: [0, 1]
+v: [0, 1]
+
+r, g, b: [0, 1]
+*/
+hsv_to_rgb :: proc(h, s, v: f32) -> (r, g, b: f32) {
+	if ODIN_DEBUG {
+		assert(h >= 0 && b < 360);
+		assert(s >= 0 && s <= 1);
+		assert(v >= 0 && v <= 1);
+	}
+
+	h := h / 60;
+	f := h - math.floor(h);
+	p := v * (1 - s);
+	q := v * (1 - s * f);
+	t := v * (1 - s * (1 - f));
+
+	switch u32(h) {
+	case 0:
+		return v, t, p;
+	case 1:
+		return q, v, p;
+	case 2:
+		return p, v, t;
+	case 3:
+		return p, q, v;
+	case 4:
+		return t, p, v;
+	case 5:
+		return v, p, q;
+	case:
+		unreachable();
+	}
 }
 
 @(test, private)

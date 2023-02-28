@@ -106,7 +106,7 @@ main :: proc() {
 		suboptimal_swapchain = begin_render_frame(&vulkan, &game.camera, &game.entities_geos, &game.texts);
 
 		if !suboptimal_swapchain {
-			immediate_mode_render_game(&vulkan);
+			immediate_mode_render_game(&vulkan, game.car);
 			suboptimal_swapchain = end_render_frame(&vulkan);
 		}
 	}
@@ -177,8 +177,6 @@ init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
 }
 
 update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
-	update_car_status_effects_remaining_time(game.car, dt);
-
 	if game.camera.state != .First_Person {
 		move_car(window, game.car, dt, &game.entities_geos, &game.car_helpers);
 	}
@@ -186,16 +184,17 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	simulate(game, dt);
 	position_and_orient_wheels(game.car, &game.entities_geos, dt);
 	move_camera(&game.camera, window, game.car, dt);
-
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
+
+	update_car_status_effects_remaining_time(game.car, dt);
 
 	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
 
 	free_all(context.temp_allocator);
 }
 
-immediate_mode_render_game :: proc(vulkan: ^Vulkan) {
-
+immediate_mode_render_game :: proc(vulkan: ^Vulkan, car: ^Car_Entity) {
+	draw_car_status_effects(vulkan, car);
 }
 
 cleanup_game :: proc(game: ^Game) {

@@ -37,6 +37,13 @@ Rigid_Body_Entity :: struct {
 	status_effect: Status_Effect,
 }
 
+Fire_Particle :: struct {
+	using particle: Particle,
+	velocity: linalg.Vector3f32,
+	life_time: f32,
+	time_alive: f32,
+}
+
 Car_Entity :: struct {
 	using entity: Entity,
 	inv_global_inertia_tensor: linalg.Matrix3f32,
@@ -48,6 +55,7 @@ Car_Entity :: struct {
 	shock_remaining_time: f32,
 	on_fire: bool,
 	on_fire_remaining_time: f32,
+	on_fire_elapsed_ramp_up_time: f32,
 	wheel_radius: f32,
 	wheels: [4]Wheel,
 	current_steer_angle: f32,
@@ -55,6 +63,7 @@ Car_Entity :: struct {
 	back_wheel_angular_velocity,
 	front_wheel_orientation,
 	back_wheel_orientation: f32,
+	fire_particles: [dynamic]Fire_Particle,
 
 	forward_helper_geo,
 	steer_angle_helper_geo: Geometry_Lookup,

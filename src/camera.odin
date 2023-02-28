@@ -181,7 +181,7 @@ move_camera :: proc(using camera: ^Camera, window: glfw.WindowHandle, car: ^Car_
 
 		if linalg.length2(dir) != 0.0 {
 			dir_norm := linalg.normalize(dir);
-			position += quaternion_transform_direction(orientation, dir_norm) * TRANSLATION_SPEED * dt;
+			position += math2.quaternion_transform_direction(orientation, dir_norm) * TRANSLATION_SPEED * dt;
 		}
 
 		transform = linalg.matrix4_from_trs_f32(position, orientation, linalg.Vector3f32 {1, 1, 1});
