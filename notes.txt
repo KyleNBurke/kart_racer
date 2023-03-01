@@ -41,22 +41,11 @@ Improvements
 - Instead of exporting multiple ground collision meshes, then loading in and inserting each one into the ground grid. Why don't we have the exporter do the work of combining the collision meshes into one big array of indices and positions.
 
 Todo
-- Side bouncy rails
-	- Think of design
-	- Implement it
-- Non exploding shock cubes
-	- [done] Blender asset creation
-	- [done] Exporting it
-	- [done] Importing it
-	- [done] Implementation
-	- Particle system
-- Non exploding fire cubes
-	- [done] Blender assert creation
-	- [done] Exporting/importing
-	- [done] Implementation
-	- Particle system
-		- [done] Fix all orientations
-- [done] Reversing with the keyboard is not smooth
+- Shock cube particle effects
+- Shock car particle effects
+- Cylinder bumper
+- Slow the car down when you hit a rigid body
+- Boost jets
 
 I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting
 the impulse but they don't do anything. Maybe this is correct behavior and I need to put a lower bound on delta time, maybe the clamping logic is incorrect, need to investigate.
