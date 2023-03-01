@@ -51,7 +51,7 @@ update_fire_particle :: proc(particle: ^Fire_Particle, dt: f32) {
 
 	h := math.lerp(f32(65), f32(10), life_time_multiplier);
 	s := math.lerp(f32(0.8), f32(1.0), life_time_multiplier);
-	v: f32 : 1;
+	v : f32 : 1;
 
 	r, g, b := math2.hsv_to_rgb(h, s, v);
 	particle.color = [3]f32 {r, g, b};
@@ -59,22 +59,19 @@ update_fire_particle :: proc(particle: ^Fire_Particle, dt: f32) {
 
 @(private="file")
 reset_fire_particle :: proc(rigid_body: ^Rigid_Body_Entity, particle: ^Fire_Particle) {
-	RANGE :: 1.2;
-	
-	left := math2.matrix4_left(rigid_body.transform);
-	forward := math2.matrix4_forward(rigid_body.transform);
+	RANGE :: 1.1;
 
-	offset_left := left * rand.float32_range(-RANGE, RANGE);
-	offset_forward := forward * rand.float32_range(-RANGE, RANGE);
-	offset_up := linalg.Vector3f32 {0, -1, 0};
-	particle.position = rigid_body.position + offset_left + offset_forward + offset_up;
+	offset_x := rand.float32_range(-RANGE, RANGE);
+	offset_y : f32 = -1;
+	offset_z := rand.float32_range(-RANGE, RANGE);
+	particle.position = rigid_body.position + linalg.Vector3f32 {offset_x, offset_y, offset_z};
 
 	particle.velocity = rigid_body.velocity;
 	particle.velocity.y += 8;
 
-	off_center_life_time_offset := (1 - linalg.length(offset_left + offset_forward) / 1.2) * 0.2;
+	off_center_life_time_offset := (1 - (offset_x * offset_x + offset_z * offset_z) / (RANGE * RANGE * 2)) * 0.3;
 	rand_life_time_offset := rand.float32_range(0, 0.1);
-	particle.life_time = 0.25 + off_center_life_time_offset + rand_life_time_offset;
+	particle.life_time = 0.15 + off_center_life_time_offset + rand_life_time_offset;
 
 	particle.time_alive = 0;
 }
