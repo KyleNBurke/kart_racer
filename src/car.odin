@@ -200,7 +200,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 			}
 		}
 
-		if abs(lat_vel) > 2 || ang_vel > 5 {
+		if abs(lat_vel) > 3 || abs(ang_vel) > 5 {
 			slipping = true;
 		}
 
@@ -233,7 +233,8 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 				surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
 				body_surface_long_dir := linalg.normalize(linalg.cross(body_left, surface_normal));
 				body_surface_long_vel := linalg.dot(body_velocity, body_surface_long_dir);
-				max_steer_angle := 0.05 + 0.195 * max(full_grip_top_speed - body_surface_long_vel, 0) / full_grip_top_speed;
+				body_surface_long_forward_vel := max(body_surface_long_vel, 0);
+				max_steer_angle := 0.05 + 0.195 * max(full_grip_top_speed - body_surface_long_forward_vel, 0) / full_grip_top_speed;
 	
 				target_steer_angle := max_steer_angle * steer_multiplier;
 				car.current_steer_angle += clamp(target_steer_angle - car.current_steer_angle, -0.8 * dt, 0.8 * dt);
@@ -271,7 +272,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 		body_surface_long_vel := linalg.dot(body_velocity, body_surface_long_dir);
 
 		DRAG: f32 : 5;
-		REVERSE_TOP_SPEED: f32 : 20;
+		REVERSE_TOP_SPEED: f32 : 15;
 
 		drag_accel := clamp(body_surface_long_vel, -DRAG * dt, DRAG * dt);
 		long_vel := body_surface_long_vel - drag_accel;
