@@ -188,8 +188,11 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 				// add_rigid_body_to_island(&islands, int(island_index), entity_lookup, rigid_body);
 				append(&awake_rigid_body_lookups, entity_lookup);
 
-				if status_effect == .Fire {
-					append(&fire_cubes, entity_lookup);
+				#partial switch status_effect {
+					case .Shock:
+						append(&shock_cubes, entity_lookup);
+					case .Fire:
+						append(&fire_cubes, entity_lookup);
 				}
 
 				assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);

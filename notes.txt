@@ -41,7 +41,7 @@ Improvements
 - Instead of exporting multiple ground collision meshes, then loading in and inserting each one into the ground grid. Why don't we have the exporter do the work of combining the collision meshes into one big array of indices and positions.
 
 Todo
-- Shock cube particle effects
+- [done] Shock cube particle effects
 - Shock car particle effects
 - Cylinder bumper
 - Slow the car down when you hit a rigid body
@@ -51,6 +51,10 @@ I'm questioning if the impulse clamping is correct. When the object has a large 
 the impulse but they don't do anything. Maybe this is correct behavior and I need to put a lower bound on delta time, maybe the clamping logic is incorrect, need to investigate.
 	- Need to check this again given the fix we made for the other issue
 
-Exporter
-- Make better procs, i.e. a proc that get the indices and positions and exports it all in one. Combine the functionality into one. Make a single export hulls proc.
-- I think just make a get_indices_global_positions proc even if it's just used once.
+For a cool particle explosion effect do this:
+	RANGE :: 5;
+
+	particle.velocity.x += rand.float32_range(-RANGE, RANGE);
+	particle.velocity.y += rand.float32_range(-RANGE, RANGE);
+	particle.velocity.z += rand.float32_range(-RANGE, RANGE);
+	particle.position += particle.velocity * dt;

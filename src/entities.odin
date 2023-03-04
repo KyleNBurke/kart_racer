@@ -21,13 +21,6 @@ Status_Effect :: enum {
 	Fire,
 }
 
-Fire_Particle :: struct {
-	using particle: Particle,
-	velocity: linalg.Vector3f32,
-	life_time: f32,
-	time_alive: f32,
-}
-
 Rigid_Body_Entity :: struct {
 	using entity: Entity,
 	// This is only used for updating collision hulls within the collision hull grid which only rigid bodies do since they move.
@@ -42,6 +35,7 @@ Rigid_Body_Entity :: struct {
 	island_index: int,
 	sleep_duration: f32,
 	status_effect: Status_Effect,
+	shock_particles: [dynamic]Shock_Particle,
 	fire_particles: [dynamic]Fire_Particle,
 }
 

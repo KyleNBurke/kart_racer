@@ -32,6 +32,7 @@ Game :: struct {
 	car: ^Car_Entity,
 	car_helpers: Car_Helpers,
 	frame_metrics: Frame_Metrics,
+	shock_cubes: [dynamic]Entity_Lookup,
 	fire_cubes: [dynamic]Entity_Lookup,
 }
 
@@ -174,6 +175,7 @@ init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
 	load_car(&game, spawn_position, spawn_orientation);
 	game.car_helpers = init_car_helpers(&game.entities_geos);
 
+	initialize_shock_particles(&game.entities_geos, game.shock_cubes[:]);
 	initialize_fire_particles(&game.entities_geos, game.fire_cubes[:]);
 
 	return game;
@@ -189,6 +191,7 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	move_camera(&game.camera, window, game.car, dt);
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
 
+	update_shock_cube_particles(&game.entities_geos, game.shock_cubes[:], dt);
 	update_fire_cube_particles(&game.entities_geos, game.fire_cubes[:], dt);
 	update_car_status_effects_and_particles(game.car, dt);
 
@@ -198,12 +201,14 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 }
 
 immediate_mode_render_game :: proc(vulkan: ^Vulkan, game: ^Game) {
+	draw_shock_cube_particles(vulkan, &game.entities_geos, game.shock_cubes[:]);
 	draw_fire_cube_particles(vulkan, &game.entities_geos, game.fire_cubes[:]);
 	draw_car_status_effects(vulkan, game.car);
 }
 
 cleanup_game :: proc(game: ^Game) {
-	cleanup_fire_particles(&game.entities_geos, game.fire_cubes[:]);
+	cleanup_shock_cube_particles(&game.entities_geos, game.shock_cubes[:]);
+	cleanup_fire_cube_particles(&game.entities_geos, game.fire_cubes[:]);
 	cleanup_car(game.car);
 	cleanup_entities_geos(&game.entities_geos);
 	cleanup_font(&game.font);
@@ -216,6 +221,7 @@ cleanup_game :: proc(game: ^Game) {
 		cleanup_text(&text);
 	}
 
+	delete(game.shock_cubes);
 	delete(game.fire_cubes);
 	delete(game.texts);
 	delete(game.awake_rigid_body_lookups);

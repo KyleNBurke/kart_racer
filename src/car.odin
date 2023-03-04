@@ -83,8 +83,6 @@ update_car_status_effects_and_particles :: proc(car: ^Car_Entity, dt: f32) {
 	for i := len(car.fire_particles) - 1; i >= 0; i -= 1 {
 		particle := &car.fire_particles[i];
 
-		update_fire_particle(particle, dt);
-
 		if particle.time_alive >= particle.life_time {
 			if car.on_fire {
 				reset_fire_particle(car, particle);
@@ -92,8 +90,8 @@ update_car_status_effects_and_particles :: proc(car: ^Car_Entity, dt: f32) {
 				unordered_remove(&car.fire_particles, i);
 			}
 		}
-		
-		particle.time_alive += dt;
+
+		update_fire_particle(particle, dt);
 	}
 }
 
