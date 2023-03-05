@@ -193,7 +193,7 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 
 	update_shock_cube_particles(&game.entities_geos, game.shock_cubes[:], dt);
 	update_fire_cube_particles(&game.entities_geos, game.fire_cubes[:], dt);
-	update_car_status_effects_and_particles(game.car, dt);
+	update_car_status_effects_and_particles(game.car, game.camera.transform, dt);
 
 	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
 

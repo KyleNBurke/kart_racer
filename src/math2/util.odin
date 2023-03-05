@@ -29,8 +29,6 @@ vector3_rotate :: proc(v, axis: linalg.Vector3f32, angle: f32) -> linalg.Vector3
 	return b * 2 * linalg.dot(b, v) + v * (a_cos * a_cos - linalg.dot(b, b)) + linalg.cross(b, v) * 2 * a_cos;
 }
 
-vector_rotate :: proc{vector2_rotate, vector3_rotate}
-
 vector3_tangents :: proc(v: linalg.Vector3f32) -> (t1, t2: linalg.Vector3f32) {
 	if abs(v.x) >= 0.57735027 {
 		t1 = linalg.normalize(linalg.Vector3f32 {v.y, -v.x, 0});

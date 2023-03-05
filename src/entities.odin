@@ -50,6 +50,7 @@ Car_Entity :: struct {
 	shock_remaining_time: f32,
 	on_fire: bool,
 	on_fire_remaining_time: f32,
+	shock_elapsed_ramp_down_time: f32,
 	on_fire_elapsed_ramp_up_time: f32,
 	wheel_radius: f32,
 	wheels: [4]Wheel,
@@ -58,6 +59,7 @@ Car_Entity :: struct {
 	back_wheel_angular_velocity,
 	front_wheel_orientation,
 	back_wheel_orientation: f32,
+	shock_particles: [dynamic]Shock_Particle,
 	fire_particles: [dynamic]Fire_Particle,
 
 	forward_helper_geo,

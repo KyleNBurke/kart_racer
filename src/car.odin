@@ -8,7 +8,20 @@ import "math2";
 
 @(private="file") FIRE_PARTICLE_LIFE_TIME: f32 : 0.2;
 @(private="file") MAX_FIRE_PARTICLES :: 100;
-@(private="file") TIME_BETWEEN_PARTILCE_EMISSION :: FIRE_PARTICLE_LIFE_TIME / MAX_FIRE_PARTICLES;
+@(private="file") TIME_BETWEEN_FIRE_PARTILCE_EMISSION :: FIRE_PARTICLE_LIFE_TIME / MAX_FIRE_PARTICLES;
+
+@(private="file") SHOCK_PARTICLE_MAX_X :: 1.2;
+@(private="file") SHOCK_PARTICLE_MAX_Y :: 1.0;
+@(private="file") SHOCK_PARTICLE_MIN_Y :: -0.4;
+@(private="file") SHOCK_PARTICLE_MAX_Z :: 1.8;
+@(private="file") SHOCK_PARTICLE_MIN_Z :: -2.2;
+
+@(private="file") MAX_SHOCK_PARTICLES :: 100;
+@(private="file") SHOCK_PARTICLE_RAMP_DOWN_TIME: f32 : 1;
+@(private="file") TIME_BETWEEN_SHOCK_PARTICLE_DESTRUCTION :: SHOCK_PARTICLE_RAMP_DOWN_TIME / MAX_SHOCK_PARTICLES;
+
+SHOCK_PARTICLE_COLOR_FADE_TIME :: 2.0;
+SHOCK_PARTICLE_SIZE :: 0.1;
 
 Car_Helpers :: struct {
 	forward_geo_lookup,
@@ -36,32 +49,48 @@ init_car_helpers :: proc(entities_geos: ^Entities_Geos) -> Car_Helpers {
 }
 
 cleanup_car :: proc(car: ^Car_Entity) {
+	delete(car.shock_particles);
 	delete(car.fire_particles);
 }
 
 shock_car :: proc(car: ^Car_Entity) {
-	car.shocked = true;
 	car.shock_remaining_time = 3;
+
+	if !car.shocked {
+		car.shocked = true;
+
+		for _ in 0..<MAX_SHOCK_PARTICLES {
+			particle: Shock_Particle;
+			particle.size = SHOCK_PARTICLE_SIZE;
+			reset_shock_particle(car, &particle);
+	
+			append(&car.shock_particles, particle);
+		}
+	}
 }
 
 light_car_on_fire :: proc(car: ^Car_Entity) {
-	car.on_fire = true;
 	car.on_fire_remaining_time = 10;
-	car.on_fire_elapsed_ramp_up_time = 0;
+
+	if !car.on_fire {
+		car.on_fire = true;
+		car.on_fire_elapsed_ramp_up_time = 0;
+	}
 }
 
-update_car_status_effects_and_particles :: proc(car: ^Car_Entity, dt: f32) {
+update_car_status_effects_and_particles :: proc(car: ^Car_Entity, camera_trans: linalg.Matrix4f32, dt: f32) {
 	if car.shocked {
 		car.shock_remaining_time -= dt;
 
 		if car.shock_remaining_time <= 0 {
 			car.shocked = false;
+			car.shock_elapsed_ramp_down_time = 0;
 		}
 	}
 
 	if car.on_fire {
-		if car.on_fire_elapsed_ramp_up_time < FIRE_PARTICLE_LIFE_TIME {
-			desired_particles := cast(int) math.ceil(car.on_fire_elapsed_ramp_up_time / TIME_BETWEEN_PARTILCE_EMISSION);
+		if len(car.fire_particles) < MAX_FIRE_PARTICLES {
+			desired_particles := min(cast(int) math.ceil(car.on_fire_elapsed_ramp_up_time / TIME_BETWEEN_FIRE_PARTILCE_EMISSION), MAX_FIRE_PARTICLES);
 			particles_to_add := desired_particles - len(car.fire_particles);
 
 			for _ in 0..<particles_to_add {
@@ -80,6 +109,32 @@ update_car_status_effects_and_particles :: proc(car: ^Car_Entity, dt: f32) {
 		}
 	}
 
+	for i := len(car.shock_particles) - 1; i >= 0; i -= 1 {
+		particle := &car.shock_particles[i];
+
+		car_left    := math2.matrix4_left(car.transform);
+		car_up      := math2.matrix4_up(car.transform);
+		car_forward := math2.matrix4_forward(car.transform);
+		
+		dist := particle.position - car.position;
+
+		x_dist := linalg.dot(car_left, dist);
+		y_dist := linalg.dot(car_up, dist);
+		z_dist := linalg.dot(car_forward, dist);
+
+		if abs(x_dist) > SHOCK_PARTICLE_MAX_X || y_dist < SHOCK_PARTICLE_MIN_Y || y_dist > SHOCK_PARTICLE_MAX_Y || z_dist < SHOCK_PARTICLE_MIN_Z || z_dist > SHOCK_PARTICLE_MAX_Z {
+			reset_shock_particle(car, particle);
+		}
+
+		update_shock_particle(car.velocity, particle, dt);
+	}
+
+	if !car.shocked && len(car.shock_particles) > 0 {
+		desired_particles := max(MAX_SHOCK_PARTICLES - cast(int) math.floor(car.shock_elapsed_ramp_down_time / TIME_BETWEEN_SHOCK_PARTICLE_DESTRUCTION), 0);
+		resize(&car.shock_particles, desired_particles);
+		car.shock_elapsed_ramp_down_time += dt;
+	}
+
 	for i := len(car.fire_particles) - 1; i >= 0; i -= 1 {
 		particle := &car.fire_particles[i];
 
@@ -96,13 +151,27 @@ update_car_status_effects_and_particles :: proc(car: ^Car_Entity, dt: f32) {
 }
 
 @(private="file")
+reset_shock_particle :: proc(car: ^Car_Entity, particle: ^Shock_Particle) {
+	car_left    := math2.matrix4_left(car.transform);
+	car_up      := math2.matrix4_up(car.transform);
+	car_forward := math2.matrix4_forward(car.transform);
+
+	offset_left    := car_left    * rand.float32_range(-SHOCK_PARTICLE_MAX_X, SHOCK_PARTICLE_MAX_X);
+	offset_up      := car_up      * rand.float32_range(SHOCK_PARTICLE_MIN_Y, SHOCK_PARTICLE_MAX_Y);
+	offset_forward := car_forward * rand.float32_range(SHOCK_PARTICLE_MIN_Z, SHOCK_PARTICLE_MAX_Z);
+	particle.position = car.position + offset_left + offset_up + offset_forward;
+
+	particle.time_alive = rand.float32_range(0, SHOCK_PARTICLE_COLOR_FADE_TIME);
+}
+
+@(private="file")
 reset_fire_particle :: proc(car: ^Car_Entity, particle: ^Fire_Particle) {
 	left := math2.matrix4_left(car.transform);
 	forward := math2.matrix4_forward(car.transform);
 
 	offset_left := left * rand.float32_range(-1, 1);
-	offset_forward := forward * rand.float32_range(-2.2, 1.8);
 	offset_up := linalg.Vector3f32 {0, -0.4, 0};
+	offset_forward := forward * rand.float32_range(-2.2, 1.8);
 	particle.position = car.position + offset_left + offset_forward + offset_up;
 
 	particle.velocity = car.velocity;
@@ -115,6 +184,10 @@ reset_fire_particle :: proc(car: ^Car_Entity, particle: ^Fire_Particle) {
 }
 
 draw_car_status_effects :: proc(vulkan: ^Vulkan, car: ^Car_Entity) {
+	for particle in &car.shock_particles {
+		draw_particle(vulkan, &particle);
+	}
+
 	for particle in &car.fire_particles {
 		draw_particle(vulkan, &particle);
 	}
@@ -236,7 +309,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 	
 				target_steer_angle := max_steer_angle * steer_multiplier;
 				car.current_steer_angle += clamp(target_steer_angle - car.current_steer_angle, -0.8 * dt, 0.8 * dt);
-				tire_long_dir := math2.vector_rotate(body_forward, body_up, car.current_steer_angle);
+				tire_long_dir := math2.vector3_rotate(body_forward, body_up, car.current_steer_angle);
 				tire_lat_dir := linalg.normalize(linalg.cross(surface_normal, tire_long_dir));
 				tire_vel := body_velocity + linalg.cross(body_angular_velocity, body_forward * SPRING_BODY_POINT_Z);
 				tire_lat_vel := linalg.dot(tire_vel, tire_lat_dir);

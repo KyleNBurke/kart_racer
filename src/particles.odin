@@ -11,7 +11,9 @@ SHOCK_PARTICLE_MAX_OFFSET :: 1.4;
 
 Shock_Particle :: struct {
 	using particle: Particle,
+	local_position: linalg.Vector3f32,
 	velocity: linalg.Vector3f32,
+	life_time: f32,
 	time_alive: f32,
 }
 
@@ -28,7 +30,7 @@ initialize_shock_particles :: proc(entities_geos: ^Entities_Geos, shock_cubes: [
 
 		for _ in 0..<150 {
 			particle: Shock_Particle;
-			particle.size = 0.1;
+			particle.size = SHOCK_PARTICLE_SIZE;
 			
 			append(&rigid_body.shock_particles, particle);
 		}
@@ -71,15 +73,14 @@ update_shock_cube_particles :: proc(entities_geos: ^Entities_Geos, shock_cubes: 
 				reset_shock_particle(rigid_body, &particle);
 			}
 
-			update_shock_particle(rigid_body, &particle, dt);
+			update_shock_particle(rigid_body.velocity, &particle, dt);
 		}
 	}
 }
 
-update_shock_particle :: proc(rigid_body: ^Rigid_Body_Entity, particle: ^Shock_Particle, dt: f32) {
+update_shock_particle :: proc(body_velocity: linalg.Vector3f32, particle: ^Shock_Particle, dt: f32) {
 	MAX_VEL_CHANGE :: 1;
 	MAX_VEL :: 2;
-	COLOR_FADE_TIME :: 2;
 
 	particle.velocity.x += rand.float32_range(-MAX_VEL_CHANGE, MAX_VEL_CHANGE);
 	particle.velocity.y += rand.float32_range(-MAX_VEL_CHANGE, MAX_VEL_CHANGE);
@@ -89,13 +90,13 @@ update_shock_particle :: proc(rigid_body: ^Rigid_Body_Entity, particle: ^Shock_P
 	particle.velocity.y = clamp(particle.velocity.y, -MAX_VEL, MAX_VEL);
 	particle.velocity.z = clamp(particle.velocity.z, -MAX_VEL, MAX_VEL);
 
-	particle.position += (rigid_body.velocity + particle.velocity) * dt;
+	particle.position += (body_velocity + particle.velocity) * dt;
 
-	life_time_multiplier := math.mod_f32(particle.time_alive, COLOR_FADE_TIME) / COLOR_FADE_TIME;
+	life_time_multiplier := math.mod_f32(particle.time_alive, SHOCK_PARTICLE_COLOR_FADE_TIME) / SHOCK_PARTICLE_COLOR_FADE_TIME;
 
 	h: f32;
 	s: f32;
-	if particle.time_alive < COLOR_FADE_TIME / 2 {
+	if particle.time_alive < SHOCK_PARTICLE_COLOR_FADE_TIME / 4 {
 		h = 62;
 		s = math.lerp(f32(1), f32(0), life_time_multiplier);
 	} else {
@@ -133,7 +134,7 @@ update_fire_cube_particles :: proc(entities_geos: ^Entities_Geos, fire_cubes: []
 				reset_fire_particle(rigid_body, &particle);
 			}
 
-			update_fire_particle(&particle, dt); // Can I put time alive update in there?
+			update_fire_particle(&particle, dt);
 		}
 	}
 }
