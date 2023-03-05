@@ -41,8 +41,6 @@ Improvements
 - Instead of exporting multiple ground collision meshes, then loading in and inserting each one into the ground grid. Why don't we have the exporter do the work of combining the collision meshes into one big array of indices and positions.
 
 Todo
-- [done] Shock cube particle effects
-- Shock car particle effects
 - Cylinder bumper
 - Slow the car down when you hit a rigid body
 - Boost jets
