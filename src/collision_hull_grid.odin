@@ -147,6 +147,8 @@ collision_hull_grid_update_hull_helpers :: proc(using collision_hull_grid: ^Coll
 
 	clear(&hull_helpers);
 
+	if len(hull_records) == 0 do return;
+
 	geo := init_box_helper();
 	geo_lookup := add_geometry(entities_geos, geo);
 

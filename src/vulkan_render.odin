@@ -139,7 +139,7 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, entities_geos
 
 			when ODIN_DEBUG {
 				assert(geometry_offset <= instance_offset);
-				assert(int(first_instance) <= MAX_ENTITIES);
+				assert(first_instance <= MAX_ENTITIES);
 				if record.on_no_entities == .Render do assert(len(record.entity_lookups) == 0);
 			}
 

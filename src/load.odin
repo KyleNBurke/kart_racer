@@ -69,7 +69,7 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 }
 
 load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
-	bytes, success := os.read_entire_file_from_filename("res/all.kgl");
+	bytes, success := os.read_entire_file_from_filename("res/cylinder_test.kgl");
 	defer delete(bytes);
 	assert(success);
 

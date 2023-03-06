@@ -42,6 +42,15 @@ Improvements
 
 Todo
 - Cylinder bumper
+	- Cylinder collision detection and resolution
+		- Create a basic scene with a cylinder rigid body
+		- Export it
+		- Import it
+		- ...
+	- Blender design (should be consistent with rail bumper)
+	- Exporting
+	- Importing
+	- Gameplay logic
 - Slow the car down when you hit a rigid body
 - Boost jets
 
