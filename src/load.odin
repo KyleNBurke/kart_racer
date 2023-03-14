@@ -69,7 +69,7 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 }
 
 load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
-	bytes, success := os.read_entire_file_from_filename("res/cylinder_test.kgl");
+	bytes, success := os.read_entire_file_from_filename("res/all.kgl");
 	defer delete(bytes);
 	assert(success);
 
@@ -103,7 +103,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 	for i in 0..<geometries_count {
 		indices, attributes := read_indices_attributes(&bytes, &pos);
-		geometry := init_triangle_geometry(indices, attributes);
+		geometry := init_triangle_geometry("", indices, attributes);
 		geometry_lookups[i] = add_geometry(&entities_geos, geometry);
 
 		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -115,20 +115,20 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 		for i in 0..<inanimate_entities_count {
 			position := read_vec3(&bytes, &pos);
 			orientation := read_quat(&bytes, &pos);
-			scale := read_vec3(&bytes, &pos);
+			size := read_vec3(&bytes, &pos);
 			geometry_index := read_u32(&bytes, &pos);
 			hull_count := read_u32(&bytes, &pos);
 
-			inanimate_entity := new_inanimate_entity(position, orientation, scale);
+			inanimate_entity := new_inanimate_entity(position, orientation, size);
 			entity_lookup := add_entity(&entities_geos, geometry_lookups[geometry_index], inanimate_entity);
 
 			for hull_index in 0..<hull_count {
 				local_position := read_vec3(&bytes, &pos);
 				local_orientation := read_quat(&bytes, &pos);
-				local_scale := read_vec3(&bytes, &pos);
+				local_size := read_vec3(&bytes, &pos);
 				kind := cast(Hull_Kind) read_u32(&bytes, &pos);
 
-				local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
+				local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_size);
 				hull := init_collision_hull(local_transform, inanimate_entity.transform, kind);
 				
 				append(&inanimate_entity.collision_hulls, hull);
@@ -150,7 +150,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 			for body_index in 0..<bodies_count {
 				position := read_vec3(&bytes, &pos);
 				orientation := read_quat(&bytes, &pos);
-				scale := read_vec3(&bytes, &pos);
+				size := read_vec3(&bytes, &pos);
 				geometry_index := read_u32(&bytes, &pos);
 				mass := read_f32(&bytes, &pos);
 				dimensions := read_vec3(&bytes, &pos);
@@ -165,7 +165,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 					case: unreachable()
 				}
 
-				rigid_body := new_rigid_body_entity(position, orientation, scale, mass, dimensions, status_effect);
+				rigid_body := new_rigid_body_entity(position, orientation, size, mass, dimensions, status_effect);
 				rigid_body.collision_exclude = collision_exclude;
 				entity_lookup := add_entity(&entities_geos, geometry_lookups[geometry_index], rigid_body);
 
@@ -173,10 +173,10 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 				for hull_index in 0..<hull_count {
 					local_position := read_vec3(&bytes, &pos);
 					local_orientation := read_quat(&bytes, &pos);
-					local_scale := read_vec3(&bytes, &pos);
+					local_size := read_vec3(&bytes, &pos);
 					kind := cast(Hull_Kind) read_u32(&bytes, &pos);
 
-					local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_scale);
+					local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_size);
 					hull := init_collision_hull(local_transform, rigid_body.transform, kind);
 
 					append(&rigid_body.collision_hulls, hull);
@@ -212,7 +212,7 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 
 	indices, attributes := read_indices_attributes(&bytes, &pos);
 
-	geometry := init_triangle_geometry(indices, attributes);
+	geometry := init_triangle_geometry("car", indices, attributes);
 	geometry_lookup := add_geometry(&entities_geos, geometry);
 	entity := new_car_entity(spawn_position, spawn_orientation);
 	entity_lookup := add_entity(&entities_geos, geometry_lookup, entity);
@@ -235,7 +235,7 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 
 	{ // Wheels
 		indices, attributes := read_indices_attributes(&bytes, &pos);
-		geometry := init_triangle_geometry(indices, attributes);
+		geometry := init_triangle_geometry("wheel", indices, attributes);
 		geometry_lookup := add_geometry(&entities_geos, geometry);
 
 		for i in 0..<4 {

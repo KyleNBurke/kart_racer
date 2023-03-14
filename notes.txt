@@ -43,20 +43,32 @@ Improvements
 Todo
 - Cylinder bumper
 	- Cylinder collision detection and resolution
-		- Create a basic scene with a cylinder rigid body
-		- Export it
-		- Import it
-		- ...
+		- [done] Create a basic scene with a cylinder rigid body
+		- [done] Export it
+		- [done] Import it
+		- [done] Cylinder hull visualizer
+		- Contacts visualizer
+		- Consider changing the EPA tolerances, it could be taking a lot of iterations for not much gain.
+		- [done] Ensure sure .Keep and .KeepRender are working
+		- [done] Cylinder vs other hull collisions
+		- Something to consider. When calculating the bounds for cylinders, we could just directly calculate the AABB. You would calculate it as if the local bounds were rotated 45 degrees since that is the worst case scenaro.
+		- Try to remove the nesting in the collision procs
+		- Manifold reduction
+		- Spring vs cylinder collisions
 	- Blender design (should be consistent with rail bumper)
 	- Exporting
 	- Importing
 	- Gameplay logic
+- File for settings
 - Slow the car down when you hit a rigid body
 - Boost jets
+- The case where a geometry is marked as Free has a problem I believe. You see the free-ing logic only happens once you remove an entity from a geometry. So, if you create a geometry, mark it as Free and never assign an entity to it. I think the geometry really should be cleaned up but that'll never happen. Maybe we should add some debug logic that runs every frame to catch this potential memory leak.
 
-I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting
-the impulse but they don't do anything. Maybe this is correct behavior and I need to put a lower bound on delta time, maybe the clamping logic is incorrect, need to investigate.
-	- Need to check this again given the fix we made for the other issue
+Sequential impulse solver
+	- I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting
+	the impulse but they don't do anything. Maybe this is correct behavior and I need to put a lower bound on delta time, maybe the clamping logic is incorrect, need to investigate.
+		- Need to check this again given the fix we made for the other issue
+	- Since we're getting objects flying up into the air if they have big penetrations, can I just set the velocity to 0 in the direction of the collision normal once the solver has finished its work?
 
 For a cool particle explosion effect do this:
 	RANGE :: 5;

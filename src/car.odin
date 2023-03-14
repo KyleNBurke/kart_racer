@@ -24,8 +24,6 @@ SHOCK_PARTICLE_COLOR_FADE_TIME :: 2.0;
 SHOCK_PARTICLE_SIZE :: 0.1;
 
 Car_Helpers :: struct {
-	forward_geo_lookup,
-	front_tire_dir_geo_lookup,
 	front_tire_left_geo_lookup,
 	back_tire_left_geo_lookup: Geometry_Lookup,
 }
@@ -33,17 +31,11 @@ Car_Helpers :: struct {
 init_car_helpers :: proc(entities_geos: ^Entities_Geos) -> Car_Helpers {
 	using car_helpers: Car_Helpers;
 
-	forward_geo: Geometry;
-	forward_geo_lookup = add_geometry(entities_geos, forward_geo, .Render);
+	front_tire_left_geo := Geometry { name = "Front tire left visualizer" };
+	front_tire_left_geo_lookup = add_geometry(entities_geos, front_tire_left_geo, .KeepRender);
 
-	front_tire_dir_geo: Geometry;
-	front_tire_dir_geo_lookup = add_geometry(entities_geos, front_tire_dir_geo, .Render);
-
-	front_tire_left_geo: Geometry;
-	front_tire_left_geo_lookup = add_geometry(entities_geos, front_tire_left_geo, .Render);
-
-	back_tire_left_geo: Geometry;
-	back_tire_left_geo_lookup = add_geometry(entities_geos, back_tire_left_geo, .Render);
+	back_tire_left_geo := Geometry { name = "Back tire left visualizer" };
+	back_tire_left_geo_lookup = add_geometry(entities_geos, back_tire_left_geo, .KeepRender);
 
 	return car_helpers;
 }

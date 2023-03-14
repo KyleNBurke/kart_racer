@@ -27,19 +27,32 @@ evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangl
 
 			hull_normal, hull_polygon := find_plane_normal_and_polygon(entity_hull, -normal);
 
-			contacts: [dynamic]Contact;
-			if abs(linalg.dot(normal, hull_normal)) >= abs(linalg.dot(normal, triangle_normal)) {
-				contacts = clip(hull_normal, hull_polygon, triangle_polygon, true);
-			} else {
-				contacts = clip(triangle_normal, triangle_polygon, hull_polygon, false);
-			};
+			a_is_ref := abs(linalg.dot(normal, hull_normal)) > abs(linalg.dot(normal, triangle_normal));
+			contacts: small_array.Small_Array(4, Contact);
 
-			if len(contacts) == 0 {
+			if len(hull_polygon) == 2 {
+				if a_is_ref {
+					contacts = line_clip_line_is_ref(hull_normal, hull_polygon[0], hull_polygon[1], triangle_polygon);
+				} else {
+					contacts = line_clip_poly_is_ref(triangle_normal, triangle_polygon, hull_polygon[0], hull_polygon[1]);
+				}
+			} else {
+				full_contacts: [dynamic]Contact;
+
+				if a_is_ref {
+					full_contacts = clip(hull_normal, hull_polygon, triangle_polygon, true);
+				} else {
+					full_contacts = clip(triangle_normal, triangle_polygon, hull_polygon, false);
+				};
+
+				contacts = reduce(full_contacts);
+			}
+
+			if small_array.len(contacts) == 0 {
 				return nil;
 			}
 
-			reduced_contacts := reduce(contacts);
-			return Contact_Manifold { normal, reduced_contacts };
+			return Contact_Manifold { normal, contacts };
 		}
 	}
 

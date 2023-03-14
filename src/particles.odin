@@ -5,8 +5,6 @@ import "core:math/linalg";
 import "core:math/rand";
 import "math2";
 
-import "core:fmt";
-
 SHOCK_PARTICLE_MAX_OFFSET :: 1.4;
 
 Shock_Particle :: struct {
@@ -24,7 +22,7 @@ Fire_Particle :: struct {
 	time_alive: f32,
 }
 
-initialize_shock_particles :: proc(entities_geos: ^Entities_Geos, shock_cubes: []Entity_Lookup) {
+init_shock_particles :: proc(entities_geos: ^Entities_Geos, shock_cubes: []Entity_Lookup) {
 	for lookup in shock_cubes {
 		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
 
@@ -37,7 +35,7 @@ initialize_shock_particles :: proc(entities_geos: ^Entities_Geos, shock_cubes: [
 	}
 }
 
-initialize_fire_particles :: proc(entities_geos: ^Entities_Geos, fire_cubes: []Entity_Lookup) {
+init_fire_particles :: proc(entities_geos: ^Entities_Geos, fire_cubes: []Entity_Lookup) {
 	for lookup in fire_cubes {
 		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
 

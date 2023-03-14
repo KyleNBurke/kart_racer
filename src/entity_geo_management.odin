@@ -31,7 +31,11 @@ Lookup :: struct {
 Geometry_Lookup :: distinct Lookup;
 Entity_Lookup :: distinct Lookup;
 
-On_No_Entities :: enum {Free, Render}
+On_No_Entities :: enum {
+	Keep,       // Will not free the geometry
+	KeepRender, // Will not free the geometry and will render it with an identity matrix
+	Free,       // Free the geometry
+}
 
 add_geometry :: proc(using entities_geos: ^Entities_Geos, geometry: Geometry, on_no_entities: On_No_Entities = .Free) -> Geometry_Lookup {
 	if index, ok := pop_safe(&free_geometry_records); ok {
@@ -126,7 +130,7 @@ remove_entity :: proc(using entities_geos: ^Entities_Geos, entity_lookup: Entity
 	assert(ok);
 	unordered_remove(&geometry_record.entity_lookups, removal_index);
 
-	if geometry_record.on_no_entities == .Free && len(geometry_record.entity_lookups) == 0 {
+	if len(geometry_record.entity_lookups) == 0 && geometry_record.on_no_entities == .Free {
 		delete(geometry_record.geometry.indices);
 		delete(geometry_record.geometry.attributes);
 

@@ -162,8 +162,8 @@ update_island_helpers :: proc(islands: ^Islands, entities_geos: ^Entities_Geos) 
 		}
 
 		color := [?]f32 {1, 1, 1} if island.asleep else [?]f32 {0, 1, 0};
-		geo := init_box_helper(bounds_min, bounds_max, color);
-		geo_lookup := add_geometry(entities_geos, geo, .Render);
+		geo := init_box_helper("Island visualizer", bounds_min, bounds_max, color);
+		geo_lookup := add_geometry(entities_geos, geo, .KeepRender);
 		append(&islands.island_helpers, geo_lookup);
 	}
 }

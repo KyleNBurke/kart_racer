@@ -43,12 +43,12 @@ main :: proc() {
 		context.allocator = mem.tracking_allocator(&track);
 	}
 
-	assert(glfw.Init() == 1,"Failed to initialize GLFW" );
+	assert(glfw.Init() == 1);
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
 	glfw.WindowHint(glfw.MAXIMIZED, 1);
 	window := glfw.CreateWindow(1280, 720, "Kart Guys", nil, nil);
-	assert(window != nil, "Failed to create window");
+	assert(window != nil);
 
 	glfw.SetFramebufferSizeCallback(window, framebuffer_size_callback);
 	glfw.SetWindowIconifyCallback(window, iconify_callback);
@@ -175,8 +175,9 @@ init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
 	load_car(&game, spawn_position, spawn_orientation);
 	game.car_helpers = init_car_helpers(&game.entities_geos);
 
-	initialize_shock_particles(&game.entities_geos, game.shock_cubes[:]);
-	initialize_fire_particles(&game.entities_geos, game.fire_cubes[:]);
+	init_collision_hull_grid(&game.collision_hull_grid, &game.entities_geos);
+	init_shock_particles(&game.entities_geos, game.shock_cubes[:]);
+	init_fire_particles(&game.entities_geos, game.fire_cubes[:]);
 
 	return game;
 }

@@ -37,7 +37,13 @@ furthest_point_hull :: proc(hull: ^Collision_Hull, direction: linalg.Vector3f32)
 		case .Box:
 			point = linalg.Vector3f32 {math.sign_f32(d.x), math.sign_f32(d.y), math.sign_f32(d.z)};
 		case .Cylinder:
-			xz := linalg.normalize(linalg.Vector2f32 {d.x, d.z});
+			xz: linalg.Vector2f32;
+			if d.x == 0 && d.z == 0 {
+				xz = linalg.Vector2f32 {0, 1};
+			} else {
+				xz = linalg.normalize(linalg.Vector2f32 {d.x, d.z});
+			}
+
 			point = linalg.Vector3f32 {xz.x, math.sign_f32(d.y), xz.y};
 		case .Mesh:
 			unimplemented();
@@ -266,7 +272,42 @@ find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: l
 			}
 
 		case .Cylinder:
-			unimplemented();
+			d_norm := linalg.normalize(d);
+			dot := linalg.dot(d_norm, linalg.VECTOR3F32_Y_AXIS);
+
+			if math.acos(abs(dot)) < math.PI / 4 {
+				// The direction is pointing up or down
+				y, angle_dir: f32;
+
+				if dot > 0 {
+					y = 1;
+					angle_dir = -1;
+				} else {
+					y = -1;
+					angle_dir = 1;
+				}
+
+				plane_normal = linalg.Vector3f32 {0, y, 0};
+				
+				POINT_COUNT :: 4;
+				ANGLE_INCREMENT := math.TAU / f32(POINT_COUNT);
+
+				for i in 0..<POINT_COUNT {
+					angle := angle_dir * f32(i) * ANGLE_INCREMENT;
+					x := math.cos(angle);
+					z := math.sin(angle);
+					
+					append(&polygon, linalg.Vector3f32 {x, y, z});
+				}
+			} else {
+				// The direction is pointing sideways
+				xz := linalg.normalize(linalg.Vector2f32 {d_norm.x, d_norm.z});
+				plane_normal = linalg.Vector3f32 {xz.x, 0, xz.y};
+				
+				append(&polygon,
+					linalg.Vector3f32 {xz.x,  1, xz.y},
+					linalg.Vector3f32 {xz.x, -1, xz.y});
+			}
 		
 		case .Mesh:
 			unimplemented();
@@ -305,14 +346,11 @@ clip :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon, inc_polygon: [dyn
 				append(&new_points, inc_a);
 			}
 
-			if d0 * d1 < 0.0 {
-				u := d0 / (d0 - d1);
+			if d0 * d1 < -0.0001 {
+				t := d0 / (d0 - d1);
+				p := (inc_b - inc_a) * t + inc_a;
 
-				e := inc_b - inc_a;
-				e *= u;
-				e += inc_a;
-
-				append(&new_points, e);
+				append(&new_points, p);
 			}
 		}
 
@@ -346,10 +384,194 @@ clip :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon, inc_polygon: [dyn
 	return contacts;
 }
 
+clip_line :: proc(normal: linalg.Vector3f32, offset: f32, a: linalg.Vector3f32, b: ^linalg.Vector3f32) {
+	depth_a := linalg.dot(normal, a) - offset;
+	depth_b := linalg.dot(normal, b^) - offset;
+
+	if depth_b > 0 {
+		t := depth_a / (depth_a - depth_b);
+		b^ = (b^ - a) * t + a;
+	}
+}
+
+// This is defined to return up to 4 contacts. However, only 0, 1 or 2 will be returned. We use 4 to avoid the type conversion Small_Array(2, Contact) -> Small_Array(4, Contact)
+line_clip_poly_is_ref :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon: [dynamic]linalg.Vector3f32, line_a, line_b: linalg.Vector3f32) -> small_array.Small_Array(4, Contact) {
+	// Clip the incident line between all the edges of the reference polygon. That should always keep 2 points. Then run those 2 points through the final clip.
+
+	inc_a := line_a;
+	inc_b := line_b;
+	
+	for ref_a, ref_index_a in ref_polygon {
+		ref_index_b := (ref_index_a + 1) % len(ref_polygon);
+		ref_b := ref_polygon[ref_index_b];
+		ref_edge := ref_b - ref_a;
+
+		normal := linalg.normalize(linalg.cross(ref_edge, ref_plane_normal));
+		offset := linalg.dot(normal, ref_a);
+
+		clip_line(normal, offset, inc_a, &inc_b);
+		clip_line(normal, offset, inc_b, &inc_a);
+	}
+
+	contacts: small_array.Small_Array(4, Contact);
+	ref_a := ref_polygon[0];
+	offset := linalg.dot(ref_plane_normal, ref_a);
+
+	depth_a := linalg.dot(ref_plane_normal, inc_a) - offset;
+	depth_b := linalg.dot(ref_plane_normal, inc_b) - offset;
+
+	if depth_a < 0 {
+		projection := inc_a + ref_plane_normal * -depth_a;
+		small_array.append(&contacts, Contact { inc_a, projection });
+	}
+
+	if depth_b < 0 {
+		projection := inc_b + ref_plane_normal * -depth_b;
+		small_array.append(&contacts, Contact { inc_b, projection });
+	}
+
+	return contacts;
+}
+
+// This is defined to return up to 4 contacts. However, only 0, 1 or 2 will be returned. We use 4 to avoid the type conversion Small_Array(2, Contact) -> Small_Array(4, Contact)
+line_clip_line_is_ref :: proc(ref_normal, line_a, line_b: linalg.Vector3f32, inc_polygon: [dynamic]linalg.Vector3f32) -> small_array.Small_Array(4, Contact) {
+	// If the line is reference, we know it must run through the coplanar polygon and give 1 or 2 intersection points. It may be possible to return 0
+	// due to floating point weirdness? If we have 2 points, we clip them against the end planes of the reference line. Then run those 2 points through
+	// the final clip.
+
+	points: [2]linalg.Vector3f32;
+	points_index := 0;
+
+	ref_edge := line_b - line_a;
+	normal := linalg.normalize(linalg.cross(ref_edge, ref_normal));
+	offset := linalg.dot(normal, line_a);
+
+	for inc_a, inc_index_a in inc_polygon {
+		inc_index_b := (inc_index_a + 1) % len(inc_polygon);
+		inc_b := inc_polygon[inc_index_b];
+
+		depth_a := linalg.dot(normal, inc_a) - offset;
+		depth_b := linalg.dot(normal, inc_b) - offset;
+
+		if depth_a * depth_b < 0 {
+			t := depth_a / (depth_a - depth_b);
+			points[points_index] = (inc_b - inc_a) * t + inc_a;
+
+			points_index += 1;
+			if points_index == 2 do break;
+		}
+	}
+
+	if points_index < 2 {
+		return {};
+	}
+
+	{
+		norm_to_b := linalg.normalize(line_b - line_a);
+		offset := linalg.dot(norm_to_b, line_b);
+
+		clip_line(norm_to_b, offset, points[0], &points[1]);
+		clip_line(norm_to_b, offset, points[1], &points[0]);
+	}
+
+	{
+		norm_to_a := linalg.normalize(line_a - line_b);
+		offset := linalg.dot(norm_to_a, line_a);
+
+		clip_line(norm_to_a, offset, points[0], &points[1]);
+		clip_line(norm_to_a, offset, points[1], &points[0]);
+	}
+
+	contacts: small_array.Small_Array(4, Contact);
+
+	{
+		offset := linalg.dot(ref_normal, line_a);
+		inc_a := points[0];
+		inc_b := points[1];
+		depth_a := linalg.dot(ref_normal, inc_a) - offset;
+		depth_b := linalg.dot(ref_normal, inc_b) - offset;
+
+		if depth_a < 0 {
+			projection := inc_a + ref_normal * -depth_a;
+			small_array.append(&contacts, Contact { inc_a, projection });
+		}
+	
+		if depth_b < 0 {
+			projection := inc_b + ref_normal * -depth_b;
+			small_array.append(&contacts, Contact { inc_b, projection });
+		}
+	}
+
+	return contacts;
+}
+// This is defined to return up to 4 contacts. However, only 0, 1 or 2 will be returned. We use 4 to avoid the type conversion Small_Array(2, Contact) -> Small_Array(4, Contact)
+line_clip_lines :: proc(ref_normal, ref_a, ref_b, inc_a, inc_b: linalg.Vector3f32, a_is_ref: bool) -> small_array.Small_Array(4, Contact) {
+	// In the case of 2 lines we first determine whether they intersect. If they intersect, the final clip only operates on the intersection point.
+	// If they don't intersect, we clip the end points between the reference line and run the final clip on those two points.
+
+	points: [2]linalg.Vector3f32;
+	points_count := 0;
+
+	ref_edge := ref_b - ref_a;
+	normal := linalg.normalize(linalg.cross(ref_edge, ref_normal));
+	offset := linalg.dot(normal, ref_a);
+
+	inc_depth_a := linalg.dot(normal, inc_a) - offset;
+	inc_depth_b := linalg.dot(normal, inc_b) - offset;
+
+	if inc_depth_a * inc_depth_b < 0 {
+		t := inc_depth_a / (inc_depth_a - inc_depth_b);
+		points[0] = (inc_b - inc_a) * t + inc_a;
+		points_count = 1;
+	} else {
+		inc_a, inc_b := inc_a, inc_b;
+
+		norm_to_b := linalg.normalize(ref_b - ref_a);
+		offset = linalg.dot(norm_to_b, ref_b);
+		clip_line(norm_to_b, offset, inc_a, &inc_b);
+		clip_line(norm_to_b, offset, inc_b, &inc_a);
+
+		norm_to_a := linalg.normalize(ref_a - ref_b);
+		offset = linalg.dot(norm_to_a, ref_a);
+		clip_line(norm_to_a, offset, inc_a, &inc_b);
+		clip_line(norm_to_a, offset, inc_b, &inc_a);
+
+		points[0], points[1] = inc_a, inc_b;
+		points_count = 2;
+	}
+
+	contacts: small_array.Small_Array(4, Contact);
+	offset = linalg.dot(ref_normal, ref_a);
+
+	for i in 0..<points_count {
+		point := points[i];
+		depth := linalg.dot(ref_normal, point) - offset;
+
+		if depth < 0 {
+			projection := point + ref_normal * -depth;
+			contact: Contact;
+
+			if a_is_ref {
+				contact.position_a = projection;
+				contact.position_b = point;
+			} else {
+				contact.position_a = point;
+				contact.position_b = projection;
+			}
+
+			small_array.append(&contacts, contact);
+		}
+	}
+
+	return contacts;
+}
+
 // As is stands like this, we could eliminate this proc and only return at most 4 contacts from clip.
 // In the future, if we want a more complicated manifold reduction proct, this would be the place to do it.
 // So for now, we'll keep it.
 reduce :: proc(contacts: [dynamic]Contact) -> small_array.Small_Array(4, Contact) {
+	// WE DO NEED MANIFOLD REDUCTION NOW
+
 	reduced_contacts: small_array.Small_Array(4, Contact);
 	count := min(len(contacts), 4);
 

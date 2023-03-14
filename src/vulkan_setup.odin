@@ -827,7 +827,7 @@ create_frame_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool:
 	return descriptor_set_layout, descriptor_sets;
 }
 
-create_per_frame_buffers :: proc(physical_device: vk.PhysicalDevice, logical_device: vk.Device, ) -> ([IFFC]vk.Buffer, [IFFC]vk.DeviceMemory) {
+create_per_frame_buffers :: proc(physical_device: vk.PhysicalDevice, logical_device: vk.Device) -> ([IFFC]vk.Buffer, [IFFC]vk.DeviceMemory) {
 	buffers: [IFFC]vk.Buffer;
 	buffers_memory: [IFFC]vk.DeviceMemory;
 

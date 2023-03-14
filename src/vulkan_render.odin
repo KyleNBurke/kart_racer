@@ -1,11 +1,9 @@
 package main;
 
 import "core:c";
-import "core:fmt";
 import "core:mem";
 import vk "vendor:vulkan";
 import "core:math/linalg";
-
 import "math2";
 
 begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, entities_geos: ^Entities_Geos, texts: ^[dynamic]Text) -> bool {
@@ -128,7 +126,9 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, entities_geos
 		first_instance: u32 = 0;
 
 		for record in &entities_geos.geometry_records {
-			if record.freed do continue;
+			if record.freed || (len(record.entity_lookups) == 0 && record.on_no_entities == .Keep) {
+				continue;
+			}
 
 			index_array_size := size_of(u16) * len(record.geometry.indices);
 			attribute_array_size := size_of(f32) * len(record.geometry.attributes);
@@ -138,9 +138,12 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, entities_geos
 			geometry_offset = attribute_array_offset + attribute_array_size;
 
 			when ODIN_DEBUG {
+				if len(record.entity_lookups) == 0 {
+					assert(record.on_no_entities == .KeepRender);
+				}
+
 				assert(geometry_offset <= instance_offset);
 				assert(first_instance <= MAX_ENTITIES);
-				if record.on_no_entities == .Render do assert(len(record.entity_lookups) == 0);
 			}
 
 			// Copy geometry data

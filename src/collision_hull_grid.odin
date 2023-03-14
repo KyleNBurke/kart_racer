@@ -13,6 +13,8 @@ Collision_Hull_Grid :: struct {
 	hull_records: [dynamic]Collision_Hull_Record,
 	query_flags: [dynamic]u32,
 	grid: [dynamic][dynamic][dynamic]int,
+	box_helper_geo: Geometry_Lookup,
+	cylinder_helper_geo: Geometry_Lookup,
 	hull_helpers: [dynamic]Entity_Lookup,
 }
 
@@ -20,6 +22,14 @@ Collision_Hull_Record :: struct {
 	entity_lookup: Entity_Lookup,
 	hull: ^Collision_Hull,
 	query_run: u32,
+}
+
+init_collision_hull_grid :: proc(using collision_hull_grid: ^Collision_Hull_Grid, entities_geos: ^Entities_Geos) {
+	box_geo := init_box_helper("box hull visualizer");
+	box_helper_geo = add_geometry(entities_geos, box_geo, .Keep);
+
+	cylinder_geo := init_cylinder_helper("cylinder hull visualizer");
+	cylinder_helper_geo = add_geometry(entities_geos, cylinder_geo, .Keep);
 }
 
 reset_collision_hull_grid :: proc(using collision_hull_grid: ^Collision_Hull_Grid, half_size: f32) {
@@ -147,15 +157,21 @@ collision_hull_grid_update_hull_helpers :: proc(using collision_hull_grid: ^Coll
 
 	clear(&hull_helpers);
 
-	if len(hull_records) == 0 do return;
-
-	geo := init_box_helper();
-	geo_lookup := add_geometry(entities_geos, geo);
-
 	for hull_record in &hull_records {
 		helper := new_inanimate_entity();
 		helper.transform = hull_record.hull.global_transform;
-		helper_lookup := add_entity(entities_geos, geo_lookup, helper);
+
+		geo: Geometry_Lookup;
+		switch hull_record.hull.kind {
+		case .Box:
+			geo = box_helper_geo;
+		case .Cylinder:
+			geo = cylinder_helper_geo;
+		case .Mesh:
+			unimplemented();
+		}
+
+		helper_lookup := add_entity(entities_geos, geo, helper);
 		append(&hull_helpers, helper_lookup);
 	}
 }

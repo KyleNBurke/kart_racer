@@ -2,6 +2,7 @@ package main;
 
 import "core:fmt";
 import "core:math/linalg";
+import "core:container/small_array";
 import "math2";
 
 evaluate_entity_collision :: proc(hull_a, hull_b: ^Collision_Hull) -> Maybe(Contact_Manifold) {
@@ -14,20 +15,44 @@ evaluate_entity_collision :: proc(hull_a, hull_b: ^Collision_Hull) -> Maybe(Cont
 			// Since the collision normal points from b to a, we must negate the normal for a
 			plane_normal_a, polygon_a := find_plane_normal_and_polygon(hull_a, -normal);
 			plane_normal_b, polygon_b := find_plane_normal_and_polygon(hull_b, normal);
+			a_is_ref := abs(linalg.dot(normal, plane_normal_a)) > abs(linalg.dot(normal, plane_normal_b));
+			contacts: small_array.Small_Array(4, Contact);
 
-			contacts: [dynamic]Contact;
-			if abs(linalg.dot(normal, plane_normal_a)) >= abs(linalg.dot(normal, plane_normal_b)) {
-				contacts = clip(plane_normal_a, polygon_a, polygon_b, true);
+			if len(polygon_a) == 2 && len(polygon_b) == 2 {
+				if a_is_ref {
+					contacts = line_clip_lines(plane_normal_a, polygon_a[0], polygon_a[1], polygon_b[0], polygon_b[1], true);
+				} else {
+					contacts = line_clip_lines(plane_normal_b, polygon_b[0], polygon_b[1], polygon_a[0], polygon_a[1], false);
+				}
+			} else if len(polygon_a) == 2 {
+				if a_is_ref {
+					contacts = line_clip_line_is_ref(plane_normal_a, polygon_a[0], polygon_a[1], polygon_b);
+				} else {
+					contacts = line_clip_poly_is_ref(plane_normal_b, polygon_b, polygon_a[0], polygon_a[1]);
+				}
+			} else if len(polygon_b) == 2 {
+				if a_is_ref {
+					contacts = line_clip_poly_is_ref(plane_normal_a, polygon_a, polygon_b[0], polygon_b[1]);
+				} else {
+					contacts = line_clip_line_is_ref(plane_normal_b, polygon_b[0], polygon_b[1], polygon_a);
+				}
 			} else {
-				contacts = clip(plane_normal_b, polygon_b, polygon_a, false);
-			};
+				full_contacts: [dynamic]Contact;
 
-			if len(contacts) == 0 {
+				if a_is_ref {
+					full_contacts = clip(plane_normal_a, polygon_a, polygon_b, true);
+				} else {
+					full_contacts = clip(plane_normal_b, polygon_b, polygon_a, false);
+				}
+
+				contacts = reduce(full_contacts);
+			}
+
+			if small_array.len(contacts) == 0 {
 				return nil;
 			}
 			
-			reduced_contacts := reduce(contacts);
-			return Contact_Manifold { normal, reduced_contacts };
+			return Contact_Manifold { normal, contacts };
 		}
 	}
 	
