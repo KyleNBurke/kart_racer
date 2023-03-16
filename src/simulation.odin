@@ -337,10 +337,22 @@ spring_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, a, b, c
 }
 
 spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Collision_Hull) -> Maybe(Spring_Contact_Intermediary) {
+	local_origin := math2.matrix4_transform_point(hull.inv_global_transform, origin);
+
+	// If the hull has a scale this will not be normalized. I think normalizing it changes the "scale" or "reference view" of the t value
+	// in the cylinder case so they are small than what they should be. That can probably be corrected somehow but this does doesn't
+	// seem use need this to be normalized so we can simply leave it unnormalized.
+	local_direction := math2.matrix4_transform_direction(hull.inv_global_transform, direction);
+
+	local_normal: linalg.Vector3f32;
+	length: f32 = max(f32);
+
 	switch hull.kind {
 	case .Box:
-		local_origin := math2.matrix4_transform_point(hull.inv_global_transform, origin);
-		local_direction := math2.matrix4_transform_direction(hull.inv_global_transform, direction);
+		// We could probably take another look at this and try to improve it. It would be nice if we could generate the faces to check.
+		// Just remember, you cannot use the direction of the ray to derive the exact face the ray will pass through. You can use it
+		// to find the faces which have normals poiting in the same direction.
+		// Why are we doing best length here? The unbounded ray would pass through 2 faces but the backside is already being ignored.
 
 		best_normal: linalg.Vector3f32;
 		best_length := max(f32);
@@ -393,22 +405,73 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 		}
 
 		if best_length != max(f32) {
-			global_normal := math2.matrix4_transform_direction(hull.global_transform, best_normal);
-
-			return Spring_Contact_Intermediary {
-				global_normal,
-				best_length,
-			};
+			local_normal = best_normal;
+			length = best_length;
 		}
 
 	case .Cylinder:
-		unimplemented();
+		s := local_origin;
+		e := local_origin + local_direction * SPRING_MAX_LENGTH;
+
+		top_bot: {
+			// If the y value of the ray is 0 then it's horizontal.
+			if local_direction.y == 0 do break top_bot;
+
+			y := math.sign(local_direction.y);
+			depth_s := abs(s.y) - 1; // The - 1 is the distance to the horizontal plane
+			depth_e := abs(e.y) - 1;
+
+			if depth_s * depth_e < 0 {
+				t := depth_s / (depth_s - depth_e);
+				p := s + local_direction * t;
+
+				if p.x * p.x + p.z * p.z >= 1 do break top_bot;
+				
+				local_normal = linalg.Vector3f32 {0, -y, 0};
+				length = t;
+				break;
+			}
+		}
+
+		sides: {
+			// If the y value of the ray is 1 or -1 then it's vertical.
+			if abs(local_direction.y) == 1 do break sides;
+
+			v := local_direction;
+			a := v.x * v.x + v.z * v.z;
+			b := 2 * s.x * v.x + 2 * s.z * v.z;
+			c := s.x * s.x + s.z * s.z - 1;
+
+			j := b * b - 4 * a * c;
+			if j < 0 do break sides;
+			k := math.sqrt(b * b - 4 * a * c);
+			q := 2 * a;
+
+			t1 := (-b + k) / q;
+			t2 := (-b - k) / q;
+			t := min(t1, t2);
+
+			if t <= 0 || t >= SPRING_MAX_LENGTH {
+				break sides;
+			}
+
+			p := s + t * v;
+			if abs(p.y) >= 1 do break sides;
+
+			local_normal = linalg.Vector3f32 {p.x, 0, p.z};
+			length = t;
+		}
 
 	case .Mesh:
 		unimplemented();
 	}
 
-	return nil;
+	if length == max(f32) {
+		return nil;
+	} else {
+		global_normal := linalg.normalize(math2.matrix4_transform_direction(hull.global_transform, local_normal));
+		return Spring_Contact_Intermediary { global_normal, length };
+	}
 }
 
 @(private="file")

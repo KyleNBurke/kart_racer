@@ -54,7 +54,7 @@ Todo
 		- Something to consider. When calculating the bounds for cylinders, we could just directly calculate the AABB. You would calculate it as if the local bounds were rotated 45 degrees since that is the worst case scenaro.
 		- Try to remove the nesting in the collision procs
 		- Manifold reduction
-		- Spring vs cylinder collisions
+		- [done] Spring vs cylinder collisions
 	- Blender design (should be consistent with rail bumper)
 	- Exporting
 	- Importing
