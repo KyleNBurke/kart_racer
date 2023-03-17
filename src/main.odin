@@ -20,6 +20,7 @@ Callback_State :: struct {
 }
 
 Game :: struct {
+	config: Config,
 	camera: Camera,
 	entities_geos: Entities_Geos,
 	font: Font,
@@ -159,11 +160,12 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 }
 
 init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
-	camera_aspect := f32(vulkan.extent.width) / f32(vulkan.extent.height);
+	game: Game;
 
-	game := Game {
-		camera = init_camera(camera_aspect, 75.0, window),
-	};
+	game.config = load_config();
+
+	camera_aspect := f32(vulkan.extent.width) / f32(vulkan.extent.height);
+	game.camera = init_camera(camera_aspect, 75.0, window);
 
 	content_scale_x, _ := glfw.GetWindowContentScale(window);
 	game.font = init_font("roboto", 20, content_scale_x);
