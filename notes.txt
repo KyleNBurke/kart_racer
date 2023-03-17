@@ -39,22 +39,11 @@ we could pick a different maximum length. It's intentionally designed such that 
 
 Improvements
 - Instead of exporting multiple ground collision meshes, then loading in and inserting each one into the ground grid. Why don't we have the exporter do the work of combining the collision meshes into one big array of indices and positions.
+- Cylinder top and bottom faces can generate more than four contacts. This means we could implement manifold reduction. I did some investigation and it looks like it's not generating more than 5 contacts even though it could theoretically generate 8.
 
 Todo
 - Cylinder bumper
 	- Cylinder collision detection and resolution
-		- [done] Create a basic scene with a cylinder rigid body
-		- [done] Export it
-		- [done] Import it
-		- [done] Cylinder hull visualizer
-		- Contacts visualizer
-		- Consider changing the EPA tolerances, it could be taking a lot of iterations for not much gain.
-		- [done] Ensure sure .Keep and .KeepRender are working
-		- [done] Cylinder vs other hull collisions
-		- Something to consider. When calculating the bounds for cylinders, we could just directly calculate the AABB. You would calculate it as if the local bounds were rotated 45 degrees since that is the worst case scenaro.
-		- Try to remove the nesting in the collision procs
-		- Manifold reduction
-		- [done] Spring vs cylinder collisions
 	- Blender design (should be consistent with rail bumper)
 	- Exporting
 	- Importing
@@ -63,6 +52,9 @@ Todo
 - Slow the car down when you hit a rigid body
 - Boost jets
 - The case where a geometry is marked as Free has a problem I believe. You see the free-ing logic only happens once you remove an entity from a geometry. So, if you create a geometry, mark it as Free and never assign an entity to it. I think the geometry really should be cleaned up but that'll never happen. Maybe we should add some debug logic that runs every frame to catch this potential memory leak.
+
+Unecessary but cool things we could do
+- Contact point, normal and tangent visualizers
 
 Sequential impulse solver
 	- I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting

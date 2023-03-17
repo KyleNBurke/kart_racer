@@ -570,8 +570,6 @@ line_clip_lines :: proc(ref_normal, ref_a, ref_b, inc_a, inc_b: linalg.Vector3f3
 // In the future, if we want a more complicated manifold reduction proct, this would be the place to do it.
 // So for now, we'll keep it.
 reduce :: proc(contacts: [dynamic]Contact) -> small_array.Small_Array(4, Contact) {
-	// WE DO NEED MANIFOLD REDUCTION NOW
-
 	reduced_contacts: small_array.Small_Array(4, Contact);
 	count := min(len(contacts), 4);
 

@@ -18,9 +18,7 @@ init_collision_hull :: proc(local_transform, entity_global_transform: linalg.Mat
 	local_bounds: math2.Box3f32;
 
 	switch kind {
-		case .Box:
-			local_bounds = math2.BOX3F32_STANDARD;
-		case .Cylinder:
+		case .Box, .Cylinder:
 			local_bounds = math2.BOX3F32_STANDARD;
 		case .Mesh:
 			unimplemented();

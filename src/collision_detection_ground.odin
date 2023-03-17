@@ -17,46 +17,45 @@ evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangl
 
 	triangle := form_triangle(triangle_positions, ground_grid_triangle.indices);
 
-	if simplex, ok := colliding(&triangle, entity_hull).?; ok {
-		ground_hull := form_convex_ground_hull(&triangle, triangle_positions, &ground_grid_triangle.indices);
+	simplex, ok_colliding := colliding(&triangle, entity_hull).?;
+	if !ok_colliding do return nil;
 
-		if normal, ok := find_collision_normal(&simplex, &ground_hull, entity_hull).?; ok {
-			triangle_normal := triangle.normal;
-			triangle_polygon := make([dynamic]linalg.Vector3f32, context.temp_allocator);
-			append(&triangle_polygon, triangle.a, triangle.b, triangle.c);
+	ground_hull := form_convex_ground_hull(&triangle, triangle_positions, &ground_grid_triangle.indices);
+	normal, ok_normal := find_collision_normal(&simplex, &ground_hull, entity_hull).?;
+	if !ok_normal do return nil;
 
-			hull_normal, hull_polygon := find_plane_normal_and_polygon(entity_hull, -normal);
+	triangle_normal := triangle.normal;
+	triangle_polygon := make([dynamic]linalg.Vector3f32, context.temp_allocator);
+	append(&triangle_polygon, triangle.a, triangle.b, triangle.c);
 
-			a_is_ref := abs(linalg.dot(normal, hull_normal)) > abs(linalg.dot(normal, triangle_normal));
-			contacts: small_array.Small_Array(4, Contact);
+	hull_normal, hull_polygon := find_plane_normal_and_polygon(entity_hull, -normal);
 
-			if len(hull_polygon) == 2 {
-				if a_is_ref {
-					contacts = line_clip_line_is_ref(hull_normal, hull_polygon[0], hull_polygon[1], triangle_polygon);
-				} else {
-					contacts = line_clip_poly_is_ref(triangle_normal, triangle_polygon, hull_polygon[0], hull_polygon[1]);
-				}
-			} else {
-				full_contacts: [dynamic]Contact;
+	a_is_ref := abs(linalg.dot(normal, hull_normal)) > abs(linalg.dot(normal, triangle_normal));
+	contacts: small_array.Small_Array(4, Contact);
 
-				if a_is_ref {
-					full_contacts = clip(hull_normal, hull_polygon, triangle_polygon, true);
-				} else {
-					full_contacts = clip(triangle_normal, triangle_polygon, hull_polygon, false);
-				};
-
-				contacts = reduce(full_contacts);
-			}
-
-			if small_array.len(contacts) == 0 {
-				return nil;
-			}
-
-			return Contact_Manifold { normal, contacts };
+	if len(hull_polygon) == 2 {
+		if a_is_ref {
+			contacts = line_clip_line_is_ref(hull_normal, hull_polygon[0], hull_polygon[1], triangle_polygon);
+		} else {
+			contacts = line_clip_poly_is_ref(triangle_normal, triangle_polygon, hull_polygon[0], hull_polygon[1]);
 		}
+	} else {
+		full_contacts: [dynamic]Contact;
+
+		if a_is_ref {
+			full_contacts = clip(hull_normal, hull_polygon, triangle_polygon, true);
+		} else {
+			full_contacts = clip(triangle_normal, triangle_polygon, hull_polygon, false);
+		}
+
+		contacts = reduce(full_contacts);
 	}
 
-	return nil;
+	if small_array.len(contacts) == 0 {
+		return nil;
+	}
+
+	return Contact_Manifold { normal, contacts };
 }
 
 form_triangle :: proc(positions: []f32, indices: [6]int) -> Triangle {
