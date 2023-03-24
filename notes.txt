@@ -42,19 +42,21 @@ Improvements
 - Cylinder top and bottom faces can generate more than four contacts. This means we could implement manifold reduction. I did some investigation and it looks like it's not generating more than 5 contacts even though it could theoretically generate 8.
 
 Todo
+- Helper enabling/disabling in the config file
 - Cylinder bumper
+	- Figure out how to do it. Use restitution? Should it even run through the constraint system?
 	- Cylinder collision detection and resolution
 	- Blender design (should be consistent with rail bumper)
 	- Exporting
 	- Importing
 	- Gameplay logic
-- File for settings
 - Slow the car down when you hit a rigid body
 - Boost jets
 - The case where a geometry is marked as Free has a problem I believe. You see the free-ing logic only happens once you remove an entity from a geometry. So, if you create a geometry, mark it as Free and never assign an entity to it. I think the geometry really should be cleaned up but that'll never happen. Maybe we should add some debug logic that runs every frame to catch this potential memory leak.
 
 Unecessary but cool things we could do
 - Contact point, normal and tangent visualizers
+- Export and import names
 
 Sequential impulse solver
 	- I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting

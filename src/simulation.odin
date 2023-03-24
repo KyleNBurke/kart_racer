@@ -35,12 +35,14 @@ simulate :: proc(using game: ^Game, dt: f32) {
 		new_orientation := math2.integrate_angular_velocity(rigid_body.angular_velocity, rigid_body.orientation, dt);
 		rigid_body.inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(new_orientation, rigid_body.inv_local_inertia_tensor);
 
-		transform := linalg.matrix4_from_trs(rigid_body.new_position, new_orientation, rigid_body.size);
-		collision_hull_grid_transform_entity(&collision_hull_grid, rigid_body.collision_hull_record_indices[:], transform);
+		tentative_transform := linalg.matrix4_from_trs(rigid_body.new_position, new_orientation, rigid_body.size);
+		rigid_body.tentative_transform = tentative_transform;
+		collision_hull_grid_transform_entity(&collision_hull_grid, rigid_body.collision_hull_record_indices[:], tentative_transform);
 
 		init_island(&islands, lookup, rigid_body);
 	}
 
+	clear_contact_helpers(&contact_helpers, &entities_geos);
 	clear_constraints(&constraints);
 	find_spring_constraints(game, dt);
 	
@@ -72,7 +74,7 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 				switch e in nearby_entity.variant {
 					case ^Rigid_Body_Entity:
-						add_car_movable_constraint_set(&constraints, car, nearby_lookup, e, &manifold, dt);
+						add_car_movable_constraint_set(&constraints, car, e, &manifold, dt);
 						car_collision_maybe_wake_island(&islands, &entities_woken_up, e);
 						handle_status_effects(car, e);
 					case ^Inanimate_Entity:
@@ -102,7 +104,8 @@ simulate :: proc(using game: ^Game, dt: f32) {
 				nearby_triangle := ground_grid_get_triangle(&ground_grid, nearby_triangle_index);
 
 				if manifold, ok := evaluate_ground_collision(ground_grid.positions[:], nearby_triangle, provoking_hull).?; ok {
-					add_fixed_constraint_set(&constraints, provoking_lookup, provoking_entity, &manifold, dt);
+					add_fixed_constraint_set(&constraints, provoking_entity, provoking_hull.kind, &manifold, dt);
+					add_contact_helper(&contact_helpers, &entities_geos, &manifold);
 				}
 			}
 
@@ -128,10 +131,10 @@ simulate :: proc(using game: ^Game, dt: f32) {
 				if manifold, ok := evaluate_entity_collision(provoking_hull, nearby_hull).?; ok {
 					switch e in nearby_entity.variant {
 						case ^Rigid_Body_Entity:
-							add_movable_constraint_set(&constraints, provoking_lookup, nearby_lookup, provoking_entity, e, &manifold, dt);
+							add_movable_constraint_set(&constraints, provoking_entity, e, &manifold, dt);
 							rigid_body_collision_merge_islands(&islands, &entities_geos, &entities_woken_up, provoking_lookup, provoking_entity, e);
 						case ^Inanimate_Entity:
-							add_fixed_constraint_set(&constraints, provoking_lookup, provoking_entity, &manifold, dt);
+							add_fixed_constraint_set(&constraints, provoking_entity, provoking_hull.kind, &manifold, dt);
 						case ^Car_Entity:
 							unreachable();
 					}
@@ -142,8 +145,8 @@ simulate :: proc(using game: ^Game, dt: f32) {
 		}
 	}
 
-	update_island_helpers(&islands, &entities_geos);
-	solve_constraints(&constraints, &entities_geos, car);
+	// update_island_helpers(&islands, &entities_geos);
+	solve_constraints(&constraints, car, dt);
 
 	{
 		car.position += car.velocity * dt;
@@ -248,11 +251,8 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 				if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
 					continue;
 				}
-				
 
 				if contact.length < best_spring_contact.length {
-					// fmt.println(-extension_dir, contact.normal);
-					// fmt.println(math.acos(linalg.dot(-extension_dir, contact.normal)), contact.length);
 					best_spring_contact = contact;
 				}
 			}
@@ -481,5 +481,21 @@ handle_status_effects :: proc(car: ^Car_Entity, rigid_body: ^Rigid_Body_Entity) 
 		shock_car(car);
 	case .Fire:
 		light_car_on_fire(car);
+	}
+}
+
+clear_contact_helpers :: proc(contact_helpers: ^[dynamic]Geometry_Lookup, entities_geos: ^Entities_Geos) {
+	for lookup in contact_helpers {
+		remove_geometry(entities_geos, lookup);
+	}
+
+	clear(contact_helpers);
+}
+
+add_contact_helper :: proc(contact_helpers: ^[dynamic]Geometry_Lookup, entities_geos: ^Entities_Geos, manifold: ^Contact_Manifold) {
+	for contact in small_array.slice(&manifold.contacts) {
+		geo := init_line_helper("contact_helper", contact.position_b, manifold.normal * 3);
+		geo_lookup := add_geometry(entities_geos, geo, .KeepRender);
+		append(contact_helpers, geo_lookup);
 	}
 }

@@ -26,6 +26,7 @@ Rigid_Body_Entity :: struct {
 	// This is only used for updating collision hulls within the collision hull grid which only rigid bodies do since they move.
 	collision_hull_record_indices: [dynamic]int,
 	mass: f32,
+	tentative_transform: linalg.Matrix4f32,
 	inv_local_inertia_tensor: linalg.Matrix3f32,
 	inv_global_inertia_tensor: linalg.Matrix3f32,
 	velocity: linalg.Vector3f32,

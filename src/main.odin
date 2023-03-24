@@ -30,6 +30,7 @@ Game :: struct {
 	awake_rigid_body_lookups: [dynamic]Entity_Lookup,
 	islands: Islands,
 	constraints: Constraints,
+	contact_helpers: [dynamic]Geometry_Lookup,
 	car: ^Car_Entity,
 	car_helpers: Car_Helpers,
 	frame_metrics: Frame_Metrics,
@@ -198,7 +199,7 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	update_fire_cube_particles(&game.entities_geos, game.fire_cubes[:], dt);
 	update_car_status_effects_and_particles(game.car, game.camera.transform, dt);
 
-	collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
+	// collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
 
 	free_all(context.temp_allocator);
 }

@@ -8,6 +8,7 @@ NEG_ONE :: linalg.Vector3f32 {-1, -1, -1};
 POS_ONE :: linalg.Vector3f32 {1, 1, 1};
 
 GREEN :: [3]f32 {0, 1, 0};
+BLUE  :: [3]f32 {0, 0, 1};
 GREY :: [3]f32 {0.3, 0.3, 0.3};
 YELLOW :: [3]f32 {1, 1, 0};
 
