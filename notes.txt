@@ -42,7 +42,6 @@ Improvements
 - Cylinder top and bottom faces can generate more than four contacts. This means we could implement manifold reduction. I did some investigation and it looks like it's not generating more than 5 contacts even though it could theoretically generate 8.
 
 Todo
-- Helper enabling/disabling in the config file
 - Cylinder bumper
 	- Figure out how to do it. Use restitution? Should it even run through the constraint system?
 	- Cylinder collision detection and resolution
@@ -62,7 +61,7 @@ Sequential impulse solver
 	- I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting
 	the impulse but they don't do anything. Maybe this is correct behavior and I need to put a lower bound on delta time, maybe the clamping logic is incorrect, need to investigate.
 		- Need to check this again given the fix we made for the other issue
-	- Since we're getting objects flying up into the air if they have big penetrations, can I just set the velocity to 0 in the direction of the collision normal once the solver has finished its work?
+	- Since we're getting objects flying up into the air if they have big penetrations, can I just set the velocity to 0 in the direction of the collision normal once the solver has finished its work? We tried this, it didn't really work out. Objects fell weird and friction had to be done a different way where they're not constraints. Angular and linear velocity damping was used. Maybe there is still some usefulness of this approach only when impulses are very large to prevent them from flying all crazy.
 
 For a cool particle explosion effect do this:
 	RANGE :: 5;

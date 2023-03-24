@@ -20,7 +20,6 @@ Callback_State :: struct {
 }
 
 Game :: struct {
-	config: Config,
 	camera: Camera,
 	entities_geos: Entities_Geos,
 	font: Font,
@@ -44,6 +43,9 @@ main :: proc() {
 		mem.tracking_allocator_init(&track, context.allocator);
 		context.allocator = mem.tracking_allocator(&track);
 	}
+
+	config := load_config();
+	context.user_ptr = &config;
 
 	assert(glfw.Init() == 1);
 
@@ -163,8 +165,6 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
 	game: Game;
 
-	game.config = load_config();
-
 	camera_aspect := f32(vulkan.extent.width) / f32(vulkan.extent.height);
 	game.camera = init_camera(camera_aspect, 75.0, window);
 
@@ -199,7 +199,10 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	update_fire_cube_particles(&game.entities_geos, game.fire_cubes[:], dt);
 	update_car_status_effects_and_particles(game.car, game.camera.transform, dt);
 
-	// collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
+	config := cast(^Config) context.user_ptr;
+	if config.hull_helpers {
+		collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
+	}
 
 	free_all(context.temp_allocator);
 }
@@ -229,4 +232,5 @@ cleanup_game :: proc(game: ^Game) {
 	delete(game.fire_cubes);
 	delete(game.texts);
 	delete(game.awake_rigid_body_lookups);
+	delete(game.contact_helpers);
 }

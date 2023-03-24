@@ -4,10 +4,16 @@ import "core:os";
 import "core:fmt";
 import "core:unicode/utf8";
 import "core:strings";
+import "core:strconv";
 
 Config :: struct {
 	level: string,
+	contact_point_helpers: bool,
+	hull_helpers: bool,
+	island_helpers: bool,
 }
+
+Config_Map :: map[string]string;
 
 load_config :: proc() -> Config {
 	file_path :: "res/config.txt";
@@ -15,7 +21,7 @@ load_config :: proc() -> Config {
 	data, data_ok := os.read_entire_file_from_filename(file_path, context.temp_allocator);
 	assert(data_ok, fmt.tprintf("Failed to load config file %s", file_path));
 
-	data_map := make(map[string]string, 10, context.temp_allocator);
+	data_map := make(Config_Map, 10, context.temp_allocator);
 	line := make([dynamic]rune, context.temp_allocator);
 	split_index, j: int;
 
@@ -48,11 +54,27 @@ load_config :: proc() -> Config {
 		}
 	}
 
-	level, ok := data_map["level"];
-	assert(ok);
+	get_string :: proc(data_map: ^Config_Map, key: string) -> string {
+		s, ok := data_map[key];
+		assert(ok);
+		return s;
+	}
+
+	get_bool :: proc(data_map: ^Config_Map, key: string) -> bool {
+		s, s_ok := data_map[key];
+		assert(s_ok);
+
+		b, b_ok := strconv.parse_bool(s);
+		assert(b_ok);
+
+		return b;
+	}
 
 	config := Config {
-		level,
+		level = get_string(&data_map, "level"),
+		contact_point_helpers = get_bool(&data_map, "contact_point_helpers"),
+		hull_helpers = get_bool(&data_map, "hull_helpers"),
+		island_helpers = get_bool(&data_map, "island_helpers"),
 	};
 	
 	fmt.printf("Loaded config file %s\n", file_path);

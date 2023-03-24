@@ -10,6 +10,8 @@ import "core:fmt";
 GRAVITY: f32 : -20.0;
 
 simulate :: proc(using game: ^Game, dt: f32) {
+	config := cast(^Config) context.user_ptr;
+	
 	{
 		car.velocity.y += GRAVITY * dt;
 		car.new_position = car.position + car.velocity * dt;
@@ -42,7 +44,10 @@ simulate :: proc(using game: ^Game, dt: f32) {
 		init_island(&islands, lookup, rigid_body);
 	}
 
-	clear_contact_helpers(&contact_helpers, &entities_geos);
+	if config.contact_point_helpers {
+		clear_contact_helpers(&contact_helpers, &entities_geos);
+	}
+	
 	clear_constraints(&constraints);
 	find_spring_constraints(game, dt);
 	
@@ -105,7 +110,10 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 				if manifold, ok := evaluate_ground_collision(ground_grid.positions[:], nearby_triangle, provoking_hull).?; ok {
 					add_fixed_constraint_set(&constraints, provoking_entity, provoking_hull.kind, &manifold, dt);
-					add_contact_helper(&contact_helpers, &entities_geos, &manifold);
+					
+					if config.contact_point_helpers {
+						add_contact_helper(&contact_helpers, &entities_geos, &manifold);
+					}
 				}
 			}
 
@@ -145,7 +153,10 @@ simulate :: proc(using game: ^Game, dt: f32) {
 		}
 	}
 
-	// update_island_helpers(&islands, &entities_geos);
+	if config.island_helpers {
+		update_island_helpers(&islands, &entities_geos);
+	}
+	
 	solve_constraints(&constraints, car, dt);
 
 	{

@@ -1,1 +1,4 @@
 level = all
+contact_point_helpers = false
+hull_helpers = false
+island_helpers = false
