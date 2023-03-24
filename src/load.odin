@@ -69,7 +69,7 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 }
 
 load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
-	file_path := fmt.tprintf("res/%s.kgl", game.config.level);
+	file_path := fmt.tprintf("res/maps/%s.kgl", game.config.level);
 	bytes, success := os.read_entire_file_from_filename(file_path);
 	defer delete(bytes);
 	assert(success, fmt.tprintf("Failed to load level file %s", file_path));
