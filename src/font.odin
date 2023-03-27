@@ -43,13 +43,16 @@ init_font :: proc(name: string, base_size: u32, content_scale: f32) -> Font {
 	scaled_size_u32 := u32(scaled_size);
 	cached_file_path := fmt.tprintf("build/fonts/%v%v.cfont", name, scaled_size_u32);
 
+	font: Font;
 	if os.exists(cached_file_path) {
-		fmt.printf("Loading font %v at scaled size %v\n", name, scaled_size_u32);
-		return load_cached(name, base_size, cached_file_path);
+		font = load_cached(name, base_size, cached_file_path);
+		fmt.printf("Loaded font %v at scaled size %v\n", name, scaled_size_u32);
 	} else {
-		fmt.printf("Generating font %v at scaled size %v\n", name, scaled_size_u32);
-		return generate_and_save(name, base_size, scaled_size, cached_file_path);
+		font = generate_and_save(name, base_size, scaled_size, cached_file_path);
+		fmt.printf("Generated font %v at scaled size %v\n", name, scaled_size_u32);
 	}
+
+	return font;
 }
 
 generate_and_save :: proc(name: string, base_size: u32, scaled_size: f32, cached_file_path: string) -> Font {
