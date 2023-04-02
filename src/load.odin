@@ -187,9 +187,12 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 					append(&rigid_body.collision_hull_record_indices, hull_record);
 				}
 
-				// add_rigid_body_to_island(&islands, int(island_index), entity_lookup, rigid_body);
-				append(&awake_rigid_body_lookups, entity_lookup);
-
+				if config.init_sleeping_islands {
+					add_rigid_body_to_island(&islands, int(island_index), entity_lookup, rigid_body);
+				} else {
+					append(&awake_rigid_body_lookups, entity_lookup);
+				}
+				
 				#partial switch status_effect {
 					case .Shock:
 						append(&shock_cubes, entity_lookup);

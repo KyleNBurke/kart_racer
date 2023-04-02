@@ -11,6 +11,7 @@ Config :: struct {
 	contact_point_helpers: bool,
 	hull_helpers: bool,
 	island_helpers: bool,
+	init_sleeping_islands: bool,
 }
 
 Config_Map :: map[string]string;
@@ -75,6 +76,7 @@ load_config :: proc() -> Config {
 		contact_point_helpers = get_bool(&data_map, "contact_point_helpers"),
 		hull_helpers = get_bool(&data_map, "hull_helpers"),
 		island_helpers = get_bool(&data_map, "island_helpers"),
+		init_sleeping_islands = get_bool(&data_map, "init_sleeping_islands"),
 	};
 	
 	fmt.printf("Loaded config file %s\n", file_path);

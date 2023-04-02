@@ -1,0 +1,11 @@
+theme = "dark_plus"
+
+[editor]
+cursorline = true
+auto-format = false
+color-modes = true
+gutters = ["diagnostics", "diff"]
+lsp.display-messages = true
+indent-guides.render = true
+bufferline = "multiple"
+soft-wrap.enable = true
