@@ -1,4 +1,5 @@
 level = all
-contact_point_helpers = false
-hull_helpers = false
-island_helpers = false
+contact_point_helpers = f
+hull_helpers = f
+island_helpers = f
+init_sleeping_islands = t

@@ -1,6 +1,9 @@
 package main;
 
 import "core:math/linalg";
+import "core:slice";
+import "core:math";
+import "math2";
 
 Entity :: struct {
 	position: linalg.Vector3f32,
@@ -8,6 +11,8 @@ Entity :: struct {
 	size: linalg.Vector3f32,
 	transform: linalg.Matrix4x4f32,
 	collision_hulls: [dynamic]Collision_Hull,
+	bounds: math2.Box3f32,
+	query_run: u32,
 	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity, ^Car_Entity},
 }
 
@@ -15,16 +20,17 @@ Inanimate_Entity :: struct {
 	using entity: Entity,
 }
 
+// Rename?
 Status_Effect :: enum {
 	None,
 	Shock,
 	Fire,
+	ExplodingShock,
 }
 
 Rigid_Body_Entity :: struct {
 	using entity: Entity,
-	// This is only used for updating collision hulls within the collision hull grid which only rigid bodies do since they move.
-	collision_hull_record_indices: [dynamic]int,
+	checked_collision: bool,
 	mass: f32,
 	tentative_transform: linalg.Matrix4f32,
 	inv_local_inertia_tensor: linalg.Matrix3f32,
@@ -35,9 +41,13 @@ Rigid_Body_Entity :: struct {
 	collision_exclude: bool,
 	island_index: int,
 	sleep_duration: f32,
+
+	// I get not wanting to separate shock cubes from shock barrels due to the [dynamic]particle needed to be in both but what if I pull out the things below this into Rigid_Body_Status_Effect_Entity?
+	// We should hold off on this because we may want status effects for inanimate entities which would mean putting these things into the Entity anyway.
 	status_effect: Status_Effect,
 	shock_particles: [dynamic]Shock_Particle,
 	fire_particles: [dynamic]Fire_Particle,
+	exploding_health: f32,
 }
 
 Car_Entity :: struct {
@@ -99,7 +109,7 @@ new_rigid_body_entity :: proc(
 	size := linalg.Vector3f32 {1.0, 1.0, 1.0},
 	mass: f32,
 	dimensions: linalg.Vector3f32,
-	status_effect: Status_Effect,
+	status_effect: Status_Effect = .None,
 ) -> ^Rigid_Body_Entity {
 	k := mass / 12.0;
 	
@@ -128,6 +138,7 @@ new_rigid_body_entity :: proc(
 	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
 	e.island_index = -1;
 	e.status_effect = status_effect;
+	e.exploding_health = 100;
 
 	return e;
 }
@@ -160,3 +171,10 @@ new_car_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaterni
 
 	return e;
 }
+
+// add_hull_to_rigid_body :: proc(lookup: Entity_Lookup, collision_hull_grid: ^Collision_Hull_Grid, rigid_body: ^Rigid_Body_Entity, hull: Collision_Hull) {
+// 	append(&rigid_body.collision_hulls, hull);
+// 	hull_ptr := slice.last_ptr(rigid_body.collision_hulls[:]);
+// 	hull_record := insert_into_collision_hull_grid(collision_hull_grid, lookup, hull_ptr);
+// 	append(&rigid_body.collision_hull_record_indices, hull_record);
+// }

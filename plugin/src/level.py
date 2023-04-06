@@ -1,21 +1,12 @@
 from bpy.types import Context, Depsgraph, Object, Mesh
-import bpy
 from . import util
-
-class WObject:
-	def __init__(self):
-		self.depth: int = None
-		self.parent_w_object: WObject = None
-		self.object: Object = None
-		self.children_w_objects = []
-		self.instance_w_object: WObject = None
-		self.unique_name = None
-		self.final_world_matrix = None
+from .util import WObject
 
 def export(operator, context: Context):
 	depsgraph: Depsgraph = context.evaluated_depsgraph_get()
-	graph = create_scene_graph(depsgraph)
-	debug_export_graph(graph, operator.filepath)
+	graph = util.create_scene_graph(depsgraph)
+	util.print_graph(graph, 0)
+	util.debug_export_graph(graph, operator.filepath)
 
 	file = open(operator.filepath, 'wb')
 
@@ -28,93 +19,6 @@ def export(operator, context: Context):
 	file.close()
 	print("Exported", operator.filepath)
 	return {'FINISHED'}
-
-def create_scene_graph(depsgraph: Depsgraph):
-	graph = []
-
-	# Find root nodes
-	for object in depsgraph.scene.objects:
-		if object.parent is None:
-			root_w_object = WObject()
-			root_w_object.depth = 0
-			root_w_object.object = object
-			root_w_object.unique_name = object.name_full
-			root_w_object.final_world_matrix = object.matrix_world
-			graph.append(root_w_object)
-	
-	# Process root nodes to find the rest of the graph
-	w_objects_to_process = graph.copy()
-
-	while w_objects_to_process:
-		w_object: WObject = w_objects_to_process.pop()
-		object = w_object.object
-
-		# Find the children of this object
-		child_objects = None
-		instance_collection = object.instance_collection
-
-		if instance_collection is None:
-			child_objects = object.children
-		else:
-			child_objects = []
-
-			for child_object in instance_collection.objects:
-				if child_object.parent is None:
-					child_objects.append(child_object)
-
-		# Add each child to the graph
-		for child_object in child_objects:
-			child_w_object: WObject = WObject()
-			child_w_object.depth = w_object.depth + 1
-			child_w_object.parent_w_object = w_object
-			child_w_object.object = child_object
-
-			if instance_collection is None:
-				child_w_object.instance_w_object = w_object.instance_w_object
-			else:
-				child_w_object.instance_w_object = w_object
-			
-			if child_w_object.instance_w_object is None:
-				child_w_object.unique_name = child_object.name_full
-				child_w_object.final_world_matrix = child_object.matrix_world
-			else:
-				child_w_object.unique_name = child_w_object.instance_w_object.object.name_full + " -> " + child_object.name_full
-				child_w_object.final_world_matrix = child_w_object.instance_w_object.final_world_matrix @ child_object.matrix_world
-
-			w_object.children_w_objects.append(child_w_object)
-			w_objects_to_process.append(child_w_object)
-
-	# Print graph
-	print("--- Graph ---")
-	to_visit = graph.copy()
-
-	while to_visit:
-		w_object: WObject = to_visit.pop()
-
-		for i in range(w_object.depth):
-			print("    ", end="")
-		
-		print(w_object.object.name_full, "(" + w_object.object.kg_type + ")")
-		to_visit.extend(w_object.children_w_objects)
-	
-	print()
-	
-	return graph
-
-def debug_export_graph(graph, filepath):
-	file = open(filepath + ".txt", 'w')
-	to_visit = graph.copy()
-
-	while to_visit:
-		w_object: WObject = to_visit.pop()
-
-		for i in range(w_object.depth):
-			file.write("    ")
-		
-		file.write(w_object.object.name_full + " (" + w_object.object.kg_type + ")" + "\n")
-		to_visit.extend(w_object.children_w_objects)
-
-	file.close()
 
 def export_spawn_point(graph, file):
 	spawn_point_w_object = None
@@ -328,6 +232,10 @@ def export_rigid_bodies(graph, file, mesh_name_to_index_map):
 					status_effect = 1
 				case 'fire':
 					status_effect = 2
+				case 'exploding_shock_barrel':
+					status_effect = 3
+			
+			assert(status_effect is not None)
 			
 			util.write_game_pos_ori_scale_from_blender_matrix(file, w_object.final_world_matrix)
 			util.write_u32(file, mesh_index)

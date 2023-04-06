@@ -1,0 +1,15 @@
+Shock barrel shrapnel count: u32
+	Geometry
+		indices count:    u32
+		indices:         [u16]
+		attributes count: u32
+		attributes:      [f32]
+	position:   vec3
+	rotation:   quat
+	scale:      vec3
+	dimensions: vec3
+	Hull
+		position: vec3
+		rotation: quat
+		scale:    vec3
+	Position check: u32

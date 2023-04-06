@@ -2,6 +2,118 @@ import struct
 import bpy
 from bpy.types import Depsgraph, Object, Mesh
 
+class WObject:
+	def __init__(self):
+		self.depth: int = None
+		self.parent_w_object: WObject = None
+		self.object: Object = None
+		self.children_w_objects = []
+		self.instance_w_object: WObject = None
+		self.unique_name = None
+		self.final_world_matrix = None
+
+def create_scene_graph(depsgraph: Depsgraph):
+	graph = []
+
+	# Find root nodes
+	for object in depsgraph.scene.objects:
+		if object.kg_shared_ignore:
+			continue
+
+		if object.parent is None:
+			root_w_object = WObject()
+			root_w_object.depth = 0
+			root_w_object.object = object
+			root_w_object.unique_name = object.name_full
+			root_w_object.final_world_matrix = object.matrix_world
+			graph.append(root_w_object)
+	
+	# Process root nodes to find the rest of the graph
+	w_objects_to_process = graph.copy()
+
+	while w_objects_to_process:
+		w_object: WObject = w_objects_to_process.pop()
+		object = w_object.object
+
+		# Find the children of this object
+		child_objects = None
+		instance_collection = object.instance_collection
+
+		if instance_collection is None:
+			child_objects = object.children
+		else:
+			child_objects = []
+
+			for child_object in instance_collection.objects:
+				if child_object.parent is None:
+					child_objects.append(child_object)
+
+		# Add each child to the graph
+		for child_object in child_objects:
+			if child_object.kg_shared_ignore:
+					continue
+			
+			child_w_object: WObject = WObject()
+			child_w_object.depth = w_object.depth + 1
+			child_w_object.parent_w_object = w_object
+			child_w_object.object = child_object
+
+			if instance_collection is None:
+				child_w_object.instance_w_object = w_object.instance_w_object
+			else:
+				child_w_object.instance_w_object = w_object
+			
+			if child_w_object.instance_w_object is None:
+				child_w_object.unique_name = child_object.name_full
+				child_w_object.final_world_matrix = child_object.matrix_world
+			else:
+				child_w_object.unique_name = child_w_object.instance_w_object.object.name_full + " -> " + child_object.name_full
+				child_w_object.final_world_matrix = child_w_object.instance_w_object.final_world_matrix @ child_object.matrix_world
+
+			w_object.children_w_objects.append(child_w_object)
+			w_objects_to_process.append(child_w_object)
+	
+	return graph
+
+# properties: 0 for level, 1 for runtime assets
+def print_graph(graph, properties: int):
+	print("--- Graph ---")
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop()
+
+		for i in range(w_object.depth):
+			print("    ", end="")
+		
+		t = None
+		if properties == 0:
+			t = w_object.object.kg_type
+		elif properties == 1:
+			t = w_object.object.kg_rta_type
+		else:
+			assert False
+		
+		print(w_object.object.name_full, "(" + t + ")")
+		to_visit.extend(w_object.children_w_objects)
+	
+	print()
+
+def debug_export_graph(graph, filepath):
+	file = open(filepath + ".txt", 'w')
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop()
+
+		for i in range(w_object.depth):
+			file.write("    ")
+		
+		file.write(w_object.object.name_full + " (" + w_object.object.kg_type + ")" + "\n")
+		to_visit.extend(w_object.children_w_objects)
+
+	file.close()
+
 def blender_position_to_game_position(pos):
 	return (pos[0], pos[2], -pos[1])
 

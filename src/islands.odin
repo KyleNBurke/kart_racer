@@ -1,12 +1,16 @@
 package main;
 
 import "core:math/linalg";
+import "core:slice";
 
 Islands :: struct {
 	islands: [dynamic]Island,
 	free_islands: [dynamic]int,
 	awake_island_indices: [dynamic]int,
 	island_helpers: [dynamic]Geometry_Lookup,
+	box_helper_geo_lookup: Geometry_Lookup,
+	cylinder_helper_geo_lookup: Geometry_Lookup,
+	hull_helpers: [dynamic]Entity_Lookup,
 }
 
 Island :: struct {
@@ -28,6 +32,12 @@ init_islands :: proc(islands: ^Islands, count: u32) {
 			awake_island_index_index = -1,
 		});
 	}
+
+	box_helper_geo := init_box_helper("box hull visualizer");
+	islands.box_helper_geo_lookup = add_geometry(box_helper_geo, .Keep);
+
+	cylinder_helper_geo := init_cylinder_helper("cylinder hull visualizer");
+	islands.cylinder_helper_geo_lookup = add_geometry(cylinder_helper_geo, .Keep);
 }
 
 add_rigid_body_to_island :: proc(islands: ^Islands, island_index: int, lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
@@ -73,7 +83,7 @@ car_collision_maybe_wake_island :: proc(islands: ^Islands, entities_woken_up: ^[
 	}
 }
 
-rigid_body_collision_merge_islands :: proc(islands: ^Islands, entities_geos: ^Entities_Geos, entities_woken_up: ^[dynamic]Entity_Lookup, provoking_lookup: Entity_Lookup, provoking_rigid_body, nearby_rigid_body: ^Rigid_Body_Entity) {
+rigid_body_collision_merge_islands :: proc(islands: ^Islands, entities_woken_up: ^[dynamic]Entity_Lookup, provoking_lookup: Entity_Lookup, provoking_rigid_body, nearby_rigid_body: ^Rigid_Body_Entity) {
 	provoking_island_index := provoking_rigid_body.island_index;
 	nearby_island_index := nearby_rigid_body.island_index;
 
@@ -85,7 +95,7 @@ rigid_body_collision_merge_islands :: proc(islands: ^Islands, entities_geos: ^En
 	append(&provoking_island.lookups, ..nearby_island.lookups[:]);
 
 	for lookup in nearby_island.lookups {
-		nearby_rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
+		nearby_rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 		nearby_rigid_body.island_index = provoking_island_index;
 	}
 
@@ -106,7 +116,7 @@ rigid_body_collision_merge_islands :: proc(islands: ^Islands, entities_geos: ^En
 	delete(nearby_island.lookups);
 }
 
-sleep_islands :: proc(islands: ^Islands, entities_geos: ^Entities_Geos, awake_rigid_body_lookups: ^[dynamic]Entity_Lookup) {
+sleep_islands :: proc(islands: ^Islands, awake_rigid_body_lookups: ^[dynamic]Entity_Lookup) {
 	SLEEP_DURATION: f32 : 2;
 
 	clear(awake_rigid_body_lookups);
@@ -118,7 +128,8 @@ sleep_islands :: proc(islands: ^Islands, entities_geos: ^Entities_Geos, awake_ri
 		when ODIN_DEBUG do assert(len(island.lookups) > 0);
 
 		for lookup in island.lookups {
-			rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
+			rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
+			rigid_body.checked_collision = false; // Explain
 
 			if rigid_body.sleep_duration < SLEEP_DURATION {
 				asleep = false;
@@ -139,9 +150,33 @@ sleep_islands :: proc(islands: ^Islands, entities_geos: ^Entities_Geos, awake_ri
 	}
 }
 
-update_island_helpers :: proc(islands: ^Islands, entities_geos: ^Entities_Geos) {
+remove_rigid_body_from_island :: proc(islands: ^Islands, lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
+	island := &islands.islands[rigid_body.island_index];
+
+	if island.asleep {
+		unimplemented();
+	}
+
+	index, ok := slice.linear_search(island.lookups[:], lookup);
+	assert(ok);
+	unordered_remove(&island.lookups, index);
+
+	if len(island.lookups) == 0 {
+		// Do we even need to clean it up?
+	}
+
+	// Copy pasta - make proc? (don't have to)
+	unordered_remove(&islands.awake_island_indices, island.awake_island_index_index);
+	if island.awake_island_index_index != len(islands.awake_island_indices) {
+		swapped_island_index := islands.awake_island_indices[island.awake_island_index_index];
+		swapped_island := &islands.islands[swapped_island_index];
+		swapped_island.awake_island_index_index = island.awake_island_index_index;
+	}
+}
+
+update_island_helpers :: proc(islands: ^Islands) {
 	for lookup in islands.island_helpers {
-		remove_geometry(entities_geos, lookup);
+		remove_geometry(lookup);
 	}
 
 	clear(&islands.island_helpers);
@@ -153,7 +188,7 @@ update_island_helpers :: proc(islands: ^Islands, entities_geos: ^Entities_Geos) 
 		bounds_max := linalg.Vector3f32 { min(f32), min(f32), min(f32) };
 
 		for lookup in island.lookups {
-			entity := get_entity(entities_geos, lookup);
+			entity := get_entity(lookup);
 
 			for hull in &entity.collision_hulls {
 				bounds_min = linalg.min(bounds_min, hull.global_bounds.min);
@@ -163,8 +198,51 @@ update_island_helpers :: proc(islands: ^Islands, entities_geos: ^Entities_Geos) 
 
 		color := [?]f32 {1, 1, 1} if island.asleep else [?]f32 {0, 1, 0};
 		geo := init_box_helper("Island visualizer", bounds_min, bounds_max, color);
-		geo_lookup := add_geometry(entities_geos, geo, .KeepRender);
+		geo_lookup := add_geometry(geo, .KeepRender);
 		append(&islands.island_helpers, geo_lookup);
+	}
+}
+
+update_hull_helpers :: proc(awake_entity_lookups: []Entity_Lookup, islands: ^Islands) {
+	for lookup in &islands.hull_helpers {
+		remove_entity(lookup);
+	}
+
+	clear(&islands.hull_helpers);
+
+	// When the simulate proc is done, there will be no alive islands so we canno't just loop through all the islands.
+	// Hate this but it's just a debug proc so I don't really care. Would be better to loop through all the rigid bodies.
+	// Maybe we can update Entities_Geos to have a hole-less list of all the rigid bodies or something.
+	all_lookups := slice.clone_to_dynamic(awake_entity_lookups, context.temp_allocator);
+
+	for island in &islands.islands {
+		if island.free do continue;
+
+		for lookup in island.lookups {
+			append(&all_lookups, lookup);
+		}
+	}
+
+	for lookup in all_lookups {
+		entity := get_entity(lookup);
+
+		for hull in &entity.collision_hulls {
+			helper := new_inanimate_entity();
+			helper.transform = hull.global_transform;
+
+			geo: Geometry_Lookup;
+			switch hull.kind {
+			case .Box:
+				geo = islands.box_helper_geo_lookup;
+			case .Cylinder:
+				geo = islands.cylinder_helper_geo_lookup;
+			case .Mesh:
+				unimplemented();
+			}
+
+			helper_lookup := add_entity(geo, helper);
+			append(&islands.hull_helpers, helper_lookup);
+		}
 	}
 }
 
@@ -180,4 +258,5 @@ cleanup_islands :: proc(islands: ^Islands) {
 	}
 
 	delete(islands.islands);
+	delete(islands.hull_helpers);
 }

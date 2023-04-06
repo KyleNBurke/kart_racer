@@ -3,16 +3,17 @@ package main;
 import "core:math";
 import "core:math/linalg";
 import "core:container/small_array";
+import "core:slice";
 import "math2";
 
 import "core:fmt";
 
 GRAVITY: f32 : -20.0;
 
-simulate :: proc(using game: ^Game, dt: f32) {
-	config := cast(^Config) context.user_ptr;
-	
+simulate :: proc(game: ^Game, dt: f32) {
 	{
+		car := game.car;
+
 		car.velocity.y += GRAVITY * dt;
 		car.new_position = car.position + car.velocity * dt;
 
@@ -21,15 +22,13 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 		car.new_transform = linalg.matrix4_from_trs(car.new_position, new_orientation, linalg.Vector3f32 {1, 1, 1});
 
-		for hull in &car.collision_hulls {
-			update_collision_hull_global_transform_and_bounds(&hull, car.new_transform);
-		}
+		update_entity_hull_transforms_and_bounds(car, car.new_transform);
 	}
 
-	clear_islands(&islands);
+	clear_islands(&game.islands);
 
-	for lookup in awake_rigid_body_lookups {
-		rigid_body := get_entity(&entities_geos, lookup).variant.(^Rigid_Body_Entity);
+	for lookup in game.awake_rigid_body_lookups {
+		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		rigid_body.velocity.y += GRAVITY * dt;
 		rigid_body.new_position = rigid_body.position + rigid_body.velocity * dt;
@@ -39,125 +38,119 @@ simulate :: proc(using game: ^Game, dt: f32) {
 
 		tentative_transform := linalg.matrix4_from_trs(rigid_body.new_position, new_orientation, rigid_body.size);
 		rigid_body.tentative_transform = tentative_transform;
-		collision_hull_grid_transform_entity(&collision_hull_grid, rigid_body.collision_hull_record_indices[:], tentative_transform);
+		move_rigid_body_tentatively_in_grid(&game.entity_grid, lookup, rigid_body);
 
-		init_island(&islands, lookup, rigid_body);
+		rigid_body.checked_collision = false;
+		init_island(&game.islands, lookup, rigid_body);
 	}
 
 	if config.contact_point_helpers {
-		clear_contact_helpers(&contact_helpers, &entities_geos);
+		clear_contact_helpers(&game.contact_helpers);
 	}
 	
-	clear_constraints(&constraints);
-	find_spring_constraints(game, dt);
+	clear_constraints(&game.constraints);
+	find_spring_constraints(&game.ground_grid, &game.entity_grid, &game.constraints, game.car, dt);
 	
 	entities_woken_up := make([dynamic]Entity_Lookup, context.temp_allocator);
 
 	// Car collisions
-	for provoking_hull in &car.collision_hulls {
+	{
 		// Ground collisions
-		nearby_triangle_indices := ground_grid_find_nearby_triangles(&ground_grid, provoking_hull.global_bounds);
+		nearby_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, game.car.bounds);
 
-		for nearby_triangle_index in nearby_triangle_indices {
-			nearby_triangle := ground_grid_get_triangle(&ground_grid, nearby_triangle_index);
+		for provoking_hull in &game.car.collision_hulls {
+			for nearby_triangle_index in nearby_triangle_indices {
+				nearby_triangle := ground_grid_get_triangle(&game.ground_grid, nearby_triangle_index);
 
-			if manifold, ok := evaluate_ground_collision(ground_grid.positions[:], nearby_triangle, &provoking_hull).?; ok {
-				add_car_fixed_constraint_set(&constraints, car, &manifold, dt);
+				if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], nearby_triangle, &provoking_hull).?; ok {
+					add_car_fixed_constraint_set(&game.constraints, game.car, &manifold, dt);
+				}
 			}
 		}
 
-		// Other hull collisions
-		nearby_hull_indices := collision_hull_grid_find_nearby_hulls(&collision_hull_grid, provoking_hull.global_bounds);
+		// Collisions with other hulls
+		nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, game.car.bounds);
 
-		for nearby_hull_index in nearby_hull_indices {
-			nearby_hull_record := &collision_hull_grid.hull_records[nearby_hull_index];
-			nearby_hull := nearby_hull_record.hull;
+		for provoking_hull in &game.car.collision_hulls {
+			for nearby_lookup in nearby_lookups {
+				nearby_entity := get_entity(nearby_lookup);
 
-			if manifold, ok := evaluate_entity_collision(&provoking_hull, nearby_hull).?; ok {
-				nearby_lookup := nearby_hull_record.entity_lookup;
-				nearby_entity := get_entity(&entities_geos, nearby_lookup);
-
-				switch e in nearby_entity.variant {
-					case ^Rigid_Body_Entity:
-						add_car_movable_constraint_set(&constraints, car, e, &manifold, dt);
-						car_collision_maybe_wake_island(&islands, &entities_woken_up, e);
-						handle_status_effects(car, e);
-					case ^Inanimate_Entity:
-						// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
-						// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
-						add_car_fixed_constraint_set(&constraints, car, &manifold, dt);
-					case ^Car_Entity:
-						unreachable();
+				for nearby_hull in &nearby_entity.collision_hulls {
+					if manifold, ok := evaluate_entity_collision(&provoking_hull, &nearby_hull).?; ok {
+						switch e in nearby_entity.variant {
+						case ^Rigid_Body_Entity:
+							add_car_movable_constraint_set(&game.constraints, game.car, e, &manifold, dt);
+							car_collision_maybe_wake_island(&game.islands, &entities_woken_up, e);
+							handle_status_effects(game.car, e);
+						case ^Inanimate_Entity:
+							// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
+							// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
+							add_car_fixed_constraint_set(&game.constraints, game.car, &manifold, dt);
+						case ^Car_Entity:
+							unreachable();
+						}
+					}
 				}
 			}
 		}
 	}
 
-	// Other rigid body collisions
-	checked_hulls := make([dynamic]bool, len(collision_hull_grid.hull_records), context.temp_allocator);
+	// Rigid body collisions
+	for provoking_lookup, provoking_lookup_index in &game.awake_rigid_body_lookups { // Do I need to use "&" here? What is the deal with that again in Odin?
+		provoking_rigid_body := get_entity(provoking_lookup).variant.(^Rigid_Body_Entity);
 
-	for provoking_lookup in awake_rigid_body_lookups {
-		provoking_entity := get_entity(&entities_geos, provoking_lookup).variant.(^Rigid_Body_Entity);
+		// Collisions with the ground
+		nearby_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, provoking_rigid_body.bounds);
 
-		for provoking_hull_index in provoking_entity.collision_hull_record_indices {
-			provoking_hull := collision_hull_grid.hull_records[provoking_hull_index].hull;
-
-			// Handle collisions with the ground
-			nearby_triangle_indices := ground_grid_find_nearby_triangles(&ground_grid, provoking_hull.global_bounds);
-
+		for provoking_hull in &provoking_rigid_body.collision_hulls {
 			for nearby_triangle_index in nearby_triangle_indices {
-				nearby_triangle := ground_grid_get_triangle(&ground_grid, nearby_triangle_index);
+				nearby_triangle := ground_grid_get_triangle(&game.ground_grid, nearby_triangle_index);
 
-				if manifold, ok := evaluate_ground_collision(ground_grid.positions[:], nearby_triangle, provoking_hull).?; ok {
-					add_fixed_constraint_set(&constraints, provoking_entity, provoking_hull.kind, &manifold, dt);
-					
-					if config.contact_point_helpers {
-						add_contact_helper(&contact_helpers, &entities_geos, &manifold);
-					}
+				if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], nearby_triangle, &provoking_hull).?; ok {
+					process_rigid_body_ground_collision(provoking_lookup, provoking_rigid_body, provoking_hull.kind, &game.constraints, &manifold, dt, &game.contact_helpers);
 				}
 			}
+		}
 
-			// Handle collisions with other hulls
-			nearby_hull_indices := collision_hull_grid_find_nearby_hulls(&collision_hull_grid, provoking_hull.global_bounds);
+		// Collisions with other hulls
+		nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, provoking_rigid_body.bounds);
 
-			for nearby_hull_index in nearby_hull_indices {
-				if checked_hulls[nearby_hull_index] || provoking_hull_index == nearby_hull_index do continue; // Maybe the collision hull grid could take in an optional provoking hull so that this check can be done in there
-
-				nearby_hull_record := &collision_hull_grid.hull_records[nearby_hull_index];
-				nearby_lookup := nearby_hull_record.entity_lookup;
-
+		for provoking_hull in &provoking_rigid_body.collision_hulls {
+			for nearby_lookup in nearby_lookups {
 				if provoking_lookup == nearby_lookup do continue;
 
-				nearby_entity := get_entity(&entities_geos, nearby_lookup);
+				nearby_entity := get_entity(nearby_lookup);
 
 				if nearby_rigid_body, ok := nearby_entity.variant.(^Rigid_Body_Entity); ok {
-					if provoking_entity.collision_exclude && nearby_rigid_body.collision_exclude do continue;
+					if nearby_rigid_body.checked_collision do continue;
+					if provoking_rigid_body.collision_exclude && nearby_rigid_body.collision_exclude do continue;
 				}
-				
-				nearby_hull := nearby_hull_record.hull;
 
-				if manifold, ok := evaluate_entity_collision(provoking_hull, nearby_hull).?; ok {
-					switch e in nearby_entity.variant {
+				for nearby_hull in &nearby_entity.collision_hulls {
+					if manifold, ok := evaluate_entity_collision(&provoking_hull, &nearby_hull).?; ok {
+						switch e in nearby_entity.variant {
 						case ^Rigid_Body_Entity:
-							add_movable_constraint_set(&constraints, provoking_entity, e, &manifold, dt);
-							rigid_body_collision_merge_islands(&islands, &entities_geos, &entities_woken_up, provoking_lookup, provoking_entity, e);
+							add_movable_constraint_set(&game.constraints, provoking_rigid_body, e, &manifold, dt);
+							rigid_body_collision_merge_islands(&game.islands, &entities_woken_up, provoking_lookup, provoking_rigid_body, e);
 						case ^Inanimate_Entity:
-							add_fixed_constraint_set(&constraints, provoking_entity, provoking_hull.kind, &manifold, dt);
+							add_fixed_constraint_set(&game.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
 						case ^Car_Entity:
 							unreachable();
+						}
 					}
 				}
 			}
-
-			checked_hulls[provoking_hull_index] = true;
 		}
+
+		provoking_rigid_body.checked_collision = true;
 	}
 
 	if config.island_helpers {
-		update_island_helpers(&islands, &entities_geos);
+		update_island_helpers(&game.islands);
 	}
 	
-	solve_constraints(&constraints, car, dt);
+	car := game.car;
+	solve_constraints(&game.constraints, car, dt);
 
 	{
 		car.position += car.velocity * dt;
@@ -166,26 +159,85 @@ simulate :: proc(using game: ^Game, dt: f32) {
 		update_entity_transform(car);
 	}
 	
-	append(&awake_rigid_body_lookups, ..entities_woken_up[:]);
+	append(&game.awake_rigid_body_lookups, ..entities_woken_up[:]);
 
-	for lookup in awake_rigid_body_lookups {
-		rigid_body := get_entity(&entities_geos, lookup).variant.(^Rigid_Body_Entity);
+	for i := len(game.awake_rigid_body_lookups) - 1; i >= 0; i -= 1 {
+		lookup := game.awake_rigid_body_lookups[i];
+		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
-		old_position := rigid_body.position;
-		rigid_body.position += rigid_body.velocity * dt;
+		if rigid_body.exploding_health > 0 {
+			old_position := rigid_body.position;
+			rigid_body.position += rigid_body.velocity * dt;
 
-		rigid_body.orientation = math2.integrate_angular_velocity(rigid_body.angular_velocity, rigid_body.orientation, dt);
+			rigid_body.orientation = math2.integrate_angular_velocity(rigid_body.angular_velocity, rigid_body.orientation, dt);
 		
-		update_entity_transform(rigid_body);
+			update_entity_transform(rigid_body);
 
-		if linalg.length2(rigid_body.position - old_position) < 0.00005 {
-			rigid_body.sleep_duration += dt;
+			if linalg.length2(rigid_body.position - old_position) < 0.00005 {
+				rigid_body.sleep_duration += dt;
+			} else {
+				rigid_body.sleep_duration = 0;
+			}
 		} else {
-			rigid_body.sleep_duration = 0;
+			// Remove from entity grid
+			remove_entity_from_grid(&game.entity_grid, lookup, rigid_body);
+
+			// Remove from islands
+			remove_rigid_body_from_island(&game.islands, lookup, rigid_body);
+
+			// Remove from awake rigid body lookups
+			unordered_remove(&game.awake_rigid_body_lookups, i);
+
+			// Remove from status effects entities list
+			switch rigid_body.status_effect {
+			case .Shock, .ExplodingShock:
+				remove_from_shock_entites(&game.shock_entities, lookup);
+			case .Fire:
+				unimplemented();
+			case .None:
+				unreachable();
+			}
+
+			// Rmove from entity geos
+			remove_entity(lookup);
 		}
 	}
 
-	sleep_islands(&islands, &entities_geos, &awake_rigid_body_lookups);
+	sleep_islands(&game.islands, &game.awake_rigid_body_lookups);
+}
+
+process_rigid_body_ground_collision :: proc(
+	provoking_lookup: Entity_Lookup,
+	provoking_rigid_body: ^Rigid_Body_Entity,
+	provoking_hull_kind: Hull_Kind,
+	constraints: ^Constraints,
+	manifold: ^Contact_Manifold,
+	dt: f32,
+	contact_helpers: ^[dynamic]Geometry_Lookup,
+) {
+	if provoking_rigid_body.status_effect == .ExplodingShock {
+		// Check if we already exploded the barrel so we don't try to do it twice
+		if provoking_rigid_body.exploding_health <= 0 {
+			return;
+		}
+
+		velocity_diff := abs(linalg.dot(manifold.normal, provoking_rigid_body.velocity));
+		provoking_rigid_body.exploding_health -= velocity_diff;
+
+		if provoking_rigid_body.exploding_health > 0 {
+			add_fixed_constraint_set(constraints, provoking_rigid_body, provoking_hull_kind, manifold, dt);
+			
+			if config.contact_point_helpers {
+				add_contact_helper(contact_helpers, manifold);
+			}
+		}
+	} else {
+		add_fixed_constraint_set(constraints, provoking_rigid_body, provoking_hull_kind, manifold, dt);
+
+		if config.contact_point_helpers {
+			add_contact_helper(contact_helpers, manifold);
+		}
+	}
 }
 
 Spring_Contact_Manifold :: struct {
@@ -201,7 +253,7 @@ Spring_Contact :: struct {
 SPRING_BODY_POINT_Z: f32 : 1.1;
 SPRING_MAX_LENGTH: f32 : 0.8;
 
-find_spring_constraints :: proc(using game: ^Game, dt: f32) {
+find_spring_constraints :: proc(ground_grid: ^Ground_Grid, entity_grid: ^Entity_Grid, constraints: ^Constraints, car: ^Car_Entity, dt: f32) {
 	extension_dir := -math2.matrix4_up(car.new_transform);
 
 	SPRING_BODY_POINT_X: f32 : 0.8;
@@ -229,8 +281,8 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 
 	spring_bounds := math2.box_union(spring_bounds_fl, spring_bounds_fr, spring_bounds_bl, spring_bounds_br);
 
-	triangle_indices := ground_grid_find_nearby_triangles(&ground_grid, spring_bounds);
-	hull_indices := collision_hull_grid_find_nearby_hulls(&collision_hull_grid, spring_bounds);
+	triangle_indices := ground_grid_find_nearby_triangles(ground_grid, spring_bounds);
+	nearby_lookups := find_nearby_entities_in_grid(entity_grid, spring_bounds);
 
 	manifold := Spring_Contact_Manifold {
 		normal = -extension_dir,
@@ -247,11 +299,11 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 		spring_body_point := spring_body_points[spring_index];
 
 		for triangle_index in triangle_indices {
-			triangle := ground_grid_get_triangle(&ground_grid, triangle_index);
+			triangle := ground_grid_get_triangle(ground_grid, triangle_index);
 
 			a_index := triangle.indices[0] * 3;
 			b_index := triangle.indices[1] * 3;
-			c_index := triangle.indices[2] * 3;	
+			c_index := triangle.indices[2] * 3;
 
 			positions := &ground_grid.positions;
 			a := linalg.Vector3f32 {positions[a_index], positions[a_index + 1], positions[a_index + 2]};
@@ -269,18 +321,20 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 			}
 		}
 
-		for hull_index in hull_indices {
-			hull := collision_hull_grid.hull_records[hull_index].hull;
+		for nearby_lookup in nearby_lookups {
+			nearby_entity := get_entity(nearby_lookup);
 
-			if !math2.box_intersects(spring_bounds, hull.global_bounds) do continue;
+			for nearby_hull in &nearby_entity.collision_hulls {
+				if !math2.box_intersects(spring_bounds, nearby_hull.global_bounds) do continue;
 
-			if contact, ok := spring_intersects_hull(spring_body_point, extension_dir, hull).?; ok {
-				if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
-					continue;
-				}
+				if contact, ok := spring_intersects_hull(spring_body_point, extension_dir, &nearby_hull).?; ok {
+					if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
+						continue;
+					}
 
-				if contact.length < best_spring_contact.length {
-					best_spring_contact = contact;
+					if contact.length < best_spring_contact.length {
+						best_spring_contact = contact;
+					}
 				}
 			}
 		}
@@ -303,7 +357,7 @@ find_spring_constraints :: proc(using game: ^Game, dt: f32) {
 	}
 
 	if small_array.len(manifold.contacts) > 0 {
-		set_spring_constraint_set(&constraints, car, &manifold, dt);
+		set_spring_constraint_set(constraints, car, &manifold, dt);
 	}
 }
 
@@ -488,25 +542,25 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 @(private="file")
 handle_status_effects :: proc(car: ^Car_Entity, rigid_body: ^Rigid_Body_Entity) {
 	#partial switch rigid_body.status_effect {
-	case .Shock:
+	case .Shock, .ExplodingShock:
 		shock_car(car);
 	case .Fire:
 		light_car_on_fire(car);
 	}
 }
 
-clear_contact_helpers :: proc(contact_helpers: ^[dynamic]Geometry_Lookup, entities_geos: ^Entities_Geos) {
+clear_contact_helpers :: proc(contact_helpers: ^[dynamic]Geometry_Lookup) {
 	for lookup in contact_helpers {
-		remove_geometry(entities_geos, lookup);
+		remove_geometry(lookup);
 	}
 
 	clear(contact_helpers);
 }
 
-add_contact_helper :: proc(contact_helpers: ^[dynamic]Geometry_Lookup, entities_geos: ^Entities_Geos, manifold: ^Contact_Manifold) {
+add_contact_helper :: proc(contact_helpers: ^[dynamic]Geometry_Lookup, manifold: ^Contact_Manifold) {
 	for contact in small_array.slice(&manifold.contacts) {
 		geo := init_line_helper("contact_helper", contact.position_b, manifold.normal * 3);
-		geo_lookup := add_geometry(entities_geos, geo, .KeepRender);
+		geo_lookup := add_geometry(geo, .KeepRender);
 		append(contact_helpers, geo_lookup);
 	}
 }

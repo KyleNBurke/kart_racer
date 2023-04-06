@@ -1,5 +1,6 @@
 package main;
 
+import "core:math";
 import "core:math/linalg";
 import "math2";
 
@@ -15,7 +16,7 @@ Collision_Hull :: struct {
 Hull_Kind :: enum {Box, Cylinder, Mesh}
 
 init_collision_hull :: proc(local_transform, entity_global_transform: linalg.Matrix4f32, kind: Hull_Kind) -> Collision_Hull {
-	local_bounds: math2.Box3f32;
+	local_bounds: math2.Box3f32 = ---;
 
 	switch kind {
 		case .Box, .Cylinder:
@@ -33,27 +34,38 @@ init_collision_hull :: proc(local_transform, entity_global_transform: linalg.Mat
 		math2.BOX3F32_ZERO,
 	};
 
-	update_collision_hull_global_transform_and_bounds(&hull, entity_global_transform);
-
 	return hull;
 }
 
 // Be careful about calling this. The collision hull grid relies on the hull bounds to be exactly where it was during the last grid update. If this is called haphazardly, the collision hull grid may
 // not be able to find the correct grid cells to remove the hulls. This can, of course be changed, it's just currently implemented this way.
-update_collision_hull_global_transform_and_bounds :: proc(using hull: ^Collision_Hull, entity_global_transform: linalg.Matrix4f32) {
-	global_transform = entity_global_transform * local_transform;
-	inv_global_transform = linalg.matrix4_inverse(global_transform);
+update_entity_hull_transforms_and_bounds :: proc(entity: ^Entity, transform: linalg.Matrix4f32) {
+	assert(len(entity.collision_hulls) > 0);
+	entity_min: linalg.Vector3f32 = linalg.Vector3f32 { math.INF_F32,  math.INF_F32,  math.INF_F32};
+	entity_max: linalg.Vector3f32 = linalg.Vector3f32 {-math.INF_F32, -math.INF_F32, -math.INF_F32};
 
-	// We can ignore the translation components and use a matrix 3 because we're transforming the extent with this which is a direction vector
-	global_transform_abs := linalg.Matrix3f32 {
-		abs(global_transform[0][0]), abs(global_transform[1][0]), abs(global_transform[2][0]),
-		abs(global_transform[0][1]), abs(global_transform[1][1]), abs(global_transform[2][1]),
-		abs(global_transform[0][2]), abs(global_transform[1][2]), abs(global_transform[2][2]),
-	};
+	for hull in &entity.collision_hulls {
+		hull.global_transform = transform * hull.local_transform;
+		hull.inv_global_transform = linalg.matrix4_inverse(hull.global_transform);
 
-	center := math2.matrix4_transform_point(global_transform, math2.box_center(local_bounds));
-	extent := math2.matrix3_transform_direction(global_transform_abs, math2.box_extent(local_bounds));
+		// We can ignore the translation components and use a matrix 3 because we're transforming the extent with this which is a direction vector
+		t := &hull.global_transform
+		global_transform_abs := linalg.Matrix3f32 {
+			abs(t[0][0]), abs(t[1][0]), abs(t[2][0]),
+			abs(t[0][1]), abs(t[1][1]), abs(t[2][1]),
+			abs(t[0][2]), abs(t[1][2]), abs(t[2][2]),
+		};
 
-	global_bounds.min = center - extent;
-	global_bounds.max = center + extent;
+		center := math2.matrix4_transform_point(hull.global_transform, math2.box_center(hull.local_bounds));
+		extent := math2.matrix3_transform_direction(global_transform_abs, math2.box_extent(hull.local_bounds));
+
+		hull.global_bounds.min = center - extent;
+		hull.global_bounds.max = center + extent;
+
+		entity_min = linalg.min(entity_min, hull.global_bounds.min);
+		entity_max = linalg.max(entity_max, hull.global_bounds.max);
+	}
+
+	entity.bounds.min = entity_min;
+	entity.bounds.max = entity_max;
 }

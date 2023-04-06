@@ -1,5 +1,6 @@
 package main;
 
+import "core:slice";
 import "core:math";
 import "core:math/linalg";
 import "core:math/rand";
@@ -22,9 +23,9 @@ Fire_Particle :: struct {
 	time_alive: f32,
 }
 
-init_shock_particles :: proc(entities_geos: ^Entities_Geos, shock_cubes: []Entity_Lookup) {
-	for lookup in shock_cubes {
-		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
+init_shock_particles :: proc(shock_entities: []Entity_Lookup) {
+	for lookup in shock_entities {
+		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		for _ in 0..<150 {
 			particle: Shock_Particle;
@@ -35,9 +36,9 @@ init_shock_particles :: proc(entities_geos: ^Entities_Geos, shock_cubes: []Entit
 	}
 }
 
-init_fire_particles :: proc(entities_geos: ^Entities_Geos, fire_cubes: []Entity_Lookup) {
-	for lookup in fire_cubes {
-		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
+init_fire_particles :: proc(fire_entities: []Entity_Lookup) {
+	for lookup in fire_entities {
+		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		for _ in 0..<200 {
 			particle: Fire_Particle;
@@ -46,23 +47,29 @@ init_fire_particles :: proc(entities_geos: ^Entities_Geos, fire_cubes: []Entity_
 	}
 }
 
-cleanup_shock_cube_particles :: proc(entities_geos: ^Entities_Geos, shock_cubes: []Entity_Lookup) {
-	for lookup in shock_cubes {
-		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
+cleanup_shock_entity_particles :: proc(shock_entities: []Entity_Lookup) {
+	for lookup in shock_entities {
+		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 		delete(rigid_body.shock_particles);
 	}
 }
 
-cleanup_fire_cube_particles :: proc(entities_geos: ^Entities_Geos, fire_cubes: []Entity_Lookup) {
-	for lookup in fire_cubes {
-		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
+cleanup_fire_entity_particles :: proc(fire_entities: []Entity_Lookup) {
+	for lookup in fire_entities {
+		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 		delete(rigid_body.fire_particles);
 	}
 }
 
-update_shock_cube_particles :: proc(entities_geos: ^Entities_Geos, shock_cubes: []Entity_Lookup, dt: f32) {
-	for lookup in shock_cubes {
-		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
+remove_from_shock_entites :: proc(shock_entities: ^[dynamic]Entity_Lookup, lookup: Entity_Lookup) {
+	i, ok := slice.linear_search(shock_entities[:], lookup);
+	assert(ok);
+	unordered_remove(shock_entities, i);
+}
+
+update_shock_entity_particles :: proc(shock_entities: []Entity_Lookup, dt: f32) {
+	for lookup in shock_entities {
+		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		for particle in &rigid_body.shock_particles {
 			dist := linalg.abs(particle.position - rigid_body.position);
@@ -120,12 +127,12 @@ reset_shock_particle :: proc(rigid_body: ^Rigid_Body_Entity, particle: ^Shock_Pa
 	particle.time_alive = 0;
 }
 
-update_fire_cube_particles :: proc(entities_geos: ^Entities_Geos, fire_cubes: []Entity_Lookup, dt: f32) {
+update_fire_entity_particles :: proc(fire_entities: []Entity_Lookup, dt: f32) {
 	MAX_OFFSET :: 1.1;
 	DRAG :: 20;
 
-	for lookup in fire_cubes {
-		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
+	for lookup in fire_entities {
+		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		for particle in &rigid_body.fire_particles {
 			if particle.time_alive >= particle.life_time {
@@ -176,9 +183,9 @@ reset_fire_particle :: proc(rigid_body: ^Rigid_Body_Entity, particle: ^Fire_Part
 	particle.time_alive = 0;
 }
 
-draw_shock_cube_particles ::  proc(vulkan: ^Vulkan, entities_geos: ^Entities_Geos, shock_cubes: []Entity_Lookup) {
-	for lookup in shock_cubes {
-		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
+draw_shock_entity_particles ::  proc(vulkan: ^Vulkan, shock_entities: []Entity_Lookup) {
+	for lookup in shock_entities {
+		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		for particle in &rigid_body.shock_particles {
 			draw_particle(vulkan, &particle);
@@ -186,9 +193,9 @@ draw_shock_cube_particles ::  proc(vulkan: ^Vulkan, entities_geos: ^Entities_Geo
 	}
 }
 
-draw_fire_cube_particles :: proc(vulkan: ^Vulkan, entities_geos: ^Entities_Geos, fire_cubes: []Entity_Lookup) {
-	for lookup in fire_cubes {
-		rigid_body := get_entity(entities_geos, lookup).variant.(^Rigid_Body_Entity);
+draw_fire_entity_particles :: proc(vulkan: ^Vulkan, fire_entities: []Entity_Lookup) {
+	for lookup in fire_entities {
+		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		for particle in &rigid_body.fire_particles {
 			draw_particle(vulkan, &particle);

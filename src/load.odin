@@ -69,7 +69,6 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 }
 
 load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
-	config := cast(^Config) context.user_ptr;
 	file_path := fmt.tprintf("res/maps/%s.kgl", config.level);
 	bytes, success := os.read_entire_file_from_filename(file_path);
 	defer delete(bytes);
@@ -79,10 +78,10 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 	spawn_position = read_vec3(&bytes, &pos);
 	spawn_orientation = read_quat(&bytes, &pos);
 
-	// Ground grid
-	ground_grid_half_size := read_f32(&bytes, &pos);
-	reset_ground_grid(&ground_grid, ground_grid_half_size);
-	reset_collision_hull_grid(&collision_hull_grid, ground_grid_half_size);
+	// Init grids
+	grid_half_size := read_f32(&bytes, &pos);
+	reset_ground_grid(&ground_grid, grid_half_size);
+	init_entity_grid(&entity_grid, grid_half_size);
 	
 	{
 		meshes_count := read_u32(&bytes, &pos);
@@ -106,7 +105,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 	for i in 0..<geometries_count {
 		indices, attributes := read_indices_attributes(&bytes, &pos);
 		geometry := init_triangle_geometry("", indices, attributes);
-		geometry_lookups[i] = add_geometry(&entities_geos, geometry);
+		geometry_lookups[i] = add_geometry(geometry);
 
 		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 	}
@@ -122,7 +121,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 			hull_count := read_u32(&bytes, &pos);
 
 			inanimate_entity := new_inanimate_entity(position, orientation, size);
-			entity_lookup := add_entity(&entities_geos, geometry_lookups[geometry_index], inanimate_entity);
+			entity_lookup := add_entity(geometry_lookups[geometry_index], inanimate_entity);
 
 			for hull_index in 0..<hull_count {
 				local_position := read_vec3(&bytes, &pos);
@@ -134,8 +133,11 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 				hull := init_collision_hull(local_transform, inanimate_entity.transform, kind);
 				
 				append(&inanimate_entity.collision_hulls, hull);
-				hull_ptr := slice.last_ptr(inanimate_entity.collision_hulls[:]);
-				insert_into_collision_hull_grid(&collision_hull_grid, entity_lookup, hull_ptr);
+			}
+
+			if hull_count > 0 {
+				update_entity_hull_transforms_and_bounds(inanimate_entity, inanimate_entity.transform);
+				insert_entity_into_grid(&entity_grid, entity_lookup, inanimate_entity);
 			}
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -164,12 +166,13 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 					case 0: status_effect = .None;
 					case 1: status_effect = .Shock;
 					case 2: status_effect = .Fire;
+					case 3: status_effect = .ExplodingShock;
 					case: unreachable()
 				}
 
 				rigid_body := new_rigid_body_entity(position, orientation, size, mass, dimensions, status_effect);
 				rigid_body.collision_exclude = collision_exclude;
-				entity_lookup := add_entity(&entities_geos, geometry_lookups[geometry_index], rigid_body);
+				entity_lookup := add_entity(geometry_lookups[geometry_index], rigid_body);
 
 				hull_count := read_u32(&bytes, &pos);
 				for hull_index in 0..<hull_count {
@@ -182,10 +185,10 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 					hull := init_collision_hull(local_transform, rigid_body.transform, kind);
 
 					append(&rigid_body.collision_hulls, hull);
-					hull_ptr := slice.last_ptr(rigid_body.collision_hulls[:]);
-					hull_record := insert_into_collision_hull_grid(&collision_hull_grid, entity_lookup, hull_ptr);
-					append(&rigid_body.collision_hull_record_indices, hull_record);
 				}
+
+				update_entity_hull_transforms_and_bounds(rigid_body, rigid_body.transform);
+				insert_entity_into_grid(&entity_grid, entity_lookup, rigid_body);
 
 				if config.init_sleeping_islands {
 					add_rigid_body_to_island(&islands, int(island_index), entity_lookup, rigid_body);
@@ -194,10 +197,10 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 				}
 				
 				#partial switch status_effect {
-					case .Shock:
-						append(&shock_cubes, entity_lookup);
+					case .Shock, .ExplodingShock:
+						append(&shock_entities, entity_lookup);
 					case .Fire:
-						append(&fire_cubes, entity_lookup);
+						append(&fire_entities, entity_lookup);
 				}
 
 				assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -219,9 +222,9 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 	indices, attributes := read_indices_attributes(&bytes, &pos);
 
 	geometry := init_triangle_geometry("car", indices, attributes);
-	geometry_lookup := add_geometry(&entities_geos, geometry);
+	geometry_lookup := add_geometry(geometry);
 	entity := new_car_entity(spawn_position, spawn_orientation);
-	entity_lookup := add_entity(&entities_geos, geometry_lookup, entity);
+	entity_lookup := add_entity(geometry_lookup, entity);
 	game.car = entity;
 
 	hull_count := read_u32(&bytes, &pos);
@@ -242,14 +245,53 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 	{ // Wheels
 		indices, attributes := read_indices_attributes(&bytes, &pos);
 		geometry := init_triangle_geometry("wheel", indices, attributes);
-		geometry_lookup := add_geometry(&entities_geos, geometry);
+		geometry_lookup := add_geometry(geometry);
 
 		for i in 0..<4 {
 			entity := new_inanimate_entity();
-			entity_lookup := add_entity(&entities_geos, geometry_lookup, entity);
+			entity_lookup := add_entity(geometry_lookup, entity);
 			car.wheels[i].entity_lookup = entity_lookup;
 		}
 
 		car.wheel_radius = read_f32(&bytes, &pos);
+	}
+}
+
+load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
+	bytes, success := os.read_entire_file_from_filename("res/runtime_assets.kga");
+	defer delete(bytes);
+	assert(success);
+	pos := 0;
+
+	{ // Shock barrel shrapnel
+		count := read_u32(&bytes, &pos);
+
+		for i in 0..<count {
+			indices, attributes := read_indices_attributes(&bytes, &pos);
+			position := read_vec3(&bytes, &pos);
+			orientation := read_quat(&bytes, &pos);
+			size := read_vec3(&bytes, &pos);
+			dimensions := read_vec3(&bytes, &pos);
+			hull_position := read_vec3(&bytes, &pos);
+			hull_orientation := read_quat(&bytes, &pos);
+			hull_size := read_vec3(&bytes, &pos);
+			
+			geo := init_triangle_geometry("shrapnel", indices, attributes);
+			geo_lookup := add_geometry(geo, .Keep);
+			hull_local_transform := linalg.matrix4_from_trs(hull_position, hull_orientation, hull_size);
+
+			shrapnel := Shock_Barrel_Shrapnel {
+				geo_lookup,
+				position,
+				orientation,
+				size,
+				dimensions,
+				hull_local_transform,
+			};
+
+			append(&runtime_assets.shock_barrel_shrapnel, shrapnel);
+
+			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+		}
 	}
 }

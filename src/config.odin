@@ -6,6 +6,8 @@ import "core:unicode/utf8";
 import "core:strings";
 import "core:strconv";
 
+config := Config {};
+
 Config :: struct {
 	level: string,
 	contact_point_helpers: bool,
@@ -16,7 +18,7 @@ Config :: struct {
 
 Config_Map :: map[string]string;
 
-load_config :: proc() -> Config {
+load_config :: proc(config: ^Config) {
 	file_path :: "res/config.txt";
 
 	data, data_ok := os.read_entire_file_from_filename(file_path, context.temp_allocator);
@@ -71,14 +73,11 @@ load_config :: proc() -> Config {
 		return b;
 	}
 
-	config := Config {
-		level = get_string(&data_map, "level"),
-		contact_point_helpers = get_bool(&data_map, "contact_point_helpers"),
-		hull_helpers = get_bool(&data_map, "hull_helpers"),
-		island_helpers = get_bool(&data_map, "island_helpers"),
-		init_sleeping_islands = get_bool(&data_map, "init_sleeping_islands"),
-	};
+	config.level = get_string(&data_map, "level");
+	config.contact_point_helpers = get_bool(&data_map, "contact_point_helpers");
+	config.hull_helpers = get_bool(&data_map, "hull_helpers");
+	config.island_helpers = get_bool(&data_map, "island_helpers");
+	config.init_sleeping_islands = get_bool(&data_map, "init_sleeping_islands");
 	
 	fmt.printf("Loaded config file %s\n", file_path);
-	return config;
 }

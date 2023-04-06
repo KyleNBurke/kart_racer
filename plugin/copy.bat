@@ -1,1 +1,1 @@
-xcopy .\plugin\src "C:\Program Files\Blender Foundation\Blender 3.4\3.4\scripts\addons\kart_guys\" /y
+xcopy .\plugin\src "C:\Program Files\Blender Foundation\Blender 3.5\3.5\scripts\addons\kart_guys\" /y

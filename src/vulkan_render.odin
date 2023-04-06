@@ -6,7 +6,7 @@ import vk "vendor:vulkan";
 import "core:math/linalg";
 import "math2";
 
-begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, entities_geos: ^Entities_Geos, texts: ^[dynamic]Text) -> bool {
+begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, texts: ^[dynamic]Text) -> bool {
 	logical_device := vulkan_context.logical_device;
 
 	{ // Wait for this logical frame to become available

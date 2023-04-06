@@ -42,9 +42,14 @@ Improvements
 - Cylinder top and bottom faces can generate more than four contacts. This means we could implement manifold reduction. I did some investigation and it looks like it's not generating more than 5 contacts even though it could theoretically generate 8.
 
 Todo
+- Exploding shock barrels
+	- Try having the entity hold it's own lookup. Entity_Grid is the impetus.
+	- We need to make sure cylinders with non uniform scaling works (The barrel does have a slight vertical stretch). I think there was a place in the code where that wasn't done?
+	- Explosion implementation with shrapnel pieces (involves keeping those pieces around in memory and spawning when needed)
+	- Backface rendering
 - Cylinder bumper
 	- Figure out how to do it. Use restitution? Should it even run through the constraint system?
-	- Cylinder collision detection and resolution
+	- [done] Cylinder collision detection and resolution
 	- Blender design (should be consistent with rail bumper)
 	- Exporting
 	- Importing
@@ -54,7 +59,6 @@ Todo
 - The case where a geometry is marked as Free has a problem I believe. You see the free-ing logic only happens once you remove an entity from a geometry. So, if you create a geometry, mark it as Free and never assign an entity to it. I think the geometry really should be cleaned up but that'll never happen. Maybe we should add some debug logic that runs every frame to catch this potential memory leak.
 
 Unecessary but cool things we could do
-- Contact point, normal and tangent visualizers
 - Export and import names
 
 Sequential impulse solver

@@ -4,6 +4,7 @@ import "core:fmt";
 import "core:c";
 import "core:time";
 import "core:runtime";
+import "core:math/linalg";
 import "vendor:glfw";
 
 when ODIN_DEBUG {
@@ -21,11 +22,10 @@ Callback_State :: struct {
 
 Game :: struct {
 	camera: Camera,
-	entities_geos: Entities_Geos,
 	font: Font,
 	texts: [dynamic]Text,
 	ground_grid: Ground_Grid,
-	collision_hull_grid: Collision_Hull_Grid,
+	entity_grid: Entity_Grid,
 	awake_rigid_body_lookups: [dynamic]Entity_Lookup,
 	islands: Islands,
 	constraints: Constraints,
@@ -33,8 +33,9 @@ Game :: struct {
 	car: ^Car_Entity,
 	car_helpers: Car_Helpers,
 	frame_metrics: Frame_Metrics,
-	shock_cubes: [dynamic]Entity_Lookup,
-	fire_cubes: [dynamic]Entity_Lookup,
+	shock_entities: [dynamic]Entity_Lookup,
+	fire_entities: [dynamic]Entity_Lookup,
+	runtime_assets: Runtime_Assets,
 }
 
 main :: proc() {
@@ -44,8 +45,7 @@ main :: proc() {
 		context.allocator = mem.tracking_allocator(&track);
 	}
 
-	config := load_config();
-	context.user_ptr = &config;
+	load_config(&config);
 
 	assert(glfw.Init() == 1);
 
@@ -109,7 +109,7 @@ main :: proc() {
 			updates += 1;
 		}
 
-		suboptimal_swapchain = begin_render_frame(&vulkan, &game.camera, &game.entities_geos, &game.texts);
+		suboptimal_swapchain = begin_render_frame(&vulkan, &game.camera, &game.texts);
 
 		if !suboptimal_swapchain {
 			immediate_mode_render_game(&vulkan, &game);
@@ -176,60 +176,61 @@ init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
 
 	spawn_position, spawn_orientation := load_level(&game);
 	load_car(&game, spawn_position, spawn_orientation);
-	game.car_helpers = init_car_helpers(&game.entities_geos);
+	load_runtime_assets(&game.runtime_assets);
 
-	init_collision_hull_grid(&game.collision_hull_grid, &game.entities_geos);
-	init_shock_particles(&game.entities_geos, game.shock_cubes[:]);
-	init_fire_particles(&game.entities_geos, game.fire_cubes[:]);
+	game.car_helpers = init_car_helpers();
+
+	init_shock_particles(game.shock_entities[:]);
+	init_fire_particles(game.fire_entities[:]);
 
 	return game;
 }
 
 update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	if game.camera.state != .First_Person {
-		move_car(window, game.car, dt, &game.entities_geos, &game.car_helpers);
+		move_car(window, game.car, dt, &game.car_helpers);
 	}
 	
 	simulate(game, dt);
-	position_and_orient_wheels(game.car, &game.entities_geos, dt);
+	position_and_orient_wheels(game.car, dt);
 	move_camera(&game.camera, window, game.car, dt);
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
 
-	update_shock_cube_particles(&game.entities_geos, game.shock_cubes[:], dt);
-	update_fire_cube_particles(&game.entities_geos, game.fire_cubes[:], dt);
+	update_shock_entity_particles(game.shock_entities[:], dt);
+	update_fire_entity_particles(game.fire_entities[:], dt);
 	update_car_status_effects_and_particles(game.car, game.camera.transform, dt);
 
-	config := cast(^Config) context.user_ptr;
 	if config.hull_helpers {
-		collision_hull_grid_update_hull_helpers(&game.collision_hull_grid, &game.entities_geos);
+		update_hull_helpers(game.awake_rigid_body_lookups[:], &game.islands);
 	}
 
 	free_all(context.temp_allocator);
 }
 
 immediate_mode_render_game :: proc(vulkan: ^Vulkan, game: ^Game) {
-	draw_shock_cube_particles(vulkan, &game.entities_geos, game.shock_cubes[:]);
-	draw_fire_cube_particles(vulkan, &game.entities_geos, game.fire_cubes[:]);
+	draw_shock_entity_particles(vulkan, game.shock_entities[:]);
+	draw_fire_entity_particles(vulkan, game.fire_entities[:]);
 	draw_car_status_effects(vulkan, game.car);
 }
 
 cleanup_game :: proc(game: ^Game) {
-	cleanup_shock_cube_particles(&game.entities_geos, game.shock_cubes[:]);
-	cleanup_fire_cube_particles(&game.entities_geos, game.fire_cubes[:]);
+	cleanup_shock_entity_particles(game.shock_entities[:]);
+	cleanup_fire_entity_particles(game.fire_entities[:]);
 	cleanup_car(game.car);
-	cleanup_entities_geos(&game.entities_geos);
+	cleanup_entities_geos();
 	cleanup_font(&game.font);
 	ground_grid_cleanup(&game.ground_grid);
-	collision_hull_grid_cleanup(&game.collision_hull_grid);
+	cleanup_entity_grid(&game.entity_grid);
 	cleanup_constraints(&game.constraints);
 	cleanup_islands(&game.islands);
+	cleanup_runtime_assets(&game.runtime_assets);
 
 	for text in &game.texts {
 		cleanup_text(&text);
 	}
 
-	delete(game.shock_cubes);
-	delete(game.fire_cubes);
+	delete(game.shock_entities);
+	delete(game.fire_entities);
 	delete(game.texts);
 	delete(game.awake_rigid_body_lookups);
 	delete(game.contact_helpers);

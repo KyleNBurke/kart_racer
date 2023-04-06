@@ -28,14 +28,14 @@ Car_Helpers :: struct {
 	back_tire_left_geo_lookup: Geometry_Lookup,
 }
 
-init_car_helpers :: proc(entities_geos: ^Entities_Geos) -> Car_Helpers {
+init_car_helpers :: proc() -> Car_Helpers {
 	using car_helpers: Car_Helpers;
 
 	front_tire_left_geo := Geometry { name = "Front tire left visualizer" };
-	front_tire_left_geo_lookup = add_geometry(entities_geos, front_tire_left_geo, .KeepRender);
+	front_tire_left_geo_lookup = add_geometry(front_tire_left_geo, .KeepRender);
 
 	back_tire_left_geo := Geometry { name = "Back tire left visualizer" };
-	back_tire_left_geo_lookup = add_geometry(entities_geos, back_tire_left_geo, .KeepRender);
+	back_tire_left_geo_lookup = add_geometry(back_tire_left_geo, .KeepRender);
 
 	return car_helpers;
 }
@@ -201,7 +201,7 @@ calculate_car_inertia_tensor :: proc(orientation: linalg.Quaternionf32) -> linal
 	return math2.calculate_inv_global_inertia_tensor(orientation, INV_LOCAL_INERTIA_TENSOR);
 }
 
-move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_geos: ^Entities_Geos, car_helpers: ^Car_Helpers) {
+move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, car_helpers: ^Car_Helpers) {
 	axes := glfw.GetJoystickAxes(glfw.JOYSTICK_1);
 	accel_multiplier: f32 = 0;
 	steer_multiplier: f32 = 0;
@@ -286,10 +286,10 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 			top_speed_multiplier := max((20 - abs(lat_vel)) / 20, 0);
 			top_speed = (full_grip_top_speed - 10) * top_speed_multiplier + 10;
 
-			front_tire_left_geo := get_geometry(entities_geos, car_helpers.front_tire_left_geo_lookup);
+			front_tire_left_geo := get_geometry(car_helpers.front_tire_left_geo_lookup);
 			set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
 
-			back_tire_left_geo := get_geometry(entities_geos, car_helpers.back_tire_left_geo_lookup);
+			back_tire_left_geo := get_geometry(car_helpers.back_tire_left_geo_lookup);
 			set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
 		} else {
 			if front_left_contact_normal_ok || front_right_contact_normal_ok {
@@ -310,7 +310,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 				car.velocity -= tire_lat_dir * tire_fric;
 				car.angular_velocity -= body_tensor * body_up * tire_fric;
 	
-				front_tire_left_geo := get_geometry(entities_geos, car_helpers.front_tire_left_geo_lookup);
+				front_tire_left_geo := get_geometry(car_helpers.front_tire_left_geo_lookup);
 				set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, tire_lat_dir * 2, GREEN);
 			}
 
@@ -324,7 +324,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 				car.velocity -= body_surface_lat_dir * tire_fric;
 				car.angular_velocity -= body_tensor * -body_up * tire_fric;
 
-				back_tire_left_geo := get_geometry(entities_geos, car_helpers.back_tire_left_geo_lookup);
+				back_tire_left_geo := get_geometry(car_helpers.back_tire_left_geo_lookup);
 				set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, GREEN);
 			}
 
@@ -359,7 +359,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, entities_
 	}
 }
 
-position_and_orient_wheels :: proc(car: ^Car_Entity, entities_geos: ^Entities_Geos, dt: f32) {
+position_and_orient_wheels :: proc(car: ^Car_Entity, dt: f32) {
 	// Calculate wheel orientations
 	body_left := math2.matrix4_left(car.transform);
 
@@ -391,7 +391,7 @@ position_and_orient_wheels :: proc(car: ^Car_Entity, entities_geos: ^Entities_Ge
 	body_down := -math2.matrix4_up(car.transform);
 
 	for wheel, wheel_index in &car.wheels {
-		wheel_entity := get_entity(entities_geos, wheel.entity_lookup);
+		wheel_entity := get_entity(wheel.entity_lookup);
 		wheel_entity.position = wheel.body_point + body_down * (wheel.spring_length - car.wheel_radius);
 		
 		body_euler_y, body_euler_z, body_euler_x := linalg.euler_angles_yzx_from_quaternion(car.orientation);
