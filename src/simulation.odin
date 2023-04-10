@@ -426,8 +426,8 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 	local_origin := math2.matrix4_transform_point(hull.inv_global_transform, origin);
 
 	// If the hull has a scale this will not be normalized. I think normalizing it changes the "scale" or "reference view" of the t value
-	// in the cylinder case so they are small than what they should be. That can probably be corrected somehow but this does doesn't
-	// seem use need this to be normalized so we can simply leave it unnormalized.
+	// in the cylinder case so they are smaller than what they should be. That can probably be corrected somehow but this doesn't seem to
+	// need to be normalized so we can simply leave it unnormalized.
 	local_direction := math2.matrix4_transform_direction(hull.inv_global_transform, direction);
 
 	local_normal: linalg.Vector3f32;
