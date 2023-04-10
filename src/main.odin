@@ -45,7 +45,7 @@ main :: proc() {
 		context.allocator = mem.tracking_allocator(&track);
 	}
 
-	load_config(&config);
+	load_config();
 
 	assert(glfw.Init() == 1);
 
@@ -60,6 +60,7 @@ main :: proc() {
 	glfw.SetKeyCallback(window, key_callback);
 
 	vulkan := init_vulkan(window);
+	init_entities_geos();
 	game := init_game(&vulkan, window);
 
 	free_all(context.temp_allocator);
@@ -217,7 +218,6 @@ cleanup_game :: proc(game: ^Game) {
 	cleanup_shock_entity_particles(game.shock_entities[:]);
 	cleanup_fire_entity_particles(game.fire_entities[:]);
 	cleanup_car(game.car);
-	cleanup_entities_geos();
 	cleanup_font(&game.font);
 	ground_grid_cleanup(&game.ground_grid);
 	cleanup_entity_grid(&game.entity_grid);
@@ -228,6 +228,8 @@ cleanup_game :: proc(game: ^Game) {
 	for text in &game.texts {
 		cleanup_text(&text);
 	}
+	
+	cleanup_entities_geos();
 
 	delete(game.shock_entities);
 	delete(game.fire_entities);

@@ -38,7 +38,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 		tentative_transform := linalg.matrix4_from_trs(rigid_body.new_position, new_orientation, rigid_body.size);
 		rigid_body.tentative_transform = tentative_transform;
-		move_rigid_body_tentatively_in_grid(&game.entity_grid, lookup, rigid_body);
+		move_rigid_body_tentatively_in_grid(&game.entity_grid, rigid_body);
 
 		rigid_body.checked_collision = false;
 		init_island(&game.islands, lookup, rigid_body);
@@ -96,7 +96,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 	}
 
 	// Rigid body collisions
-	for provoking_lookup, provoking_lookup_index in &game.awake_rigid_body_lookups { // Do I need to use "&" here? What is the deal with that again in Odin?
+	for provoking_lookup, provoking_lookup_index in game.awake_rigid_body_lookups {
 		provoking_rigid_body := get_entity(provoking_lookup).variant.(^Rigid_Body_Entity);
 
 		// Collisions with the ground
@@ -107,7 +107,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 				nearby_triangle := ground_grid_get_triangle(&game.ground_grid, nearby_triangle_index);
 
 				if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], nearby_triangle, &provoking_hull).?; ok {
-					process_rigid_body_ground_collision(provoking_lookup, provoking_rigid_body, provoking_hull.kind, &game.constraints, &manifold, dt, &game.contact_helpers);
+					process_rigid_body_ground_collision(provoking_rigid_body, provoking_hull.kind, &game.constraints, &manifold, dt, &game.contact_helpers);
 				}
 			}
 		}
@@ -160,6 +160,10 @@ simulate :: proc(game: ^Game, dt: f32) {
 	}
 	
 	append(&game.awake_rigid_body_lookups, ..entities_woken_up[:]);
+	
+	// Clear the entities woken up from awake islands colliding with asleep islands. We'll reuse this array to keep track
+	// of entities woken up from exploding barrels.
+	clear(&entities_woken_up);
 
 	for i := len(game.awake_rigid_body_lookups) - 1; i >= 0; i -= 1 {
 		lookup := game.awake_rigid_body_lookups[i];
@@ -178,9 +182,11 @@ simulate :: proc(game: ^Game, dt: f32) {
 			} else {
 				rigid_body.sleep_duration = 0;
 			}
+
+			rigid_body.checked_collision = false;
 		} else {
 			// Remove from entity grid
-			remove_entity_from_grid(&game.entity_grid, lookup, rigid_body);
+			remove_entity_from_grid(&game.entity_grid, rigid_body);
 
 			// Remove from islands
 			remove_rigid_body_from_island(&game.islands, lookup, rigid_body);
@@ -200,14 +206,29 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 			// Rmove from entity geos
 			remove_entity(lookup);
+
+			// Find nearby entities and add an explosion velocity to them
+			center := math2.box_center(rigid_body.bounds);
+			bounds := math2.Box3f32 { center - 5, center + 5 };
+			nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, bounds);
+
+			for lookup in nearby_lookups {
+				nearby_rigid_body, ok := get_entity(lookup).variant.(^Rigid_Body_Entity);
+				if !ok do continue;
+
+				dir := linalg.normalize(nearby_rigid_body.position - rigid_body.position);
+				nearby_rigid_body.velocity += dir * 50;
+
+				maybe_wake_island_post_solve(&game.islands, nearby_rigid_body, &entities_woken_up)
+			}
 		}
 	}
 
 	sleep_islands(&game.islands, &game.awake_rigid_body_lookups);
+	append(&game.awake_rigid_body_lookups, ..entities_woken_up[:]);
 }
 
 process_rigid_body_ground_collision :: proc(
-	provoking_lookup: Entity_Lookup,
 	provoking_rigid_body: ^Rigid_Body_Entity,
 	provoking_hull_kind: Hull_Kind,
 	constraints: ^Constraints,

@@ -28,31 +28,31 @@ init_entity_grid :: proc(grid: ^Entity_Grid, half_size: f32) {
 	}
 }
 
-insert_entity_into_grid :: proc(grid: ^Entity_Grid, lookup: Entity_Lookup, entity: ^Entity) {
+insert_entity_into_grid :: proc(grid: ^Entity_Grid, entity: ^Entity) {
 	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, entity.bounds);
 	assert(ok);
 
 	for x in grid_min_x..<grid_max_x {
 		for y in grid_min_y..<grid_max_y {
-			append(&grid.cells[x][y], lookup);
+			append(&grid.cells[x][y], entity.lookup);
 		}
 	}
 }
 
-remove_entity_from_grid :: proc(grid: ^Entity_Grid, lookup: Entity_Lookup, entity: ^Entity) {
+remove_entity_from_grid :: proc(grid: ^Entity_Grid, entity: ^Entity) {
 	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, entity.bounds);
 	if !ok do return;
 
 	for x in grid_min_x..<grid_max_x {
 		for y in grid_min_y..<grid_max_y {
-			i, ok := slice.linear_search(grid.cells[x][y][:], lookup);
+			i, ok := slice.linear_search(grid.cells[x][y][:], entity.lookup);
 			assert(ok);
 			unordered_remove(&grid.cells[x][y], i);
 		}
 	}
 }
 
-move_rigid_body_tentatively_in_grid :: proc(grid: ^Entity_Grid, lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
+move_rigid_body_tentatively_in_grid :: proc(grid: ^Entity_Grid, rigid_body: ^Rigid_Body_Entity) {
 	// Remove the lookup from the old cells which this entity spans
 	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, rigid_body.bounds);
 	if !ok do return;
@@ -61,7 +61,7 @@ move_rigid_body_tentatively_in_grid :: proc(grid: ^Entity_Grid, lookup: Entity_L
 		for y in grid_min_y..<grid_max_y {
 			cell := &grid.cells[x][y];
 
-			i, ok := slice.linear_search(cell[:], lookup);
+			i, ok := slice.linear_search(cell[:], rigid_body.lookup);
 			assert(ok);
 			unordered_remove(cell, i);
 		}
@@ -76,7 +76,7 @@ move_rigid_body_tentatively_in_grid :: proc(grid: ^Entity_Grid, lookup: Entity_L
 
 	for x in grid_min_x..<grid_max_x {
 		for y in grid_min_y..<grid_max_y {
-			append(&grid.cells[x][y], lookup);
+			append(&grid.cells[x][y], rigid_body.lookup);
 		}
 	}
 }

@@ -18,7 +18,7 @@ Config :: struct {
 
 Config_Map :: map[string]string;
 
-load_config :: proc(config: ^Config) {
+load_config :: proc() {
 	file_path :: "res/config.txt";
 
 	data, data_ok := os.read_entire_file_from_filename(file_path, context.temp_allocator);

@@ -14,11 +14,12 @@ Islands :: struct {
 }
 
 Island :: struct {
-	free: bool,
-	asleep: bool,
+	state: Island_State,
 	lookups: [dynamic]Entity_Lookup,
 	awake_island_index_index: int,
 }
+
+Island_State :: enum { Awake, Asleep, Free };
 
 init_islands :: proc(islands: ^Islands, count: u32) {
 	assert(len(islands.islands) == 0);
@@ -26,8 +27,7 @@ init_islands :: proc(islands: ^Islands, count: u32) {
 
 	for i in 0..<count {
 		append(&islands.islands, Island {
-			free = false,
-			asleep = true,
+			state = .Asleep,
 			lookups = [dynamic]Entity_Lookup {},
 			awake_island_index_index = -1,
 		});
@@ -51,8 +51,7 @@ clear_islands :: proc(islands: ^Islands) {
 
 init_island :: proc(islands: ^Islands, lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
 	island := Island {
-		free = false,
-		asleep = false,
+		state = .Awake,
 		lookups = [dynamic]Entity_Lookup {lookup},
 		awake_island_index_index = len(islands.awake_island_indices),
 	};
@@ -74,13 +73,23 @@ init_island :: proc(islands: ^Islands, lookup: Entity_Lookup, rigid_body: ^Rigid
 car_collision_maybe_wake_island :: proc(islands: ^Islands, entities_woken_up: ^[dynamic]Entity_Lookup, nearby_rigid_body: ^Rigid_Body_Entity) {
 	nearby_island := &islands.islands[nearby_rigid_body.island_index];
 
-	if nearby_island.asleep {
-		nearby_island.asleep = false;
+	if nearby_island.state == .Asleep {
+		nearby_island.state = .Awake;
 		append(&islands.awake_island_indices, nearby_rigid_body.island_index);
 		nearby_island.awake_island_index_index = len(islands.awake_island_indices) - 1;
 
 		append(entities_woken_up, ..nearby_island.lookups[:]);
 	}
+}
+
+maybe_wake_island_post_solve :: proc(islands: ^Islands, rigid_body: ^Rigid_Body_Entity, entities_woken_up: ^[dynamic]Entity_Lookup) {
+	island := &islands.islands[rigid_body.island_index];
+	if island.state == .Free || island.state == .Awake do return;
+
+	append(entities_woken_up, ..island.lookups[:]);
+	append(&islands.free_islands, rigid_body.island_index);
+	island.state = .Free;
+	delete(island.lookups);
 }
 
 rigid_body_collision_merge_islands :: proc(islands: ^Islands, entities_woken_up: ^[dynamic]Entity_Lookup, provoking_lookup: Entity_Lookup, provoking_rigid_body, nearby_rigid_body: ^Rigid_Body_Entity) {
@@ -99,20 +108,23 @@ rigid_body_collision_merge_islands :: proc(islands: ^Islands, entities_woken_up:
 		nearby_rigid_body.island_index = provoking_island_index;
 	}
 
-	if nearby_island.asleep {
-		nearby_island.asleep = false;
+	switch nearby_island.state {
+	case .Asleep:
 		append(entities_woken_up, ..nearby_island.lookups[:]);
-	} else {
+	case .Awake:
 		unordered_remove(&islands.awake_island_indices, nearby_island.awake_island_index_index);
+
 		if nearby_island.awake_island_index_index != len(islands.awake_island_indices) {
 			swapped_island_index := islands.awake_island_indices[nearby_island.awake_island_index_index];
 			swapped_island := &islands.islands[swapped_island_index];
 			swapped_island.awake_island_index_index = nearby_island.awake_island_index_index;
 		}
+	case .Free:
+		unreachable();
 	}
 
 	append(&islands.free_islands, nearby_island_index);
-	nearby_island.free = true;
+	nearby_island.state = .Free;
 	delete(nearby_island.lookups);
 }
 
@@ -129,7 +141,6 @@ sleep_islands :: proc(islands: ^Islands, awake_rigid_body_lookups: ^[dynamic]Ent
 
 		for lookup in island.lookups {
 			rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
-			rigid_body.checked_collision = false; // Explain
 
 			if rigid_body.sleep_duration < SLEEP_DURATION {
 				asleep = false;
@@ -138,13 +149,13 @@ sleep_islands :: proc(islands: ^Islands, awake_rigid_body_lookups: ^[dynamic]Ent
 		}
 
 		if asleep {
-			island.asleep = true;
+			island.state = .Asleep;
 			island.awake_island_index_index = -1;
 		} else {
 			append(awake_rigid_body_lookups, ..island.lookups[:]);
 
 			append(&islands.free_islands, island_index);
-			island.free = true;
+			island.state = .Free;
 			delete(island.lookups);
 		}
 	}
@@ -153,7 +164,7 @@ sleep_islands :: proc(islands: ^Islands, awake_rigid_body_lookups: ^[dynamic]Ent
 remove_rigid_body_from_island :: proc(islands: ^Islands, lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
 	island := &islands.islands[rigid_body.island_index];
 
-	if island.asleep {
+	if island.state == .Asleep {
 		unimplemented();
 	}
 
@@ -162,15 +173,17 @@ remove_rigid_body_from_island :: proc(islands: ^Islands, lookup: Entity_Lookup, 
 	unordered_remove(&island.lookups, index);
 
 	if len(island.lookups) == 0 {
-		// Do we even need to clean it up?
-	}
+		unordered_remove(&islands.awake_island_indices, island.awake_island_index_index);
+		
+		if island.awake_island_index_index != len(islands.awake_island_indices) {
+			swapped_island_index := islands.awake_island_indices[island.awake_island_index_index];
+			swapped_island := &islands.islands[swapped_island_index];
+			swapped_island.awake_island_index_index = island.awake_island_index_index;
+		}
 
-	// Copy pasta - make proc? (don't have to)
-	unordered_remove(&islands.awake_island_indices, island.awake_island_index_index);
-	if island.awake_island_index_index != len(islands.awake_island_indices) {
-		swapped_island_index := islands.awake_island_indices[island.awake_island_index_index];
-		swapped_island := &islands.islands[swapped_island_index];
-		swapped_island.awake_island_index_index = island.awake_island_index_index;
+		append(&islands.free_islands, rigid_body.island_index);
+		island.state = .Free;
+		delete(island.lookups);
 	}
 }
 
@@ -182,7 +195,7 @@ update_island_helpers :: proc(islands: ^Islands) {
 	clear(&islands.island_helpers);
 
 	for island, island_index in &islands.islands {
-		if island.free do continue;
+		if island.state == .Free do continue;
 
 		bounds_min := linalg.Vector3f32 { max(f32), max(f32), max(f32) };
 		bounds_max := linalg.Vector3f32 { min(f32), min(f32), min(f32) };
@@ -196,7 +209,7 @@ update_island_helpers :: proc(islands: ^Islands) {
 			}
 		}
 
-		color := [?]f32 {1, 1, 1} if island.asleep else [?]f32 {0, 1, 0};
+		color := [?]f32 {1, 1, 1} if island.state == .Asleep else [?]f32 {0, 1, 0};
 		geo := init_box_helper("Island visualizer", bounds_min, bounds_max, color);
 		geo_lookup := add_geometry(geo, .KeepRender);
 		append(&islands.island_helpers, geo_lookup);
@@ -216,7 +229,7 @@ update_hull_helpers :: proc(awake_entity_lookups: []Entity_Lookup, islands: ^Isl
 	all_lookups := slice.clone_to_dynamic(awake_entity_lookups, context.temp_allocator);
 
 	for island in &islands.islands {
-		if island.free do continue;
+		if island.state == .Free do continue;
 
 		for lookup in island.lookups {
 			append(&all_lookups, lookup);
@@ -252,7 +265,7 @@ cleanup_islands :: proc(islands: ^Islands) {
 	delete(islands.island_helpers);
 
 	for island in &islands.islands {
-		if island.free do continue;
+		if island.state == .Free do continue;
 
 		delete(island.lookups);
 	}

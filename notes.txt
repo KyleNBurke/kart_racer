@@ -43,9 +43,9 @@ Improvements
 
 Todo
 - Exploding shock barrels
-	- Try having the entity hold it's own lookup. Entity_Grid is the impetus.
+	- [done] Try having the entity hold it's own lookup. Entity_Grid is the impetus.
 	- We need to make sure cylinders with non uniform scaling works (The barrel does have a slight vertical stretch). I think there was a place in the code where that wasn't done?
-	- Explosion implementation with shrapnel pieces (involves keeping those pieces around in memory and spawning when needed)
+	- [done] Explosion implementation with shrapnel pieces (involves keeping those pieces around in memory and spawning when needed)
 	- Backface rendering
 - Cylinder bumper
 	- Figure out how to do it. Use restitution? Should it even run through the constraint system?

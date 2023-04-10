@@ -6,6 +6,7 @@ import "core:math";
 import "math2";
 
 Entity :: struct {
+	lookup: Entity_Lookup,
 	position: linalg.Vector3f32,
 	orientation: linalg.Quaternionf32,
 	size: linalg.Vector3f32,

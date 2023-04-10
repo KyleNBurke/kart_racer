@@ -137,7 +137,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 			if hull_count > 0 {
 				update_entity_hull_transforms_and_bounds(inanimate_entity, inanimate_entity.transform);
-				insert_entity_into_grid(&entity_grid, entity_lookup, inanimate_entity);
+				insert_entity_into_grid(&entity_grid, inanimate_entity);
 			}
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -188,7 +188,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 				}
 
 				update_entity_hull_transforms_and_bounds(rigid_body, rigid_body.transform);
-				insert_entity_into_grid(&entity_grid, entity_lookup, rigid_body);
+				insert_entity_into_grid(&entity_grid, rigid_body);
 
 				if config.init_sleeping_islands {
 					add_rigid_body_to_island(&islands, int(island_index), entity_lookup, rigid_body);

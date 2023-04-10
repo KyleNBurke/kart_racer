@@ -39,6 +39,16 @@ On_No_Entities :: enum {
 	Free,       // Free the geometry
 }
 
+init_entities_geos :: proc() {
+	null_entity_record := Entity_Record {
+		generation = 1,
+		entity = nil,
+		geometry_record_index = -1,
+	};
+
+	append(&entities_geos.entity_records, null_entity_record);
+}
+
 add_geometry :: proc(geometry: Geometry, on_no_entities: On_No_Entities = .Free) -> Geometry_Lookup {
 	if index, ok := pop_safe(&entities_geos.free_geometry_records); ok {
 		record := &entities_geos.geometry_records[index];
@@ -68,7 +78,7 @@ add_entity :: proc(geometry_lookup: Geometry_Lookup, entity: ^Entity) -> Entity_
 	geometry_record := &entities_geos.geometry_records[geometry_lookup.index];
 	assert(geometry_lookup.generation == geometry_record.generation);
 
-	entity_lookup: Entity_Lookup;
+	entity_lookup: Entity_Lookup = ---;
 
 	if index, ok := pop_safe(&entities_geos.free_entity_records); ok {
 		record := &entities_geos.entity_records[index];
@@ -85,6 +95,7 @@ add_entity :: proc(geometry_lookup: Geometry_Lookup, entity: ^Entity) -> Entity_
 		entity_lookup = Entity_Lookup { len(entities_geos.entity_records) - 1, 0 };
 	}
 
+	entity.lookup = entity_lookup;
 	append(&geometry_record.entity_lookups, entity_lookup);
 	return entity_lookup;
 }
@@ -162,7 +173,8 @@ cleanup_entities_geos :: proc() {
 	delete(entities_geos.geometry_records);
 	delete(entities_geos.free_geometry_records);
 
-	for record, i in &entities_geos.entity_records {
+	for i in 1..<len(entities_geos.entity_records) {
+		record := &entities_geos.entity_records[i];
 		if slice.contains(entities_geos.free_entity_records[:], i) do continue;
 
 		delete(record.entity.collision_hulls);
