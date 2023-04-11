@@ -51,7 +51,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 	clear_constraints(&game.constraints);
 	find_spring_constraints(&game.ground_grid, &game.entity_grid, &game.constraints, game.car, dt);
 	
-	entities_woken_up := make([dynamic]Entity_Lookup, context.temp_allocator);
+	additional_awake_entities := make([dynamic]Entity_Lookup, context.temp_allocator);
 
 	// Car collisions
 	{
@@ -80,7 +80,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 						switch e in nearby_entity.variant {
 						case ^Rigid_Body_Entity:
 							add_car_movable_constraint_set(&game.constraints, game.car, e, &manifold, dt);
-							car_collision_maybe_wake_island(&game.islands, &entities_woken_up, e);
+							car_collision_maybe_wake_island(&game.islands, &additional_awake_entities, e);
 							handle_status_effects(game.car, e);
 						case ^Inanimate_Entity:
 							// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
@@ -131,7 +131,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 						switch e in nearby_entity.variant {
 						case ^Rigid_Body_Entity:
 							add_movable_constraint_set(&game.constraints, provoking_rigid_body, e, &manifold, dt);
-							rigid_body_collision_merge_islands(&game.islands, &entities_woken_up, provoking_lookup, provoking_rigid_body, e);
+							rigid_body_collision_merge_islands(&game.islands, &additional_awake_entities, provoking_lookup, provoking_rigid_body, e);
 						case ^Inanimate_Entity:
 							add_fixed_constraint_set(&game.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
 						case ^Car_Entity:
@@ -159,11 +159,11 @@ simulate :: proc(game: ^Game, dt: f32) {
 		update_entity_transform(car);
 	}
 	
-	append(&game.awake_rigid_body_lookups, ..entities_woken_up[:]);
+	append(&game.awake_rigid_body_lookups, ..additional_awake_entities[:]);
 	
 	// Clear the entities woken up from awake islands colliding with asleep islands. We'll reuse this array to keep track
 	// of entities woken up from exploding barrels.
-	clear(&entities_woken_up);
+	clear(&additional_awake_entities);
 
 	for i := len(game.awake_rigid_body_lookups) - 1; i >= 0; i -= 1 {
 		lookup := game.awake_rigid_body_lookups[i];
@@ -204,9 +204,6 @@ simulate :: proc(game: ^Game, dt: f32) {
 				unreachable();
 			}
 
-			// Rmove from entity geos
-			remove_entity(lookup);
-
 			// Find nearby entities and add an explosion velocity to them
 			center := math2.box_center(rigid_body.bounds);
 			bounds := math2.Box3f32 { center - 5, center + 5 };
@@ -217,15 +214,37 @@ simulate :: proc(game: ^Game, dt: f32) {
 				if !ok do continue;
 
 				dir := linalg.normalize(nearby_rigid_body.position - rigid_body.position);
-				nearby_rigid_body.velocity += dir * 50;
+				nearby_rigid_body.velocity += dir * 30;
 
-				maybe_wake_island_post_solve(&game.islands, nearby_rigid_body, &entities_woken_up)
+				maybe_wake_island_post_solve(&game.islands, nearby_rigid_body, &additional_awake_entities)
 			}
+
+			// Spawn shrapnel pieces
+			for shrapnel in &game.runtime_assets.shock_barrel_shrapnel {
+				position := math2.matrix4_transform_point(rigid_body.transform, shrapnel.position);
+				orientation := rigid_body.orientation * shrapnel.orientation;
+				size := rigid_body.size * shrapnel.size;
+				shrapnel_rigid_body := new_rigid_body_entity(position, orientation, size, 1, shrapnel.dimensions);
+				shrapnel_rigid_body.collision_exclude = true;
+				shrapnel_lookup := add_entity(shrapnel.geometry_lookup, shrapnel_rigid_body);
+				hull := init_collision_hull(shrapnel.hull_local_transform, shrapnel_rigid_body.transform, .Box);
+				append(&shrapnel_rigid_body.collision_hulls, hull);
+				update_entity_hull_transforms_and_bounds(shrapnel_rigid_body, shrapnel_rigid_body.transform);
+				insert_entity_into_grid(&game.entity_grid, shrapnel_rigid_body);
+
+				append(&additional_awake_entities, shrapnel_lookup);
+				
+				dir := linalg.normalize(shrapnel_rigid_body.position - rigid_body.position);
+				shrapnel_rigid_body.velocity = dir * 30;
+			}
+
+			// Rmove from entity geos
+			remove_entity(lookup);
 		}
 	}
 
 	sleep_islands(&game.islands, &game.awake_rigid_body_lookups);
-	append(&game.awake_rigid_body_lookups, ..entities_woken_up[:]);
+	append(&game.awake_rigid_body_lookups, ..additional_awake_entities[:]);
 }
 
 process_rigid_body_ground_collision :: proc(

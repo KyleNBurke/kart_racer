@@ -19,15 +19,16 @@ Geometry :: struct {
 	pipeline: Pipeline,
 }
 
-Pipeline :: enum { Line, Basic, Lambert }
+Pipeline :: enum { Line, Basic, Lambert, LambertTwoSided }
 
-init_triangle_geometry :: proc(name: string, indices: [dynamic]u16, attributes: [dynamic]f32) -> Geometry {
+init_triangle_geometry :: proc(name: string, indices: [dynamic]u16, attributes: [dynamic]f32, pipeline: Pipeline) -> Geometry {
 	when ODIN_DEBUG {
 		assert(len(indices) % 3 == 0);
 		assert(len(attributes) % 9 == 0);
+		assert(pipeline != .Line);
 	}
 
-	return Geometry { name, indices, attributes, .Lambert };
+	return Geometry { name, indices, attributes, pipeline };
 }
 
 init_box :: proc(name: string, color: [3]f32 = GREY) -> Geometry {

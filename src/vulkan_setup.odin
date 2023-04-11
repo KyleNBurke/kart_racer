@@ -6,8 +6,6 @@ import "core:c";
 import "core:os";
 import "core:slice";
 import "core:mem";
-import "core:c/libc";
-import "core:strings";
 import "core:math/linalg";
 import vk "vendor:vulkan";
 import "vendor:glfw";
@@ -17,7 +15,8 @@ import "math2";
 @(private)
 IFFC :: 2; // In flight frames count
 
-PIPELINES_COUNT :: 5;
+@(private)
+PIPELINES_COUNT :: 6;
 
 @(private)
 MESH_INSTANCE_ELEMENT_SIZE :: 64;
@@ -106,12 +105,14 @@ MeshResources :: struct {
 	line_secondary_command_buffers: [IFFC]vk.CommandBuffer,
 	basic_secondary_command_buffers: [IFFC]vk.CommandBuffer,
 	lambert_secondary_command_buffers: [IFFC]vk.CommandBuffer,
+	lambert_two_sided_secondary_command_buffer: [IFFC]vk.CommandBuffer,
 	instance_descriptor_set_layout: vk.DescriptorSetLayout,
 	instance_descriptor_sets: [IFFC]vk.DescriptorSet,
 	pipeline_layout: vk.PipelineLayout,
 	line_pipeline: vk.Pipeline,
 	basic_pipeline: vk.Pipeline,
 	lambert_pipeline: vk.Pipeline,
+	lambert_two_sided_pipeline: vk.Pipeline,
 }
 
 ParticleResources :: struct {
@@ -211,12 +212,14 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		line_secondary_command_buffers = secondary_command_buffers.line,
 		basic_secondary_command_buffers = secondary_command_buffers.basic,
 		lambert_secondary_command_buffers = secondary_command_buffers.lambert,
+		lambert_two_sided_secondary_command_buffer = secondary_command_buffers.lambert_two_sided,
 		instance_descriptor_set_layout = mesh_instance_descriptor_set_layout,
 		instance_descriptor_sets = mesh_instance_descriptor_sets,
 		pipeline_layout = mesh_pipeline_layout,
 		line_pipeline = pipelines[0],
 		basic_pipeline = pipelines[1],
 		lambert_pipeline = pipelines[2],
+		lambert_two_sided_pipeline = pipelines[3],
 	};
 
 	particle_resources := ParticleResources {
@@ -225,7 +228,7 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		instance_descriptor_set_layout = particle_instance_descriptor_set_layout,
 		instance_descriptor_sets = particle_instance_descriptor_sets,
 		pipeline_layout = particle_pipeline_layout,
-		pipeline = pipelines[3],
+		pipeline = pipelines[4],
 	}
 
 	ui_resources := UiResources {
@@ -235,7 +238,7 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		sampler_descriptor_set = sampler_descriptor_set,
 		atlas_descriptor_set = atlas_descriptor_set,
 		text_pipeline_layout = text_pipeline_layout,
-		text_pipeline = pipelines[4],
+		text_pipeline = pipelines[5],
 		sampler = sampler,
 	};
 
@@ -281,6 +284,7 @@ cleanup_vulkan :: proc(using vulkan: ^Vulkan) {
 	vk.DestroyPipelineLayout(logical_device, particle_resources.pipeline_layout, nil);
 	vk.DestroyDescriptorSetLayout(logical_device, particle_resources.instance_descriptor_set_layout, nil);
 	
+	vk.DestroyPipeline(logical_device, mesh_resources.lambert_two_sided_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.line_pipeline, nil);
@@ -324,6 +328,7 @@ recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer
 	vk.DeviceWaitIdle(logical_device);
 	vk.DestroyPipeline(logical_device, ui_resources.text_pipeline, nil);
 	vk.DestroyPipeline(logical_device, particle_resources.pipeline, nil);
+	vk.DestroyPipeline(logical_device, mesh_resources.lambert_two_sided_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.line_pipeline, nil);
@@ -354,8 +359,9 @@ recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer
 	mesh_resources.line_pipeline = pipelines[0];
 	mesh_resources.basic_pipeline = pipelines[1];
 	mesh_resources.lambert_pipeline = pipelines[2];
-	particle_resources.pipeline = pipelines[3];
-	ui_resources.text_pipeline = pipelines[4];
+	mesh_resources.lambert_two_sided_pipeline = pipelines[3];
+	particle_resources.pipeline = pipelines[4];
+	ui_resources.text_pipeline = pipelines[5];
 
 	fmt.println("Swapchain recreated");
 }
@@ -762,7 +768,7 @@ create_primary_command_buffers :: proc(logical_device: vk.Device, command_pool: 
 }
 
 SecondaryCommandBuffers :: struct {
-	line, basic, lambert, particle, text: [IFFC]vk.CommandBuffer,
+	line, basic, lambert, lambert_two_sided, particle, text: [IFFC]vk.CommandBuffer,
 }
 
 create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool: vk.CommandPool) -> SecondaryCommandBuffers {
@@ -779,17 +785,18 @@ create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool
 	r := vk.AllocateCommandBuffers(logical_device, &allocate_info, &command_buffers_array[0]);
 	assert(r == .SUCCESS);
 
-	line, basic, lambert, particle, text: [IFFC]vk.CommandBuffer;
+	line, basic, lambert, lambert_two_sided, particle, text: [IFFC]vk.CommandBuffer;
 	
 	for i in 0..<IFFC {
-		line[i]     = command_buffers_array[PIPELINES_COUNT * i];
-		basic[i]    = command_buffers_array[PIPELINES_COUNT * i + 1];
-		lambert[i]  = command_buffers_array[PIPELINES_COUNT * i + 2];
-		particle[i] = command_buffers_array[PIPELINES_COUNT * i + 3];
-		text[i]     = command_buffers_array[PIPELINES_COUNT * i + 4];
+		line[i]              = command_buffers_array[PIPELINES_COUNT * i];
+		basic[i]             = command_buffers_array[PIPELINES_COUNT * i + 1];
+		lambert[i]           = command_buffers_array[PIPELINES_COUNT * i + 2];
+		lambert_two_sided[i] = command_buffers_array[PIPELINES_COUNT * i + 3];
+		particle[i]          = command_buffers_array[PIPELINES_COUNT * i + 4];
+		text[i]              = command_buffers_array[PIPELINES_COUNT * i + 5];
 	}
 
-	return SecondaryCommandBuffers { line, basic, lambert, particle, text };
+	return SecondaryCommandBuffers { line, basic, lambert, lambert_two_sided, particle, text };
 }
 
 create_frame_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool: vk.DescriptorPool) -> (vk.DescriptorSetLayout, [IFFC]vk.DescriptorSet) {
@@ -1176,475 +1183,6 @@ create_text_pipeline_layout :: proc(logical_device: vk.Device, descriptor_set_la
 	assert(r == .SUCCESS);
 
 	return pipeline_layout;
-}
-
-create_pipelines :: proc(
-	logical_device: vk.Device,
-	render_pass: vk.RenderPass,
-	extent: vk.Extent2D,
-	mesh_pipeline_layout,
-	particle_pipeline_layout,
-	text_pipeline_layout: vk.PipelineLayout,
-) -> [PIPELINES_COUNT]vk.Pipeline {
-	// Shared
-	create_shader_module :: proc(logical_device: vk.Device, file_name: string) -> vk.ShaderModule {
-		cmp_path := fmt.tprintf("build/shaders/%v.spv", file_name);
-		
-		when ODIN_DEBUG {
-			src_path := fmt.tprintf("src/shaders/%v", file_name);
-			src_time, src_error := os.last_write_time_by_name(src_path);
-			assert(src_error == os.ERROR_NONE);
-
-			cmp_time, cmp_error := os.last_write_time_by_name(cmp_path);
-
-			if cmp_error == os.ERROR_PATH_NOT_FOUND {
-				e := os.make_directory("build/shaders");
-				assert(e == os.ERROR_NONE);
-			}
-
-			if cmp_error == os.ERROR_PATH_NOT_FOUND || cmp_error == os.ERROR_FILE_NOT_FOUND || src_time > cmp_time {
-				command := fmt.tprintf("glslc %v -o %v", src_path, cmp_path);
-				command_cstring := strings.clone_to_cstring(command);
-				defer delete(command_cstring);
-			
-				r := libc.system(command_cstring);
-				assert(r == 0);
-			
-				fmt.printf("Compiled shader %v\n", cmp_path);
-			}
-		}
-
-		code, success := os.read_entire_file_from_filename(cmp_path);
-		defer delete(code);
-		assert(success);
-		
-		create_info := vk.ShaderModuleCreateInfo {
-			sType = .SHADER_MODULE_CREATE_INFO,
-			pCode = cast(^u32) raw_data(code),
-			codeSize = len(code),
-		};
-
-		shader_module: vk.ShaderModule;
-		r := vk.CreateShaderModule(logical_device, &create_info, nil, &shader_module);
-		assert(r == .SUCCESS);
-
-		return shader_module;
-	}
-	
-	shader_entry_point: cstring = "main";
-
-	viewport := vk.Viewport {
-		x = 0.0,
-		y = 0.0,
-		width = f32(extent.width),
-		height = f32(extent.height),
-		minDepth = 0.0,
-		maxDepth = 1.0,
-	};
-
-	scissor := vk.Rect2D {
-		offset = vk.Offset2D {0, 0},
-		extent = extent,
-	};
-
-	viewport_state_create_info := vk.PipelineViewportStateCreateInfo {
-		sType = .PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-		pViewports = &viewport,
-		viewportCount = 1,
-		pScissors = &scissor,
-		scissorCount = 1,
-	};
-
-	multisample_state_create_info := vk.PipelineMultisampleStateCreateInfo {
-		sType = .PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-		sampleShadingEnable = false,
-		rasterizationSamples = {._1},
-	};
-
-	depth_stencil_state_create_info := vk.PipelineDepthStencilStateCreateInfo {
-		sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-		depthTestEnable = true,
-		depthWriteEnable = true,
-		depthCompareOp = .LESS,
-		depthBoundsTestEnable = false,
-		stencilTestEnable = false,
-	};
-
-	color_blend_attachment_state := vk.PipelineColorBlendAttachmentState {
-		colorWriteMask = {.R, .G, .B, .A},
-		blendEnable = false,
-	};
-
-	color_blend_state_create_info := vk.PipelineColorBlendStateCreateInfo {
-		sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		logicOpEnable = false,
-		pAttachments = &color_blend_attachment_state,
-		attachmentCount = 1,
-	};
-
-	// Line
-	basic_vert_module := create_shader_module(logical_device, "basic.vert");
-	defer vk.DestroyShaderModule(logical_device, basic_vert_module, nil);
-	basic_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.VERTEX},
-		module = basic_vert_module,
-		pName = shader_entry_point,
-	};
-
-	basic_frag_module := create_shader_module(logical_device, "basic.frag");
-	defer vk.DestroyShaderModule(logical_device, basic_frag_module, nil);
-	basic_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.FRAGMENT},
-		module = basic_frag_module,
-		pName = shader_entry_point,
-	};
-
-	basic_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {basic_vert_stage_create_info, basic_frag_stage_create_info};
-
-	line_input_binding_description := vk.VertexInputBindingDescription {
-		binding = 0,
-		stride = 24,
-		inputRate = .VERTEX,
-	};
-
-	line_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
-		vk.VertexInputAttributeDescription { // Position
-			binding = 0,
-			location = 0,
-			format = .R32G32B32_SFLOAT,
-			offset = 0,
-		},
-		vk.VertexInputAttributeDescription { // Color
-			binding = 0,
-			location = 1,
-			format = .R32G32B32_SFLOAT,
-			offset = 12,
-		},
-	};
-
-	line_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
-		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		pVertexBindingDescriptions = &line_input_binding_description,
-		vertexBindingDescriptionCount = 1,
-		pVertexAttributeDescriptions = &line_input_attribute_descriptions[0],
-		vertexAttributeDescriptionCount = len(line_input_attribute_descriptions),
-	};
-
-	line_input_assembly_state_create_info := vk.PipelineInputAssemblyStateCreateInfo {
-		sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-		topology = .LINE_LIST,
-		primitiveRestartEnable = false,
-	};
-
-	line_rasterization_state_create_info := vk.PipelineRasterizationStateCreateInfo {
-		sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-		depthClampEnable = false,
-		rasterizerDiscardEnable = false,
-		lineWidth = 1.0,
-		depthBiasEnable = false,
-	};
-
-	line_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
-		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
-		pStages = &basic_stage_create_infos[0],
-		stageCount = len(basic_stage_create_infos),
-		pVertexInputState = &line_vertex_input_state_create_info,
-		pInputAssemblyState = &line_input_assembly_state_create_info,
-		pViewportState = &viewport_state_create_info,
-		pRasterizationState = &line_rasterization_state_create_info,
-		pMultisampleState = &multisample_state_create_info,
-		pDepthStencilState = &depth_stencil_state_create_info,
-		pColorBlendState = &color_blend_state_create_info,
-		layout = mesh_pipeline_layout,
-		renderPass = render_pass,
-		subpass = 0,
-	};
-
-	// Triangle
-	triangle_input_assembly_state_create_info := vk.PipelineInputAssemblyStateCreateInfo {
-		sType = .PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-		topology = .TRIANGLE_LIST,
-		primitiveRestartEnable = false,
-	};
-
-	triangle_rasterization_state_create_info := vk.PipelineRasterizationStateCreateInfo {
-		sType = .PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-		depthClampEnable = false,
-		rasterizerDiscardEnable = false,
-		polygonMode = .FILL,
-		lineWidth = 1.0,
-		cullMode = {.BACK},
-		frontFace = .COUNTER_CLOCKWISE,
-		depthBiasEnable = false,
-	};
-
-	// Basic
-	basic_input_binding_description := vk.VertexInputBindingDescription {
-		binding = 0,
-		stride = 36,
-		inputRate = .VERTEX,
-	};
-
-	basic_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
-		vk.VertexInputAttributeDescription { // Position
-			binding = 0,
-			location = 0,
-			format = .R32G32B32_SFLOAT,
-			offset = 0,
-		},
-		vk.VertexInputAttributeDescription { // Color
-			binding = 0,
-			location = 1,
-			format = .R32G32B32_SFLOAT,
-			offset = 24,
-		},
-	};
-
-	basic_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
-		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		pVertexBindingDescriptions = &basic_input_binding_description,
-		vertexBindingDescriptionCount = 1,
-		pVertexAttributeDescriptions = &basic_input_attribute_descriptions[0],
-		vertexAttributeDescriptionCount = len(basic_input_attribute_descriptions),
-	};
-
-	basic_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
-		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
-		pStages = &basic_stage_create_infos[0],
-		stageCount = len(basic_stage_create_infos),
-		pVertexInputState = &basic_vertex_input_state_create_info,
-		pInputAssemblyState = &triangle_input_assembly_state_create_info,
-		pViewportState = &viewport_state_create_info,
-		pRasterizationState = &triangle_rasterization_state_create_info,
-		pMultisampleState = &multisample_state_create_info,
-		pDepthStencilState = &depth_stencil_state_create_info,
-		pColorBlendState = &color_blend_state_create_info,
-		layout = mesh_pipeline_layout,
-		renderPass = render_pass,
-		subpass = 0,
-	};
-
-	// Lambert
-	lambert_vert_module := create_shader_module(logical_device, "lambert.vert");
-	defer vk.DestroyShaderModule(logical_device, lambert_vert_module, nil);
-	lambert_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.VERTEX},
-		module = lambert_vert_module,
-		pName = shader_entry_point,
-	};
-
-	lambert_frag_module := create_shader_module(logical_device, "lambert.frag");
-	defer vk.DestroyShaderModule(logical_device, lambert_frag_module, nil);
-	lambert_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.FRAGMENT},
-		module = lambert_frag_module,
-		pName = shader_entry_point,
-	};
-
-	lambert_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {lambert_vert_stage_create_info, lambert_frag_stage_create_info};
-
-	lambert_input_binding_description := vk.VertexInputBindingDescription {
-		binding = 0,
-		stride = 36,
-		inputRate = .VERTEX,
-	};
-
-	lambert_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
-		vk.VertexInputAttributeDescription { // Position
-			binding = 0,
-			location = 0,
-			format = .R32G32B32_SFLOAT,
-			offset = 0,
-		},
-		vk.VertexInputAttributeDescription { // Normal
-			binding = 0,
-			location = 1,
-			format = .R32G32B32_SFLOAT,
-			offset = 12,
-		},
-		vk.VertexInputAttributeDescription { // Color
-			binding = 0,
-			location = 2,
-			format = .R32G32B32_SFLOAT,
-			offset = 24,
-		},
-	};
-
-	lambert_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
-		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		pVertexBindingDescriptions = &lambert_input_binding_description,
-		vertexBindingDescriptionCount = 1,
-		pVertexAttributeDescriptions = &lambert_input_attribute_descriptions[0],
-		vertexAttributeDescriptionCount = len(lambert_input_attribute_descriptions),
-	};
-
-	lambert_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
-		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
-		pStages = &lambert_stage_create_infos[0],
-		stageCount = len(lambert_stage_create_infos),
-		pVertexInputState = &lambert_vertex_input_state_create_info,
-		pInputAssemblyState = &triangle_input_assembly_state_create_info,
-		pViewportState = &viewport_state_create_info,
-		pRasterizationState = &triangle_rasterization_state_create_info,
-		pMultisampleState = &multisample_state_create_info,
-		pDepthStencilState = &depth_stencil_state_create_info,
-		pColorBlendState = &color_blend_state_create_info,
-		layout = mesh_pipeline_layout,
-		renderPass = render_pass,
-		subpass = 0,
-	};
-
-	// Particle
-	particle_vert_module := create_shader_module(logical_device, "particle.vert");
-	defer vk.DestroyShaderModule(logical_device, particle_vert_module, nil);
-	particle_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.VERTEX},
-		module = particle_vert_module,
-		pName = shader_entry_point,
-	};
-
-	particle_frag_module := create_shader_module(logical_device, "particle.frag");
-	defer vk.DestroyShaderModule(logical_device, particle_frag_module, nil);
-	particle_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.FRAGMENT},
-		module = particle_frag_module,
-		pName = shader_entry_point,
-	};
-
-	particle_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {particle_vert_stage_create_info, particle_frag_stage_create_info};
-
-	particle_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
-		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-	};
-
-	particle_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
-		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
-		pStages = &particle_stage_create_infos[0],
-		stageCount = len(particle_stage_create_infos),
-		pVertexInputState = &particle_vertex_input_state_create_info,
-		pInputAssemblyState = &triangle_input_assembly_state_create_info,
-		pViewportState = &viewport_state_create_info,
-		pRasterizationState = &triangle_rasterization_state_create_info,
-		pMultisampleState = &multisample_state_create_info,
-		pDepthStencilState = &depth_stencil_state_create_info,
-		pColorBlendState = &color_blend_state_create_info, // This should change if we want to support transparency
-		layout = particle_pipeline_layout,
-		renderPass = render_pass,
-		subpass = 0,
-	};
-
-	// Text
-	text_vert_module := create_shader_module(logical_device, "text.vert");
-	defer vk.DestroyShaderModule(logical_device, text_vert_module, nil);
-	text_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.VERTEX},
-		module = text_vert_module,
-		pName = shader_entry_point,
-	};
-
-	text_frag_module := create_shader_module(logical_device, "text.frag");
-	defer vk.DestroyShaderModule(logical_device, text_frag_module, nil);
-	text_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.FRAGMENT},
-		module = text_frag_module,
-		pName = shader_entry_point,
-	};
-
-	text_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {text_vert_stage_create_info, text_frag_stage_create_info};
-
-	text_input_binding_description := vk.VertexInputBindingDescription {
-		binding = 0,
-		stride = 16,
-		inputRate = .VERTEX,
-	};
-
-	text_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
-		vk.VertexInputAttributeDescription { // Position
-			binding = 0,
-			location = 0,
-			format = .R32G32_SFLOAT,
-			offset = 0,
-		},
-		vk.VertexInputAttributeDescription { // Texture position
-			binding = 0,
-			location = 1,
-			format = .R32G32_SFLOAT,
-			offset = 8,
-		},
-	};
-
-	text_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
-		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		pVertexBindingDescriptions = &text_input_binding_description,
-		vertexBindingDescriptionCount = 1,
-		pVertexAttributeDescriptions = &text_input_attribute_descriptions[0],
-		vertexAttributeDescriptionCount = len(text_input_attribute_descriptions),
-	};
-
-	text_depth_stencil_state_create_info := vk.PipelineDepthStencilStateCreateInfo {
-		sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-		depthTestEnable = false,
-		depthWriteEnable = false,
-		depthBoundsTestEnable = false,
-		stencilTestEnable = false,
-	};
-
-	text_color_blend_attachment_state := vk.PipelineColorBlendAttachmentState {
-		colorWriteMask = {.R, .G, .B, .A},
-		blendEnable = true,
-		srcColorBlendFactor = .SRC_ALPHA,
-		dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
-		colorBlendOp = .ADD,
-		srcAlphaBlendFactor = .ONE,
-		dstAlphaBlendFactor = .ZERO,
-		alphaBlendOp = .ADD,
-	};
-
-	text_color_blend_state_create_info := vk.PipelineColorBlendStateCreateInfo {
-		sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		logicOpEnable = false,
-		pAttachments = &text_color_blend_attachment_state,
-		attachmentCount = 1,
-	};
-
-	text_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
-		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
-		pStages = &text_stage_create_infos[0],
-		stageCount = len(text_stage_create_infos),
-		pVertexInputState = &text_vertex_input_state_create_info,
-		pInputAssemblyState = &triangle_input_assembly_state_create_info,
-		pViewportState = &viewport_state_create_info,
-		pRasterizationState = &triangle_rasterization_state_create_info,
-		pMultisampleState = &multisample_state_create_info,
-		pDepthStencilState = &text_depth_stencil_state_create_info,
-		pColorBlendState = &text_color_blend_state_create_info,
-		layout = text_pipeline_layout,
-		renderPass = render_pass,
-		subpass = 0,
-	};
-
-	// Create pipelines
-	pipeline_create_infos := [PIPELINES_COUNT]vk.GraphicsPipelineCreateInfo {
-		line_pipeline_create_info,
-		basic_pipeline_create_info,
-		lambert_pipeline_create_info,
-		particle_pipeline_create_info,
-		text_pipeline_create_info,
-	};
-
-	pipelines: [PIPELINES_COUNT]vk.Pipeline;
-	r := vk.CreateGraphicsPipelines(logical_device, {}, len(pipeline_create_infos), &pipeline_create_infos[0], nil, &pipelines[0]);
-	assert(r == .SUCCESS);
-
-	return pipelines;
 }
 
 create_sampler :: proc(logical_device: vk.Device, sampler_descriptor_set: vk.DescriptorSet) -> vk.Sampler {

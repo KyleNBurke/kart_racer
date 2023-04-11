@@ -104,7 +104,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 	for i in 0..<geometries_count {
 		indices, attributes := read_indices_attributes(&bytes, &pos);
-		geometry := init_triangle_geometry("", indices, attributes);
+		geometry := init_triangle_geometry("", indices, attributes, .Lambert);
 		geometry_lookups[i] = add_geometry(geometry);
 
 		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -221,7 +221,7 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 
 	indices, attributes := read_indices_attributes(&bytes, &pos);
 
-	geometry := init_triangle_geometry("car", indices, attributes);
+	geometry := init_triangle_geometry("car", indices, attributes, .Lambert);
 	geometry_lookup := add_geometry(geometry);
 	entity := new_car_entity(spawn_position, spawn_orientation);
 	entity_lookup := add_entity(geometry_lookup, entity);
@@ -244,7 +244,7 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 
 	{ // Wheels
 		indices, attributes := read_indices_attributes(&bytes, &pos);
-		geometry := init_triangle_geometry("wheel", indices, attributes);
+		geometry := init_triangle_geometry("wheel", indices, attributes, .Lambert);
 		geometry_lookup := add_geometry(geometry);
 
 		for i in 0..<4 {
@@ -276,7 +276,7 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 			hull_orientation := read_quat(&bytes, &pos);
 			hull_size := read_vec3(&bytes, &pos);
 			
-			geo := init_triangle_geometry("shrapnel", indices, attributes);
+			geo := init_triangle_geometry("shrapnel", indices, attributes, .LambertTwoSided);
 			geo_lookup := add_geometry(geo, .Keep);
 			hull_local_transform := linalg.matrix4_from_trs(hull_position, hull_orientation, hull_size);
 

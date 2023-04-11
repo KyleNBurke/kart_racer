@@ -62,11 +62,12 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, texts: ^[dyna
 		frame_resources.per_instance_buffer_ptr = cast(^u8) per_instance_buffer_rawptr;
 	}
 
-	line_secondary_command_buffer := mesh_resources.line_secondary_command_buffers[logical_frame_index];
-	basic_secondary_command_buffer := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
-	lambert_secondary_command_buffer := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
-	particle_secondary_command_buffer := particle_resources.secondary_command_buffers[logical_frame_index];
-	text_secondary_command_buffer := ui_resources.text_secondary_command_buffer[logical_frame_index];
+	line_secondary_command_buffer              := mesh_resources.line_secondary_command_buffers[logical_frame_index];
+	basic_secondary_command_buffer             := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
+	lambert_secondary_command_buffer           := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
+	lambert_two_sided_secondary_command_buffer := mesh_resources.lambert_two_sided_secondary_command_buffer[logical_frame_index];
+	particle_secondary_command_buffer          := particle_resources.secondary_command_buffers[logical_frame_index];
+	text_secondary_command_buffer              := ui_resources.text_secondary_command_buffer[logical_frame_index];
 
 	{ // Begin secondary command buffers and bind rendering resources
 		command_buffer_inheritance_info := vk.CommandBufferInheritanceInfo {
@@ -86,30 +87,42 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, texts: ^[dyna
 		mesh_instance_descriptor_set := mesh_resources.instance_descriptor_sets[logical_frame_index];
 		particle_instance_descriptor_set := particle_resources.instance_descriptor_sets[logical_frame_index];
 
+		// Line
 		r := vk.BeginCommandBuffer(line_secondary_command_buffer, &command_buffer_begin_info);
 		assert(r == .SUCCESS);
 		vk.CmdBindPipeline(line_secondary_command_buffer, .GRAPHICS, mesh_resources.line_pipeline);
 		vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
 		vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
 
+		// Basic
 		r = vk.BeginCommandBuffer(basic_secondary_command_buffer, &command_buffer_begin_info);
 		assert(r == .SUCCESS);
 		vk.CmdBindPipeline(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.basic_pipeline);
 		vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
 		vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
 
+		// Lambert
 		r = vk.BeginCommandBuffer(lambert_secondary_command_buffer, &command_buffer_begin_info);
 		assert(r == .SUCCESS);
 		vk.CmdBindPipeline(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.lambert_pipeline);
 		vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
 		vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
 
+		// Lambert two sided
+		r = vk.BeginCommandBuffer(lambert_two_sided_secondary_command_buffer, &command_buffer_begin_info);
+		assert(r == .SUCCESS);
+		vk.CmdBindPipeline(lambert_two_sided_secondary_command_buffer, .GRAPHICS, mesh_resources.lambert_two_sided_pipeline);
+		vk.CmdBindDescriptorSets(lambert_two_sided_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
+		vk.CmdBindDescriptorSets(lambert_two_sided_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
+
+		// Particle
 		r = vk.BeginCommandBuffer(particle_secondary_command_buffer, &command_buffer_begin_info);
 		assert(r == .SUCCESS);
 		vk.CmdBindPipeline(particle_secondary_command_buffer, .GRAPHICS, particle_resources.pipeline);
 		vk.CmdBindDescriptorSets(particle_secondary_command_buffer, .GRAPHICS, particle_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
 		vk.CmdBindDescriptorSets(particle_secondary_command_buffer, .GRAPHICS, particle_resources.pipeline_layout, 1, 1, &particle_instance_descriptor_set, 0, {});
 
+		// Text
 		r = vk.BeginCommandBuffer(text_secondary_command_buffer, &command_buffer_begin_info);
 		assert(r == .SUCCESS);
 		vk.CmdBindPipeline(text_secondary_command_buffer, .GRAPHICS, ui_resources.text_pipeline);
@@ -173,12 +186,14 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, texts: ^[dyna
 
 			secondary_command_buffer: vk.CommandBuffer;
 			switch record.geometry.pipeline {
-				case .Line:
-					secondary_command_buffer = line_secondary_command_buffer;
-				case .Basic:
-					secondary_command_buffer = basic_secondary_command_buffer;
-				case .Lambert:
-					secondary_command_buffer = lambert_secondary_command_buffer;
+			case .Line:
+				secondary_command_buffer = line_secondary_command_buffer;
+			case .Basic:
+				secondary_command_buffer = basic_secondary_command_buffer;
+			case .Lambert:
+				secondary_command_buffer = lambert_secondary_command_buffer;
+			case .LambertTwoSided:
+				secondary_command_buffer = lambert_two_sided_secondary_command_buffer;
 			}
 
 			vk.CmdBindIndexBuffer(secondary_command_buffer, per_instance_buffer, cast(vk.DeviceSize) index_array_offset, .UINT16);
@@ -237,26 +252,19 @@ end_render_frame :: proc(using vulkan: ^Vulkan) -> bool {
 	primary_command_buffer := primary_command_buffers[logical_frame_index];
 
 	{ // End secondary command buffers
-		line_secondary_command_buffer := mesh_resources.line_secondary_command_buffers[logical_frame_index];
-		basic_secondary_command_buffer := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
-		lambert_secondary_command_buffer := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
-		particle_secondary_command_buffer := particle_resources.secondary_command_buffers[logical_frame_index];
-		text_secondary_command_buffer := ui_resources.text_secondary_command_buffer[logical_frame_index];
+		line_secondary_command_buffer              := mesh_resources.line_secondary_command_buffers[logical_frame_index];
+		basic_secondary_command_buffer             := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
+		lambert_secondary_command_buffer           := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
+		lambert_two_sided_secondary_command_buffer := mesh_resources.lambert_two_sided_secondary_command_buffer[logical_frame_index];
+		particle_secondary_command_buffer          := particle_resources.secondary_command_buffers[logical_frame_index];
+		text_secondary_command_buffer              := ui_resources.text_secondary_command_buffer[logical_frame_index];
 
-		r := vk.EndCommandBuffer(line_secondary_command_buffer);
-		assert(r == .SUCCESS);
-	
-		r = vk.EndCommandBuffer(basic_secondary_command_buffer);
-		assert(r == .SUCCESS);
-	
-		r = vk.EndCommandBuffer(lambert_secondary_command_buffer);
-		assert(r == .SUCCESS);
-
-		r = vk.EndCommandBuffer(particle_secondary_command_buffer);
-		assert(r == .SUCCESS);
-	
-		r = vk.EndCommandBuffer(text_secondary_command_buffer);
-		assert(r == .SUCCESS);
+		assert(vk.EndCommandBuffer(line_secondary_command_buffer) == .SUCCESS);
+		assert(vk.EndCommandBuffer(basic_secondary_command_buffer) == .SUCCESS);
+		assert(vk.EndCommandBuffer(lambert_secondary_command_buffer) == .SUCCESS);
+		assert(vk.EndCommandBuffer(lambert_two_sided_secondary_command_buffer) == .SUCCESS);
+		assert(vk.EndCommandBuffer(particle_secondary_command_buffer) == .SUCCESS);
+		assert(vk.EndCommandBuffer(text_secondary_command_buffer) == .SUCCESS);
 	}
 
 	{ // Flush and unmap per instance buffer
@@ -326,6 +334,7 @@ end_render_frame :: proc(using vulkan: ^Vulkan) -> bool {
 			mesh_resources.line_secondary_command_buffers[logical_frame_index],
 			mesh_resources.basic_secondary_command_buffers[logical_frame_index],
 			mesh_resources.lambert_secondary_command_buffers[logical_frame_index],
+			mesh_resources.lambert_two_sided_secondary_command_buffer[logical_frame_index],
 			particle_resources.secondary_command_buffers[logical_frame_index],
 			ui_resources.text_secondary_command_buffer[logical_frame_index],
 		};

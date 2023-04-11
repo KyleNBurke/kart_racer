@@ -43,7 +43,8 @@ Improvements
 
 Todo
 - Exploding shock barrels
-	- Backface rendering
+	- Shrapnel pieces (need to add hulls to all of them)
+	- [done] Backface rendering
 	- Cloud of shock
 	- Explosion particle effect
 - Cylinder bumper
