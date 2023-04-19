@@ -223,6 +223,7 @@ immediate_mode_render_game :: proc(vulkan: ^Vulkan, game: ^Game) {
 }
 
 cleanup_game :: proc(game: ^Game) {
+	cleanup_status_effect_clouds(game.status_effect_cloud_lookups[:]);
 	cleanup_shock_entity_particles(game.shock_entities[:]);
 	cleanup_fire_entity_particles(game.fire_entities[:]);
 	cleanup_car(game.car);
@@ -239,6 +240,7 @@ cleanup_game :: proc(game: ^Game) {
 	
 	cleanup_entities_geos();
 
+	delete(game.status_effect_cloud_lookups);
 	delete(game.shock_entities);
 	delete(game.fire_entities);
 	delete(game.texts);

@@ -266,3 +266,11 @@ draw_status_effect_clouds :: proc(vulkan: ^Vulkan, clouds: []Entity_Lookup) {
 		}
 	}
 }
+
+cleanup_status_effect_clouds :: proc(clouds: []Entity_Lookup) {
+	for lookup in clouds {
+		cloud := get_entity(lookup).variant.(^Cloud_Entity);
+
+		delete(cloud.shock_particles);
+	}
+}
