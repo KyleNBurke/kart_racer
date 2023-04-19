@@ -46,7 +46,7 @@ cleanup_car :: proc(car: ^Car_Entity) {
 }
 
 shock_car :: proc(car: ^Car_Entity) {
-	car.shock_remaining_time = 3;
+	car.shock_remaining_time = 1;
 
 	if !car.shocked {
 		car.shocked = true;

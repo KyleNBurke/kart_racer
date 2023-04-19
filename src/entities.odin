@@ -14,20 +14,21 @@ Entity :: struct {
 	collision_hulls: [dynamic]Collision_Hull,
 	bounds: math2.Box3f32,
 	query_run: u32,
-	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity, ^Car_Entity},
+	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity, ^Car_Entity, ^Cloud_Entity},
 }
 
 Inanimate_Entity :: struct {
 	using entity: Entity,
 }
 
-// Rename?
-Status_Effect :: enum {
-	None,
-	Shock,
-	Fire,
-	ExplodingShock,
+Cloud_Entity :: struct {
+	using entity: Entity,
+	status_effect: Cloud_Status_Effect,
+	shock_particles: [dynamic]Shock_Particle, // We could just have one particle struct and not use some of the members, it's fine.
+	ramp_up_duration: f32,
 }
+
+Cloud_Status_Effect :: enum { Shock }
 
 Rigid_Body_Entity :: struct {
 	using entity: Entity,
@@ -49,6 +50,13 @@ Rigid_Body_Entity :: struct {
 	shock_particles: [dynamic]Shock_Particle,
 	fire_particles: [dynamic]Fire_Particle,
 	exploding_health: f32,
+}
+
+Status_Effect :: enum {
+	None,
+	Shock,
+	Fire,
+	ExplodingShock,
 }
 
 Car_Entity :: struct {
@@ -85,6 +93,13 @@ Wheel :: struct {
 	spring_length: f32,
 }
 
+init_entity :: proc(e: ^Entity, position: linalg.Vector3f32, orientation: linalg.Quaternionf32, size: linalg.Vector3f32) {
+	e.position = position;
+	e.orientation = orientation;
+	e.size = size;
+	e.transform = linalg.matrix4_from_trs(position, orientation, size);
+}
+
 update_entity_transform :: proc(using entity: ^Entity) {
 	transform = linalg.matrix4_from_trs(position, orientation, size);
 }
@@ -95,11 +110,18 @@ new_inanimate_entity :: proc(
 	size := linalg.Vector3f32 {1.0, 1.0, 1.0},
 ) -> ^Inanimate_Entity {
 	e := new(Inanimate_Entity);
-	e.position = position;
-	e.orientation = orientation;
-	e.size = size;
-	e.transform = linalg.matrix4_from_trs(position, orientation, size);
 	e.variant = e;
+	init_entity(e, position, orientation, size);
+
+	return e;
+}
+
+new_cloud_entity :: proc(position: linalg.Vector3f32, status_effect: Cloud_Status_Effect) -> ^Cloud_Entity {
+	e := new(Cloud_Entity);
+	e.variant = e;
+	init_entity(e, position, linalg.QUATERNIONF32_IDENTITY, linalg.Vector3f32 {1, 1, 1});
+
+	e.status_effect = status_effect;
 
 	return e;
 }
@@ -129,11 +151,9 @@ new_rigid_body_entity :: proc(
 	};
 
 	e := new(Rigid_Body_Entity);
-	e.position = position;
-	e.orientation = orientation;
-	e.size = size;
-	e.transform = linalg.matrix4_from_trs_f32(position, orientation, size);
 	e.variant = e;
+	init_entity(e, position, orientation, size);
+	
 	e.mass = mass;
 	e.inv_local_inertia_tensor = inv_local_inertia_tensor;
 	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
@@ -162,20 +182,11 @@ CAR_INV_LOCAL_INERTIA_TENSOR :: linalg.Matrix3f32 {
 
 new_car_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaternionf32) -> ^Car_Entity {
 	e := new(Car_Entity);
-	e.position = position;
-	e.orientation =  orientation;
-	e.size = linalg.Vector3f32 {1, 1, 1};
-	e.transform = linalg.matrix4_from_trs_f32(position, orientation, linalg.Vector3f32 {1, 1, 1});
 	e.variant = e;
+	init_entity(e, position, orientation, linalg.Vector3f32 {1, 1, 1});
+	
 	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
 	e.new_transform = linalg.MATRIX4F32_IDENTITY;
 
 	return e;
 }
-
-// add_hull_to_rigid_body :: proc(lookup: Entity_Lookup, collision_hull_grid: ^Collision_Hull_Grid, rigid_body: ^Rigid_Body_Entity, hull: Collision_Hull) {
-// 	append(&rigid_body.collision_hulls, hull);
-// 	hull_ptr := slice.last_ptr(rigid_body.collision_hulls[:]);
-// 	hull_record := insert_into_collision_hull_grid(collision_hull_grid, lookup, hull_ptr);
-// 	append(&rigid_body.collision_hull_record_indices, hull_record);
-// }

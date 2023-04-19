@@ -3,6 +3,7 @@ package main;
 import "core:math/linalg";
 
 Runtime_Assets :: struct {
+	cloud_hull_transform: linalg.Matrix4f32,
 	shock_barrel_shrapnel: [dynamic]Shock_Barrel_Shrapnel,
 }
 

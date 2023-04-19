@@ -1,5 +1,6 @@
 package main;
 
+import "core:slice";
 import "core:math";
 import "core:math/linalg";
 import "math2";
@@ -13,13 +14,13 @@ Collision_Hull :: struct {
 	global_bounds: math2.Box3f32,
 }
 
-Hull_Kind :: enum {Box, Cylinder, Mesh}
+Hull_Kind :: enum {Box, Cylinder, Sphere, Mesh}
 
 init_collision_hull :: proc(local_transform, entity_global_transform: linalg.Matrix4f32, kind: Hull_Kind) -> Collision_Hull {
 	local_bounds: math2.Box3f32 = ---;
 
 	switch kind {
-		case .Box, .Cylinder:
+		case .Box, .Cylinder, .Sphere:
 			local_bounds = math2.BOX3F32_STANDARD;
 		case .Mesh:
 			unimplemented();
@@ -68,4 +69,64 @@ update_entity_hull_transforms_and_bounds :: proc(entity: ^Entity, transform: lin
 
 	entity.bounds.min = entity_min;
 	entity.bounds.max = entity_max;
+}
+
+Hull_Helpers :: struct {
+	box_helper_geo_lookup: Geometry_Lookup,
+	cylinder_helper_geo_lookup: Geometry_Lookup,
+	sphere_helepr_geo_lookup: Geometry_Lookup,
+	hull_helpers: [dynamic]Entity_Lookup,
+}
+
+init_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
+	box_helper_geo := init_box_helper("box hull visualizer");
+	hull_helpers.box_helper_geo_lookup = add_geometry(box_helper_geo, .Keep);
+
+	cylinder_helper_geo := init_cylinder_helper("cylinder hull visualizer");
+	hull_helpers.cylinder_helper_geo_lookup = add_geometry(cylinder_helper_geo, .Keep);
+
+	sphere_helper_geo := init_sphere_helper("sphere hull visualizer");
+	hull_helpers.sphere_helepr_geo_lookup = add_geometry(sphere_helper_geo, .Keep);
+}
+
+cleanup_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
+	delete(hull_helpers.hull_helpers);
+}
+
+update_entity_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
+	for lookup in &hull_helpers.hull_helpers {
+		remove_entity(lookup);
+	}
+
+	clear(&hull_helpers.hull_helpers);
+
+	for index in 1..<len(entities_geos.entity_records) {
+		entity_record := &entities_geos.entity_records[index];
+
+		// Hate it, but whatever, it's just a debug thing. If we ever end up with the ability to iterate over the lookups or entities maybe
+		// by a specific type, we could do it that way and remove the search.
+		if _, ok := slice.linear_search(entities_geos.free_entity_records[:], index); ok {
+			continue;
+		}
+
+		for hull in &entity_record.entity.collision_hulls {
+			helper := new_inanimate_entity();
+			helper.transform = hull.global_transform;
+
+			geo: Geometry_Lookup;
+			switch hull.kind {
+			case .Box:
+				geo = hull_helpers.box_helper_geo_lookup;
+			case .Cylinder:
+				geo = hull_helpers.cylinder_helper_geo_lookup;
+			case .Sphere:
+				geo = hull_helpers.sphere_helepr_geo_lookup;
+			case .Mesh:
+				unimplemented();
+			}
+
+			helper_lookup := add_entity(geo, helper);
+			append(&hull_helpers.hull_helpers, helper_lookup);
+		}
+	}
 }

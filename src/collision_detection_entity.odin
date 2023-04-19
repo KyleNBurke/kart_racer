@@ -5,15 +5,46 @@ import "core:math/linalg";
 import "core:container/small_array";
 import "math2";
 
-evaluate_entity_collision :: proc(hull_a, hull_b: ^Collision_Hull) -> Maybe(Contact_Manifold) {
+hulls_colliding :: proc(hull_a, hull_b: ^Collision_Hull) -> Maybe(Simplex) {
 	if !math2.box_intersects(hull_a.global_bounds, hull_b.global_bounds) {
 		return nil;
 	}
 
-	simplex, ok_colliding := colliding(hull_a, hull_b).?;
-	if !ok_colliding do return nil;
+	direction := linalg.Vector3f32 {0.0, 0.0, 1.0};
+	v := support(hull_a, hull_b, direction);
+	zero := linalg.Vector3f32 {0.0, 0.0, 0.0};
+	
+	simplex := Simplex {
+		[4]linalg.Vector3f32 {v, zero, zero, zero},
+		1,
+	};
+	
+	direction = -direction;
+	iteration := 0;
 
-	normal, ok_normal := find_collision_normal(&simplex, hull_a, hull_b).?
+	for {
+		if iteration > 50 {
+			fmt.println("Reached max GJK iterations for entity collision");
+			return nil;
+		}
+
+		v = support(hull_a, hull_b, direction);
+		simplex.vertices[simplex.overwrite_index] = v;
+
+		if linalg.dot(direction, v) <= 0.0 {
+			return nil;
+		}
+
+		if evaluate_and_evolve_simplex(&simplex, &direction) {
+			return simplex;
+		}
+
+		iteration += 1;
+	}
+}
+
+hulls_find_collision_manifold :: proc(hull_a, hull_b: ^Collision_Hull, simplex: Simplex) -> Maybe(Contact_Manifold) {
+	normal, ok_normal := find_collision_normal(simplex, hull_a, hull_b).?
 	if !ok_normal do return nil;
 
 	plane_normal_a, polygon_a := find_plane_normal_and_polygon(hull_a, -normal);
@@ -59,41 +90,6 @@ evaluate_entity_collision :: proc(hull_a, hull_b: ^Collision_Hull) -> Maybe(Cont
 }
 
 @(private="file")
-colliding :: proc(hull_a, hull_b: ^Collision_Hull) -> Maybe(Simplex) {
-	direction := linalg.Vector3f32 {0.0, 0.0, 1.0};
-	v := support(hull_a, hull_b, direction);
-	zero := linalg.Vector3f32 {0.0, 0.0, 0.0};
-	
-	simplex := Simplex {
-		[4]linalg.Vector3f32 {v, zero, zero, zero},
-		1,
-	};
-	
-	direction = -direction;
-	iteration := 0;
-
-	for {
-		if iteration > 50 {
-			fmt.println("Reached max GJK iterations for entity collision");
-			return nil;
-		}
-
-		v = support(hull_a, hull_b, direction);
-		simplex.vertices[simplex.overwrite_index] = v;
-
-		if linalg.dot(direction, v) <= 0.0 {
-			return nil;
-		}
-
-		if evaluate_and_evolve_simplex(&simplex, &direction) {
-			return simplex;
-		}
-
-		iteration += 1;
-	}
-}
-
-@(private="file")
 support :: proc(hull_a, hull_b: ^Collision_Hull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
 	// We do b first then a because we want the collision normal to point from b to a
 	v1 := furthest_point_hull(hull_b, direction);
@@ -103,7 +99,7 @@ support :: proc(hull_a, hull_b: ^Collision_Hull, direction: linalg.Vector3f32) -
 }
 
 @(private="file")
-find_collision_normal :: proc(simplex: ^Simplex, hull_a, hull_b: ^Collision_Hull) -> Maybe(linalg.Vector3f32) {
+find_collision_normal :: proc(simplex: Simplex, hull_a, hull_b: ^Collision_Hull) -> Maybe(linalg.Vector3f32) {
 	a := simplex.vertices[0];
 	b := simplex.vertices[1];
 	c := simplex.vertices[2];

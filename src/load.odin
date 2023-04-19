@@ -258,6 +258,13 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 }
 
 load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
+	{ // Local transform for the spherical cloud collision hull
+		position := linalg.Vector3f32 {0, 0.5, 0};
+		orientation := linalg.QUATERNIONF32_IDENTITY;
+		size := linalg.Vector3f32 {4, 2, 4};
+		runtime_assets.cloud_hull_transform = linalg.matrix4_from_trs(position, orientation, size);
+	}
+	
 	bytes, success := os.read_entire_file_from_filename("res/runtime_assets.kga");
 	defer delete(bytes);
 	assert(success);

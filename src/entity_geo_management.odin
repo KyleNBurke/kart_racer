@@ -74,29 +74,44 @@ add_geometry :: proc(geometry: Geometry, on_no_entities: On_No_Entities = .Free)
 	}
 }
 
-add_entity :: proc(geometry_lookup: Geometry_Lookup, entity: ^Entity) -> Entity_Lookup {
-	geometry_record := &entities_geos.geometry_records[geometry_lookup.index];
-	assert(geometry_lookup.generation == geometry_record.generation);
+add_entity :: proc(geometry_lookup: Maybe(Geometry_Lookup), entity: ^Entity) -> Entity_Lookup {
+	if geometry_lookup, ok := geometry_lookup.?; ok {
+		geometry_record := &entities_geos.geometry_records[geometry_lookup.index];
+		assert(geometry_lookup.generation == geometry_record.generation);
+	}
+
+	geometry_record_index: int = ---;
+
+	if geometry_lookup, ok := geometry_lookup.?; ok {
+		geometry_record_index = geometry_lookup.index;
+	} else {
+		geometry_record_index = -1;
+	}
 
 	entity_lookup: Entity_Lookup = ---;
 
 	if index, ok := pop_safe(&entities_geos.free_entity_records); ok {
 		record := &entities_geos.entity_records[index];
 		record.entity = entity;
-		record.geometry_record_index = geometry_lookup.index;
+		record.geometry_record_index = geometry_record_index;
 
 		entity_lookup = Entity_Lookup { index, record.generation };
 	} else {
 		append(&entities_geos.entity_records, Entity_Record {
 			entity = entity,
-			geometry_record_index = geometry_lookup.index,
+			geometry_record_index = geometry_record_index,
 		});
 
 		entity_lookup = Entity_Lookup { len(entities_geos.entity_records) - 1, 0 };
 	}
 
 	entity.lookup = entity_lookup;
-	append(&geometry_record.entity_lookups, entity_lookup);
+	
+	if geometry_lookup, ok := geometry_lookup.?; ok {
+		geometry_record := &entities_geos.geometry_records[geometry_lookup.index];
+		append(&geometry_record.entity_lookups, entity_lookup);
+	}
+	
 	return entity_lookup;
 }
 
@@ -118,7 +133,7 @@ remove_geometry :: proc(lookup: Geometry_Lookup) {
 	record := &entities_geos.geometry_records[lookup.index];
 	assert(lookup.generation == record.generation);
 
-	assert(len(record.entity_lookups) == 0); // We just haven't yet needed to destroy an geometry with entities. Shouldn't be an issue to do.
+	assert(len(record.entity_lookups) == 0); // We just haven't yet needed to destroy a geometry with entities. Shouldn't be an issue to do.
 
 	delete(record.geometry.indices);
 	delete(record.geometry.attributes);
@@ -134,6 +149,7 @@ remove_entity :: proc(entity_lookup: Entity_Lookup) {
 
 	entity := entity_record.entity;
 	
+	if entity_record.geometry_record_index == -1 do unimplemented();
 	geometry_record := &entities_geos.geometry_records[entity_record.geometry_record_index];
 
 	removal_index, ok := slice.linear_search(geometry_record.entity_lookups[:], entity_lookup);

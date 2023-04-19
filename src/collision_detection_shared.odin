@@ -30,12 +30,13 @@ Polytope :: struct {
 Face :: struct {a, b, c: int, normal: linalg.Vector3f32 }
 
 furthest_point_hull :: proc(hull: ^Collision_Hull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
-	d := math2.matrix4_transform_direction(hull.inv_global_transform, direction);
+	d := linalg.normalize(math2.matrix4_transform_direction(hull.inv_global_transform, direction));
 	point: linalg.Vector3f32;
 
 	switch hull.kind {
 		case .Box:
 			point = linalg.Vector3f32 {math.sign_f32(d.x), math.sign_f32(d.y), math.sign_f32(d.z)};
+
 		case .Cylinder:
 			xz: linalg.Vector2f32;
 			if d.x == 0 && d.z == 0 {
@@ -45,6 +46,10 @@ furthest_point_hull :: proc(hull: ^Collision_Hull, direction: linalg.Vector3f32)
 			}
 
 			point = linalg.Vector3f32 {xz.x, math.sign_f32(d.y), xz.y};
+
+		case .Sphere:
+			point = d;
+
 		case .Mesh:
 			unimplemented();
 	}
@@ -309,7 +314,7 @@ find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: l
 					linalg.Vector3f32 {xz.x, -1, xz.y});
 			}
 		
-		case .Mesh:
+		case .Sphere, .Mesh:
 			unimplemented();
 	}
 

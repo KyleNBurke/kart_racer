@@ -6,6 +6,8 @@ import "core:math/linalg";
 import "core:math/rand";
 import "math2";
 
+import "core:fmt";
+
 SHOCK_PARTICLE_MAX_OFFSET :: 1.4;
 
 Shock_Particle :: struct {
@@ -198,6 +200,68 @@ draw_fire_entity_particles :: proc(vulkan: ^Vulkan, fire_entities: []Entity_Look
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		for particle in &rigid_body.fire_particles {
+			draw_particle(vulkan, &particle);
+		}
+	}
+}
+
+SHOCK_CLOUD_RAMP_UP_TIME :: 1;
+SHOCK_CLOUD_DESIRED_PARTICLES :: 300;
+SHOCK_CLOUD_RAMP_UP_PARTICLES_PER_SECOND :: SHOCK_CLOUD_DESIRED_PARTICLES / SHOCK_CLOUD_RAMP_UP_TIME
+
+update_status_effect_cloud_particles :: proc(clouds: []Entity_Lookup, dt: f32) {
+	reset_shock_particle :: proc(transform: linalg.Matrix4f32, particle: ^Shock_Particle) {
+		// https://math.stackexchange.com/a/1113326/825984
+		// Uniformly pick a random point the surface of a sphere
+		u1 := rand.float32();
+		u2 := rand.float32();
+
+		y := 2 * u1 - 1;
+		x := math.sqrt(1 - y * y) * math.cos(math.TAU * u2);
+		z := math.sqrt(1 - y * y) * math.sin(math.TAU * u2);
+
+		particle.position = math2.matrix4_transform_point(transform, linalg.Vector3f32 {x, y, z});
+		particle.time_alive = 0;
+	}
+
+	for lookup in clouds {
+		cloud := get_entity(lookup).variant.(^Cloud_Entity);
+		hull := &cloud.collision_hulls[0];
+
+		switch cloud.status_effect {
+		case .Shock:
+			if len(cloud.shock_particles) < SHOCK_CLOUD_DESIRED_PARTICLES {
+				desired_particles_so_far := min(cast(int) math.ceil(cloud.ramp_up_duration * SHOCK_CLOUD_RAMP_UP_PARTICLES_PER_SECOND), SHOCK_CLOUD_DESIRED_PARTICLES);
+				particles_to_add := desired_particles_so_far - len(cloud.shock_particles);
+				
+				cloud.ramp_up_duration += dt;
+
+				for _ in 0..<particles_to_add {
+					particle: Shock_Particle;
+					particle.size = SHOCK_PARTICLE_SIZE;
+					reset_shock_particle(hull.global_transform, &particle);
+					append(&cloud.shock_particles, particle);
+				}
+			}
+
+			for particle in &cloud.shock_particles {
+				local_dist := math2.matrix4_transform_point(hull.inv_global_transform, particle.position);
+
+				if linalg.length2(local_dist) > 1.2 * 1.2 {
+					reset_shock_particle(hull.global_transform, &particle);
+				}
+				
+				update_shock_particle(linalg.Vector3f32 {0, 0, 0}, &particle, dt);
+			}
+		}
+	}
+}
+
+draw_status_effect_clouds :: proc(vulkan: ^Vulkan, clouds: []Entity_Lookup) {
+	for lookup in clouds {
+		cloud := get_entity(lookup).variant.(^Cloud_Entity);
+
+		for particle in &cloud.shock_particles {
 			draw_particle(vulkan, &particle);
 		}
 	}

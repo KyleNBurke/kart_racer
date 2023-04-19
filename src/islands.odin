@@ -8,9 +8,6 @@ Islands :: struct {
 	free_islands: [dynamic]int,
 	awake_island_indices: [dynamic]int,
 	island_helpers: [dynamic]Geometry_Lookup,
-	box_helper_geo_lookup: Geometry_Lookup,
-	cylinder_helper_geo_lookup: Geometry_Lookup,
-	hull_helpers: [dynamic]Entity_Lookup,
 }
 
 Island :: struct {
@@ -32,12 +29,6 @@ init_islands :: proc(islands: ^Islands, count: u32) {
 			awake_island_index_index = -1,
 		});
 	}
-
-	box_helper_geo := init_box_helper("box hull visualizer");
-	islands.box_helper_geo_lookup = add_geometry(box_helper_geo, .Keep);
-
-	cylinder_helper_geo := init_cylinder_helper("cylinder hull visualizer");
-	islands.cylinder_helper_geo_lookup = add_geometry(cylinder_helper_geo, .Keep);
 }
 
 add_rigid_body_to_island :: proc(islands: ^Islands, island_index: int, lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
@@ -216,49 +207,6 @@ update_island_helpers :: proc(islands: ^Islands) {
 	}
 }
 
-update_hull_helpers :: proc(awake_entity_lookups: []Entity_Lookup, islands: ^Islands) {
-	for lookup in &islands.hull_helpers {
-		remove_entity(lookup);
-	}
-
-	clear(&islands.hull_helpers);
-
-	// When the simulate proc is done, there will be no alive islands so we canno't just loop through all the islands.
-	// Hate this but it's just a debug proc so I don't really care. Would be better to loop through all the rigid bodies.
-	// Maybe we can update Entities_Geos to have a hole-less list of all the rigid bodies or something.
-	all_lookups := slice.clone_to_dynamic(awake_entity_lookups, context.temp_allocator);
-
-	for island in &islands.islands {
-		if island.state == .Free do continue;
-
-		for lookup in island.lookups {
-			append(&all_lookups, lookup);
-		}
-	}
-
-	for lookup in all_lookups {
-		entity := get_entity(lookup);
-
-		for hull in &entity.collision_hulls {
-			helper := new_inanimate_entity();
-			helper.transform = hull.global_transform;
-
-			geo: Geometry_Lookup;
-			switch hull.kind {
-			case .Box:
-				geo = islands.box_helper_geo_lookup;
-			case .Cylinder:
-				geo = islands.cylinder_helper_geo_lookup;
-			case .Mesh:
-				unimplemented();
-			}
-
-			helper_lookup := add_entity(geo, helper);
-			append(&islands.hull_helpers, helper_lookup);
-		}
-	}
-}
-
 cleanup_islands :: proc(islands: ^Islands) {
 	delete(islands.free_islands);
 	delete(islands.awake_island_indices);
@@ -271,5 +219,4 @@ cleanup_islands :: proc(islands: ^Islands) {
 	}
 
 	delete(islands.islands);
-	delete(islands.hull_helpers);
 }

@@ -29,13 +29,18 @@ Game :: struct {
 	awake_rigid_body_lookups: [dynamic]Entity_Lookup,
 	islands: Islands,
 	constraints: Constraints,
+	hull_helpers: Hull_Helpers,
 	contact_helpers: [dynamic]Geometry_Lookup,
 	car: ^Car_Entity,
 	car_helpers: Car_Helpers,
+	runtime_assets: Runtime_Assets,
 	frame_metrics: Frame_Metrics,
 	shock_entities: [dynamic]Entity_Lookup,
 	fire_entities: [dynamic]Entity_Lookup,
-	runtime_assets: Runtime_Assets,
+
+	// Let's keep in mind, we could have the entity manager keep track of entities by variant which would eliminate the need for this.
+	// We'll stick with this for now and change it if more situations like this arise.
+	status_effect_cloud_lookups: [dynamic]Entity_Lookup,
 }
 
 main :: proc() {
@@ -179,6 +184,7 @@ init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
 	load_car(&game, spawn_position, spawn_orientation);
 	load_runtime_assets(&game.runtime_assets);
 
+	init_hull_helpers(&game.hull_helpers);
 	game.car_helpers = init_car_helpers();
 
 	init_shock_particles(game.shock_entities[:]);
@@ -199,10 +205,11 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 
 	update_shock_entity_particles(game.shock_entities[:], dt);
 	update_fire_entity_particles(game.fire_entities[:], dt);
+	update_status_effect_cloud_particles(game.status_effect_cloud_lookups[:], dt);
 	update_car_status_effects_and_particles(game.car, game.camera.transform, dt);
 
 	if config.hull_helpers {
-		update_hull_helpers(game.awake_rigid_body_lookups[:], &game.islands);
+		update_entity_hull_helpers(&game.hull_helpers);
 	}
 
 	free_all(context.temp_allocator);
@@ -212,6 +219,7 @@ immediate_mode_render_game :: proc(vulkan: ^Vulkan, game: ^Game) {
 	draw_shock_entity_particles(vulkan, game.shock_entities[:]);
 	draw_fire_entity_particles(vulkan, game.fire_entities[:]);
 	draw_car_status_effects(vulkan, game.car);
+	draw_status_effect_clouds(vulkan, game.status_effect_cloud_lookups[:]);
 }
 
 cleanup_game :: proc(game: ^Game) {

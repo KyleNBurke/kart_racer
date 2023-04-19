@@ -1,3 +1,7 @@
+Git commands
+- Remove last commit but keep changes: `git reset HEAD~1`
+- Checkout to remote branch: `git fetch` then `git switch <branch>`
+
 Ideas
 - Boost
 	- Player has a boost meter.
@@ -22,6 +26,7 @@ Ideas
 	- Ice
 		- Non exploding rigid body cubes - touch it and your car turns into an ice block
 		- Exploding rigid body barrels full of dry ice - leaves behind a cloud of dry ice
+	- I think any rigid body should be able to be shocked/caught on fire/frozen. The status effect only needs to happen for a second or two. It would just add another layer of cool sandboxyness.
 - Side/cylinder bumpers which fire off when the player gets close.
 - Giant fans which can blow your car sideways or up.
 - Hitting a normal rigid body slows down the player.
@@ -45,8 +50,9 @@ Todo
 - Exploding shock barrels
 	- Shrapnel pieces (need to add hulls to all of them)
 	- [done] Backface rendering
-	- Cloud of shock
+	- [done] Cloud of shock
 	- Explosion particle effect
+	- Rigid bodies should be affected by the cloud
 - Cylinder bumper
 	- Figure out how to do it. Use restitution? Should it even run through the constraint system?
 	- [done] Cylinder collision detection and resolution
@@ -58,7 +64,11 @@ Todo
 - Boost jets
 - The case where a geometry is marked as Free has a problem I believe. You see the free-ing logic only happens once you remove an entity from a geometry. So, if you create a geometry, mark it as Free and never assign an entity to it. I think the geometry really should be cleaned up but that'll never happen. Maybe we should add some debug logic that runs every frame to catch this potential memory leak.
 
-Unecessary but cool things we could do
+Good things to do on laptop
+- Improve car wheel helpers
+	- Render them up to date
+	- Make config setting
+- Clean up the -vet things
 - Export and import names
 
 Sequential impulse solver

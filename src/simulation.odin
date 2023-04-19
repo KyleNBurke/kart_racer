@@ -11,9 +11,9 @@ import "core:fmt";
 GRAVITY: f32 : -20.0;
 
 simulate :: proc(game: ^Game, dt: f32) {
+	car := game.car;
+	
 	{
-		car := game.car;
-
 		car.velocity.y += GRAVITY * dt;
 		car.new_position = car.position + car.velocity * dt;
 
@@ -49,46 +49,55 @@ simulate :: proc(game: ^Game, dt: f32) {
 	}
 	
 	clear_constraints(&game.constraints);
-	find_spring_constraints(&game.ground_grid, &game.entity_grid, &game.constraints, game.car, dt);
+	find_spring_constraints(&game.ground_grid, &game.entity_grid, &game.constraints, car, dt);
 	
 	additional_awake_entities := make([dynamic]Entity_Lookup, context.temp_allocator);
 
 	// Car collisions
 	{
 		// Ground collisions
-		nearby_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, game.car.bounds);
+		nearby_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, car.bounds);
 
-		for provoking_hull in &game.car.collision_hulls {
+		for provoking_hull in &car.collision_hulls {
 			for nearby_triangle_index in nearby_triangle_indices {
 				nearby_triangle := ground_grid_get_triangle(&game.ground_grid, nearby_triangle_index);
 
 				if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], nearby_triangle, &provoking_hull).?; ok {
-					add_car_fixed_constraint_set(&game.constraints, game.car, &manifold, dt);
+					add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
 				}
 			}
 		}
 
 		// Collisions with other hulls
-		nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, game.car.bounds);
+		nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, car.bounds);
 
-		for provoking_hull in &game.car.collision_hulls {
+		for provoking_hull in &car.collision_hulls {
 			for nearby_lookup in nearby_lookups {
 				nearby_entity := get_entity(nearby_lookup);
 
 				for nearby_hull in &nearby_entity.collision_hulls {
-					if manifold, ok := evaluate_entity_collision(&provoking_hull, &nearby_hull).?; ok {
-						switch e in nearby_entity.variant {
-						case ^Rigid_Body_Entity:
-							add_car_movable_constraint_set(&game.constraints, game.car, e, &manifold, dt);
-							car_collision_maybe_wake_island(&game.islands, &additional_awake_entities, e);
-							handle_status_effects(game.car, e);
-						case ^Inanimate_Entity:
-							// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
-							// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
-							add_car_fixed_constraint_set(&game.constraints, game.car, &manifold, dt);
-						case ^Car_Entity:
-							unreachable();
-						}
+					simplex, colliding := hulls_colliding(&provoking_hull, &nearby_hull).?;
+					if !colliding do continue;
+
+					if _, is_cloud_entity := nearby_entity.variant.(^Cloud_Entity); is_cloud_entity {
+						shock_car(car);
+						continue;
+					}
+
+					manifold, has_manifold := hulls_find_collision_manifold(&provoking_hull, &nearby_hull, simplex).?;
+					if !has_manifold do continue;
+
+					switch e in nearby_entity.variant {
+					case ^Rigid_Body_Entity:
+						add_car_movable_constraint_set(&game.constraints, car, e, &manifold, dt);
+						car_collision_maybe_wake_island(&game.islands, &additional_awake_entities, e);
+						handle_status_effects(car, e);
+					case ^Inanimate_Entity:
+						// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
+						// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
+						add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
+					case ^Car_Entity, ^Cloud_Entity:
+						unreachable();
 					}
 				}
 			}
@@ -127,16 +136,26 @@ simulate :: proc(game: ^Game, dt: f32) {
 				}
 
 				for nearby_hull in &nearby_entity.collision_hulls {
-					if manifold, ok := evaluate_entity_collision(&provoking_hull, &nearby_hull).?; ok {
-						switch e in nearby_entity.variant {
-						case ^Rigid_Body_Entity:
-							add_movable_constraint_set(&game.constraints, provoking_rigid_body, e, &manifold, dt);
-							rigid_body_collision_merge_islands(&game.islands, &additional_awake_entities, provoking_lookup, provoking_rigid_body, e);
-						case ^Inanimate_Entity:
-							add_fixed_constraint_set(&game.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
-						case ^Car_Entity:
-							unreachable();
-						}
+					simplex, colliding := hulls_colliding(&provoking_hull, &nearby_hull).?;
+					if !colliding do continue;
+
+					if _, is_cloud_entity := nearby_entity.variant.(^Cloud_Entity); is_cloud_entity {
+						continue;
+					}
+
+					manifold, has_manifold := hulls_find_collision_manifold(&provoking_hull, &nearby_hull, simplex).?;
+					if !has_manifold do continue;
+
+					switch e in nearby_entity.variant {
+					case ^Rigid_Body_Entity:
+						add_movable_constraint_set(&game.constraints, provoking_rigid_body, e, &manifold, dt);
+						rigid_body_collision_merge_islands(&game.islands, &additional_awake_entities, provoking_lookup, provoking_rigid_body, e);
+					case ^Inanimate_Entity:
+						add_fixed_constraint_set(&game.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
+					case ^Car_Entity:
+						unreachable();
+					case ^Cloud_Entity:
+						unimplemented();
 					}
 				}
 			}
@@ -149,7 +168,6 @@ simulate :: proc(game: ^Game, dt: f32) {
 		update_island_helpers(&game.islands);
 	}
 	
-	car := game.car;
 	solve_constraints(&game.constraints, car, dt);
 
 	{
@@ -206,7 +224,8 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 			// Find nearby entities and add an explosion velocity to them
 			center := math2.box_center(rigid_body.bounds);
-			bounds := math2.Box3f32 { center - 5, center + 5 };
+			EXPLOSION_RANGE :: 10;
+			bounds := math2.Box3f32 { center - EXPLOSION_RANGE, center + EXPLOSION_RANGE };
 			nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, bounds);
 
 			for lookup in nearby_lookups {
@@ -236,6 +255,18 @@ simulate :: proc(game: ^Game, dt: f32) {
 				
 				dir := linalg.normalize(shrapnel_rigid_body.position - rigid_body.position);
 				shrapnel_rigid_body.velocity = dir * 30;
+			}
+			
+			{ // Spawn cloud
+				cloud := new_cloud_entity(rigid_body.position, .Shock);
+				cloud_lookup := add_entity(nil, cloud);
+
+				hull := init_collision_hull(game.runtime_assets.cloud_hull_transform, cloud.transform, .Sphere);
+				append(&cloud.collision_hulls, hull);
+				update_entity_hull_transforms_and_bounds(cloud, cloud.transform);
+				insert_entity_into_grid(&game.entity_grid, cloud);
+
+				append(&game.status_effect_cloud_lookups, cloud_lookup);
 			}
 
 			// Rmove from entity geos
@@ -363,6 +394,10 @@ find_spring_constraints :: proc(ground_grid: ^Ground_Grid, entity_grid: ^Entity_
 
 		for nearby_lookup in nearby_lookups {
 			nearby_entity := get_entity(nearby_lookup);
+
+			if _, is_cloud_entity := nearby_entity.variant.(^Cloud_Entity); is_cloud_entity {
+				continue;
+			}
 
 			for nearby_hull in &nearby_entity.collision_hulls {
 				if !math2.box_intersects(spring_bounds, nearby_hull.global_bounds) do continue;
@@ -566,6 +601,9 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 			local_normal = linalg.Vector3f32 {p.x, 0, p.z};
 			length = t;
 		}
+	
+	case .Sphere:
+		unreachable();
 
 	case .Mesh:
 		unimplemented();

@@ -143,8 +143,9 @@ init_cylinder_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
 		x := math.cos(angle);
 		z := math.sin(angle);
 
-		append(&geo.attributes, x,  1, z, r, g, b);
-		append(&geo.attributes, x, -1, z, r, g, b);
+		append(&geo.attributes,
+			x,  1, z, r, g, b,
+			x, -1, z, r, g, b);
 
 		k := u16(i) * 2;
 		append(&geo.indices,
@@ -153,6 +154,51 @@ init_cylinder_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
 			k + 1, (k + 3) % (POINT_COUNT * 2),
 		);
 	}
+
+	return geo;
+}
+
+init_sphere_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
+	geo := Geometry { name = name, pipeline = .Line };
+	r, g, b := color[0], color[1], color[2];
+
+	POINT_COUNT :: 8;
+	POINT_COUNT_THETA :: POINT_COUNT / 2;
+	ANGLE_INCREMENT_THETA :: math.TAU / f32(POINT_COUNT);
+	ANGLE_INCREMENT_PHI :: math.PI / f32(POINT_COUNT / 2);
+
+	append(&geo.attributes, 0, -1, 0, r, g, b); // Bottom point
+
+	for x in 0..<POINT_COUNT {
+		for y in 0..<POINT_COUNT_THETA {
+			theta := f32(x) * ANGLE_INCREMENT_THETA;
+			phi   := f32(y + 1) * ANGLE_INCREMENT_PHI - math.PI;
+
+			pos_x := math.sin(phi) * math.cos(theta);
+			pos_y := math.cos(phi);
+			pos_z := math.sin(phi) * math.sin(theta);
+
+			append(&geo.attributes, pos_x, pos_y, pos_z, r, g, b);
+
+			s: u16;
+			e: u16 = 1 + u16(x) * POINT_COUNT_THETA + u16(y);
+
+			if y == 0 {
+				s = 0;
+			} else {
+				s = e - 1;
+			}
+
+			append(&geo.indices, s, e);
+
+			if y != 0 {
+				e = 1 + u16(x + 1) % POINT_COUNT * POINT_COUNT_THETA + u16(y - 1);
+				append(&geo.indices, s, e);
+			}
+		}
+	}
+
+	append(&geo.attributes, 0, 1, 0, r, g, b); // Top point
 
 	return geo;
 }
