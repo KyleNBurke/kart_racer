@@ -48,11 +48,9 @@ Improvements
 
 Todo
 - Exploding shock barrels
-	- Shrapnel pieces (need to add hulls to all of them)
-	- [done] Backface rendering
-	- [done] Cloud of shock
 	- Explosion particle effect
 	- Rigid bodies should be affected by the cloud
+	- Consider having little rigid bodies ignored from more things like the car suspension
 - Cylinder bumper
 	- Figure out how to do it. Use restitution? Should it even run through the constraint system?
 	- [done] Cylinder collision detection and resolution
