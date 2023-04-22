@@ -22,7 +22,7 @@ init_islands :: proc(islands: ^Islands, count: u32) {
 	assert(len(islands.islands) == 0);
 	assert(len(islands.awake_island_indices) == 0);
 
-	for i in 0..<count {
+	for _ in 0..<count {
 		append(&islands.islands, Island {
 			state = .Asleep,
 			lookups = [dynamic]Entity_Lookup {},
@@ -185,7 +185,7 @@ update_island_helpers :: proc(islands: ^Islands) {
 
 	clear(&islands.island_helpers);
 
-	for island, island_index in &islands.islands {
+	for island in &islands.islands {
 		if island.state == .Free do continue;
 
 		bounds_min := linalg.Vector3f32 { max(f32), max(f32), max(f32) };

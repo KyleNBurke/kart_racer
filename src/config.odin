@@ -29,7 +29,7 @@ load_config :: proc() {
 	split_index, j: int;
 
 	for i in 0..<len(data) {
-		r, e := utf8.decode_rune(data[i:]);
+		r, _ := utf8.decode_rune(data[i:]);
 		assert(r != utf8.RUNE_ERROR);
 		
 		if r == '\n' || i == len(data) - 1 {

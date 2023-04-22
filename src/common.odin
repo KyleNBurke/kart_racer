@@ -1,7 +1,6 @@
 package main;
 
 import "core:math";
-import "core:math/linalg";
 import "math2";
 
 bounds_to_grid_cells :: proc(half_cell_count: u32, cell_size: f32, bounds: math2.Box3f32) -> (min_x, min_y, max_x, max_y: u32, ok: bool) {

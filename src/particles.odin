@@ -6,8 +6,6 @@ import "core:math/linalg";
 import "core:math/rand";
 import "math2";
 
-import "core:fmt";
-
 SHOCK_PARTICLE_MAX_OFFSET :: 1.4;
 
 Shock_Particle :: struct {
