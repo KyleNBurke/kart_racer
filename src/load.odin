@@ -3,7 +3,6 @@ package main
 import "core:os";
 import "core:math/linalg";
 import "core:fmt";
-import "core:slice";
 
 POSITION_CHECK_VALUE :: 0b10101010_10101010_10101010_10101010;
 
@@ -151,7 +150,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 		for island_index in 0..<island_count {
 			bodies_count := read_u32(&bytes, &pos);
 			
-			for body_index in 0..<bodies_count {
+			for _ in 0..<bodies_count {
 				position := read_vec3(&bytes, &pos);
 				orientation := read_quat(&bytes, &pos);
 				size := read_vec3(&bytes, &pos);
@@ -250,7 +249,7 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 	geometry := init_triangle_geometry("car", indices, attributes, .Lambert);
 	geometry_lookup := add_geometry(geometry);
 	entity := new_car_entity(spawn_position, spawn_orientation);
-	entity_lookup := add_entity(geometry_lookup, entity);
+	add_entity(geometry_lookup, entity);
 	game.car = entity;
 
 	hull_count := read_u32(&bytes, &pos);
@@ -299,7 +298,7 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 	{ // Shock barrel shrapnel
 		count := read_u32(&bytes, &pos);
 
-		for i in 0..<count {
+		for _ in 0..<count {
 			indices, attributes := read_indices_attributes(&bytes, &pos);
 			position := read_vec3(&bytes, &pos);
 			orientation := read_quat(&bytes, &pos);

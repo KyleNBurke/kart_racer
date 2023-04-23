@@ -170,7 +170,6 @@ add_car_fixed_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity
 
 add_car_movable_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, rigid_body_b: ^Rigid_Body_Entity, manifold: ^Contact_Manifold, dt: f32) {
 	n := manifold.normal;
-	t1, t2 := math2.vector3_tangents(n);
 
 	constraint_set := Car_Movable_Constraint_Set {
 		rigid_body_b = rigid_body_b,

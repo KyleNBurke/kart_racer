@@ -3,7 +3,6 @@ package main;
 import "core:container/small_array";
 import "core:math";
 import "core:math/linalg";
-import "core:slice";
 import "math2";
 
 Contact :: struct {

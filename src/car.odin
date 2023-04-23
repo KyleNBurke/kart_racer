@@ -410,7 +410,7 @@ position_and_orient_wheels :: proc(car: ^Car_Entity, dt: f32) {
 		wheel_entity := get_entity(wheel.entity_lookup);
 		wheel_entity.position = wheel.body_point + body_down * (wheel.spring_length - car.wheel_radius);
 		
-		body_euler_y, body_euler_z, body_euler_x := linalg.euler_angles_yzx_from_quaternion(car.orientation);
+		body_euler_y, body_euler_z, _ := linalg.euler_angles_yzx_from_quaternion(car.orientation);
 
 		if wheel_index == 0 || wheel_index == 1 {
 			wheel_entity.orientation = linalg.quaternion_from_euler_angles(body_euler_y + car.current_steer_angle, body_euler_z, car.front_wheel_orientation, .YZX);

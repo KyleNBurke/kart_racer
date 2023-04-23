@@ -1,7 +1,6 @@
 package main;
 
 import "core:fmt";
-import "core:strings";
 import "core:os";
 import "core:c";
 import "core:slice";
@@ -319,7 +318,7 @@ load_cached :: proc(name: string, base_size: u32, cached_file_path: string) -> F
 
 	glyphs: map[rune]Glyph;
 
-	for i in 0..<glyph_count^ {
+	for _ in 0..<glyph_count^ {
 		code_point  := cast(rune) (cast(^i32le) &data[pos])^; pos += 4;
 		atlas_pos_x := cast(u32) (cast(^u32le) &data[pos])^; pos += 4;
 		atlas_pos_y := cast(u32) (cast(^u32le) &data[pos])^; pos += 4;

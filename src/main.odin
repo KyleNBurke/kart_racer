@@ -4,7 +4,6 @@ import "core:fmt";
 import "core:c";
 import "core:time";
 import "core:runtime";
-import "core:math/linalg";
 import "vendor:glfw";
 
 when ODIN_DEBUG {

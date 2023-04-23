@@ -1,8 +1,6 @@
 package main;
 
 import "core:math/linalg";
-import "core:slice";
-import "core:math";
 import "math2";
 
 Entity :: struct {

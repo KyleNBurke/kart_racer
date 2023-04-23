@@ -3,10 +3,7 @@ package main;
 import "core:math";
 import "core:math/linalg";
 import "core:container/small_array";
-import "core:slice";
 import "math2";
-
-import "core:fmt";
 
 GRAVITY: f32 : -20.0;
 

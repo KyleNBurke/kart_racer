@@ -1,7 +1,5 @@
 package main;
 
-import "core:slice";
-
 Text :: struct {
 	indices: [dynamic]u16,
 	attributes: [dynamic]f32,
