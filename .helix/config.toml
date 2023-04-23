@@ -9,3 +9,4 @@ lsp.display-messages = true
 indent-guides.render = true
 bufferline = "multiple"
 soft-wrap.enable = true
+statusline.right = ["workspace-diagnostics", "diagnostics", "selections", "position-percentage", "position", "file-encoding"]
