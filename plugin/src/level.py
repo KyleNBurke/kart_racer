@@ -15,6 +15,7 @@ def export(operator, context: Context):
 	mesh_name_to_index_max = export_geometries(depsgraph, graph, file)
 	export_inanimate_entities(graph, file, mesh_name_to_index_max)
 	export_rigid_bodies(graph, file, mesh_name_to_index_max)
+	export_oil_slicks(depsgraph, graph, file, mesh_name_to_index_max)
 
 	file.close()
 	print("Exported", operator.filepath)
@@ -102,7 +103,7 @@ def export_geometries(depsgraph: Depsgraph, graph, file):
 		object: Object = w_object.object
 
 		kg_type = object.kg_type
-		if kg_type == 'inanimate' or kg_type == 'rigid_body':
+		if kg_type == 'inanimate' or kg_type == 'rigid_body' or kg_type == 'oil_slick':
 			mesh: Mesh = object.data
 
 			if mesh.name_full in mesh_name_to_index_map:
@@ -245,3 +246,45 @@ def export_rigid_bodies(graph, file, mesh_name_to_index_map):
 			util.write_u32(file, status_effect)
 			export_hulls(file, w_object)
 			util.write_cursor_check(file)
+
+def export_oil_slicks(depsgraph: Depsgraph, graph, file, mesh_name_to_index_map):
+	print("--- Oil slicks ---")
+
+	w_objects = []
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop(0)
+		to_visit.extend(w_object.children_w_objects)
+		object: Object = w_object.object
+
+		if object.kg_type == 'oil_slick':
+			print(w_object.unique_name)
+			w_objects.append(w_object)
+	
+	print()
+	util.write_u32(file, len(w_objects))
+
+	for w_object in w_objects:
+		util.write_game_pos_ori_scale_from_blender_matrix(file, w_object.final_world_matrix)
+
+		mesh_index = mesh_name_to_index_map[w_object.object.data.name_full]
+		util.write_u32(file, mesh_index)
+
+		# Find hull
+		hull_w_object = None
+
+		for child_w_object in w_object.children_w_objects:
+			if child_w_object.object.kg_type == 'hull':
+				hull_w_object = child_w_object
+				break
+		
+		# Export hull
+		hull_object = hull_w_object.object
+		assert hull_object.kg_hull_type == 'mesh'
+		util.write_game_pos_ori_scale_from_blender_matrix(file, hull_object.matrix_local)
+
+		indices, positions = util.calculate_indices_local_positions(depsgraph, hull_object)
+		util.write_indices_attributes(file, indices, positions)
+
+		util.write_cursor_check(file)

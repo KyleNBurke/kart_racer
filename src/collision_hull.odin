@@ -12,18 +12,46 @@ Collision_Hull :: struct {
 	kind: Hull_Kind,
 	local_bounds,
 	global_bounds: math2.Box3f32,
+	indices: [dynamic]u16,
+	positions: [dynamic]f32,
 }
 
 Hull_Kind :: enum {Box, Cylinder, Sphere, Mesh}
 
-init_collision_hull :: proc(local_transform, entity_global_transform: linalg.Matrix4f32, kind: Hull_Kind) -> Collision_Hull {
-	local_bounds: math2.Box3f32 = ---;
+init_collision_hull :: proc(
+	local_transform,
+	entity_global_transform: linalg.Matrix4f32,
+	kind: Hull_Kind,
+	maybe_indices: Maybe([dynamic]u16) = nil,
+	maybe_positions: Maybe([dynamic]f32) = nil,
+) -> Collision_Hull {
+	local_bounds: math2.Box3f32;
+	indices: [dynamic]u16;
+	positions: [dynamic]f32;
 
 	switch kind {
-		case .Box, .Cylinder, .Sphere:
-			local_bounds = math2.BOX3F32_STANDARD;
-		case .Mesh:
-			unimplemented();
+	case .Box, .Cylinder, .Sphere:
+		local_bounds = math2.BOX3F32_STANDARD;
+	case .Mesh:
+		indices_ok, positions_ok: bool;
+
+		indices, indices_ok = maybe_indices.?;
+		positions, positions_ok = maybe_positions.?;
+
+		assert(indices_ok);
+		assert(positions_ok);
+
+		local_bounds_min := linalg.Vector3f32 { math.INF_F32,  math.INF_F32,  math.INF_F32};
+		local_bounds_max := linalg.Vector3f32 {-math.INF_F32, -math.INF_F32, -math.INF_F32};
+
+		for triangle_index in 0..<len(indices) / 3 {
+			a, b, c := math2.triangle_index_to_points(triangle_index, indices[:], positions[:]);
+
+			local_bounds_min = linalg.min(local_bounds_min, linalg.min(a, b, c));
+			local_bounds_max = linalg.max(local_bounds_max, linalg.max(a, b, c));
+		}
+
+		local_bounds = math2.Box3f32 {local_bounds_min, local_bounds_max};
 	}
 
 	hull := Collision_Hull {
@@ -33,6 +61,8 @@ init_collision_hull :: proc(local_transform, entity_global_transform: linalg.Mat
 		kind,
 		local_bounds,
 		math2.BOX3F32_ZERO,
+		indices,
+		positions,
 	};
 
 	return hull;
@@ -74,7 +104,7 @@ update_entity_hull_transforms_and_bounds :: proc(entity: ^Entity, transform: lin
 Hull_Helpers :: struct {
 	box_helper_geo_lookup: Geometry_Lookup,
 	cylinder_helper_geo_lookup: Geometry_Lookup,
-	sphere_helepr_geo_lookup: Geometry_Lookup,
+	sphere_helper_geo_lookup: Geometry_Lookup,
 	hull_helpers: [dynamic]Entity_Lookup,
 }
 
@@ -86,7 +116,7 @@ init_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 	hull_helpers.cylinder_helper_geo_lookup = add_geometry(cylinder_helper_geo, .Keep);
 
 	sphere_helper_geo := init_sphere_helper("sphere hull visualizer");
-	hull_helpers.sphere_helepr_geo_lookup = add_geometry(sphere_helper_geo, .Keep);
+	hull_helpers.sphere_helper_geo_lookup = add_geometry(sphere_helper_geo, .Keep);
 }
 
 cleanup_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
@@ -110,20 +140,23 @@ update_entity_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 		}
 
 		for hull in &entity_record.entity.collision_hulls {
-			helper := new_inanimate_entity();
-			helper.transform = hull.global_transform;
-
 			geo: Geometry_Lookup;
+			
 			switch hull.kind {
 			case .Box:
 				geo = hull_helpers.box_helper_geo_lookup;
 			case .Cylinder:
 				geo = hull_helpers.cylinder_helper_geo_lookup;
 			case .Sphere:
-				geo = hull_helpers.sphere_helepr_geo_lookup;
+				geo = hull_helpers.sphere_helper_geo_lookup;
 			case .Mesh:
-				unimplemented();
+				// We would want to create a wireframe triangle geometry here using the indices and positions. This would be a good thing to do on laptop.
+				// We actually wouldn't want to use a [dynamic]linalg.Vector3f32 for the positions in this case.
+				continue;
 			}
+			
+			helper := new_inanimate_entity();
+			helper.transform = hull.global_transform;
 
 			helper_lookup := add_entity(geo, helper);
 			append(&hull_helpers.hull_helpers, helper_lookup);

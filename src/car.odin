@@ -254,6 +254,24 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, car_helpe
 		body_surface_lat_dir := linalg.normalize(linalg.cross(surface_normal, body_forward));
 		lat_vel := linalg.dot(body_velocity, body_surface_lat_dir);
 
+		lat_slip_threshold,
+		ang_slip_threshold,
+		slipping_max_lat_fric,
+		slipping_max_ang_fric: f32;
+		
+		switch car.surface_type {
+		case .Normal:
+			lat_slip_threshold = 3;
+			ang_slip_threshold = 5;
+			slipping_max_lat_fric = 20;
+			slipping_max_ang_fric = 2;
+		case .Oil:
+			lat_slip_threshold = 3;
+			ang_slip_threshold = 5;
+			slipping_max_lat_fric = 0;
+			slipping_max_ang_fric = 0;
+		}
+
 		slipping := false;
 
 		buttons := glfw.GetJoystickButtons(glfw.JOYSTICK_1);
@@ -263,7 +281,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, car_helpe
 			}
 		}
 
-		if abs(lat_vel) > 3 || abs(ang_vel) > 5 {
+		if abs(lat_vel) > lat_slip_threshold || abs(ang_vel) > ang_slip_threshold {
 			slipping = true;
 		}
 
@@ -274,13 +292,11 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, car_helpe
 		if slipping {
 			car.current_steer_angle = 0;
 
-			MAX_ANG_FRIC: f32 : 2;
-			ang_fric := -clamp(ang_vel, -MAX_ANG_FRIC * dt, MAX_ANG_FRIC * dt);
+			ang_fric := -clamp(ang_vel, -slipping_max_ang_fric * dt, slipping_max_ang_fric * dt);
 			ang_fric += 3.0 * steer_multiplier * dt;
 			car.angular_velocity += surface_normal * ang_fric;
 
-			MAX_LAT_FRIC: f32 : 20;
-			fric := clamp(lat_vel, -MAX_LAT_FRIC * dt, MAX_LAT_FRIC * dt);
+			fric := clamp(lat_vel, -slipping_max_lat_fric * dt, slipping_max_lat_fric * dt);
 			car.velocity -= body_surface_lat_dir * fric;
 
 			top_speed_multiplier := max((20 - abs(lat_vel)) / 20, 0);

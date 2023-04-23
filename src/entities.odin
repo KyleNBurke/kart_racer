@@ -14,7 +14,7 @@ Entity :: struct {
 	collision_hulls: [dynamic]Collision_Hull,
 	bounds: math2.Box3f32,
 	query_run: u32,
-	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity, ^Car_Entity, ^Cloud_Entity},
+	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity, ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity},
 }
 
 Inanimate_Entity :: struct {
@@ -59,6 +59,8 @@ Status_Effect :: enum {
 	ExplodingShock,
 }
 
+Surface_Type :: enum { Normal, Oil }
+
 Car_Entity :: struct {
 	using entity: Entity,
 	inv_global_inertia_tensor: linalg.Matrix3f32,
@@ -81,6 +83,7 @@ Car_Entity :: struct {
 	back_wheel_orientation: f32,
 	shock_particles: [dynamic]Shock_Particle,
 	fire_particles: [dynamic]Fire_Particle,
+	surface_type: Surface_Type,
 
 	forward_helper_geo,
 	steer_angle_helper_geo: Geometry_Lookup,
@@ -91,6 +94,10 @@ Wheel :: struct {
 	body_point: linalg.Vector3f32,
 	contact_normal: Maybe(linalg.Vector3f32),
 	spring_length: f32,
+}
+
+Oil_Slick_Entity :: struct {
+	using entity: Entity,
 }
 
 init_entity :: proc(e: ^Entity, position: linalg.Vector3f32, orientation: linalg.Quaternionf32, size: linalg.Vector3f32) {
@@ -187,6 +194,14 @@ new_car_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaterni
 	
 	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
 	e.new_transform = linalg.MATRIX4F32_IDENTITY;
+
+	return e;
+}
+
+new_oil_slick_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaternionf32, size: linalg.Vector3f32) -> ^Oil_Slick_Entity {
+	e := new(Oil_Slick_Entity);
+	e.variant = e;
+	init_entity(e, position, orientation, size);
 
 	return e;
 }

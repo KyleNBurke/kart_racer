@@ -139,6 +139,18 @@ hsv_to_rgb :: proc(h, s, v: f32) -> (r, g, b: f32) {
 	}
 }
 
+triangle_index_to_points :: proc(triangle_index: int, indices: []u16, positions: []f32) -> (a, b, c: linalg.Vector3f32) {
+	a_index := indices[triangle_index * 3 + 0] * 3;
+	b_index := indices[triangle_index * 3 + 1] * 3;
+	c_index := indices[triangle_index * 3 + 2] * 3;
+
+	a = linalg.Vector3f32 {positions[a_index], positions[a_index + 1], positions[a_index + 2]};
+	b = linalg.Vector3f32 {positions[b_index], positions[b_index + 1], positions[b_index + 2]};
+	c = linalg.Vector3f32 {positions[c_index], positions[c_index + 1], positions[c_index + 2]};
+
+	return a, b, c;
+}
+
 @(test, private)
 test_matrix3_transform_direction :: proc(t: ^testing.T) {
 	m := linalg.Matrix3f32 {

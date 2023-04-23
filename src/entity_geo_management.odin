@@ -170,6 +170,11 @@ remove_entity :: proc(entity_lookup: Entity_Lookup) {
 		delete(e.shock_particles);
 	}
 
+	for hull in &entity.collision_hulls {
+		delete(hull.indices);
+		delete(hull.positions);
+	}
+
 	delete(entity.collision_hulls);
 	free(entity);
 	entity_record.generation += 1;
@@ -193,8 +198,15 @@ cleanup_entities_geos :: proc() {
 		record := &entities_geos.entity_records[i];
 		if slice.contains(entities_geos.free_entity_records[:], i) do continue;
 
-		delete(record.entity.collision_hulls);
-		free(record.entity);
+		entity := record.entity;
+
+		for hull in &entity.collision_hulls {
+			delete(hull.indices);
+			delete(hull.positions);
+		}
+
+		delete(entity.collision_hulls);
+		free(entity);
 	}
 
 	delete(entities_geos.entity_records);

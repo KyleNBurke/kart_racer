@@ -49,7 +49,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 	}
 	
 	clear_constraints(&game.constraints);
-	find_spring_constraints(&game.ground_grid, &game.entity_grid, &game.constraints, car, dt);
+	find_car_spring_constraints_and_surface_type(&game.ground_grid, &game.entity_grid, &game.constraints, car, dt, game.oil_slick_lookups[:]);
 	
 	additional_awake_entities := make([dynamic]Entity_Lookup, context.temp_allocator);
 
@@ -96,7 +96,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 						// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
 						// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
 						add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
-					case ^Car_Entity, ^Cloud_Entity:
+					case ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity:
 						unreachable();
 					}
 				}
@@ -152,7 +152,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 						rigid_body_collision_merge_islands(&game.islands, &additional_awake_entities, provoking_lookup, provoking_rigid_body, e);
 					case ^Inanimate_Entity:
 						add_fixed_constraint_set(&game.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
-					case ^Car_Entity:
+					case ^Car_Entity, ^Oil_Slick_Entity:
 						unreachable();
 					case ^Cloud_Entity:
 						unimplemented();
@@ -324,16 +324,16 @@ Spring_Contact :: struct {
 SPRING_BODY_POINT_Z: f32 : 1.1;
 SPRING_MAX_LENGTH: f32 : 0.8;
 
-find_spring_constraints :: proc(ground_grid: ^Ground_Grid, entity_grid: ^Entity_Grid, constraints: ^Constraints, car: ^Car_Entity, dt: f32) {
+find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, entity_grid: ^Entity_Grid, constraints: ^Constraints, car: ^Car_Entity, dt: f32, oil_slicks: []Entity_Lookup) {
 	extension_dir := -math2.matrix4_up(car.new_transform);
 
 	SPRING_BODY_POINT_X: f32 : 0.8;
-	SPRING_BODY_POINT_Y: f32 : -0.35
+	SPRING_BODY_POINT_Y: f32 : 0.35
 
-	SPRING_BODY_POINT_LOCAL_FL :: linalg.Vector3f32 {SPRING_BODY_POINT_X, SPRING_BODY_POINT_Y, SPRING_BODY_POINT_Z};
-	SPRING_BODY_POINT_LOCAL_FR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, SPRING_BODY_POINT_Y, SPRING_BODY_POINT_Z};
-	SPRING_BODY_POINT_LOCAL_BL :: linalg.Vector3f32 {SPRING_BODY_POINT_X, SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
-	SPRING_BODY_POINT_LOCAL_BR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
+	SPRING_BODY_POINT_LOCAL_FL :: linalg.Vector3f32 { SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y,  SPRING_BODY_POINT_Z};
+	SPRING_BODY_POINT_LOCAL_FR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y,  SPRING_BODY_POINT_Z};
+	SPRING_BODY_POINT_LOCAL_BL :: linalg.Vector3f32 { SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
+	SPRING_BODY_POINT_LOCAL_BR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
 
 	spring_body_point_fl := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_FL);
 	spring_body_point_fr := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_FR);
@@ -431,8 +431,46 @@ find_spring_constraints :: proc(ground_grid: ^Ground_Grid, entity_grid: ^Entity_
 		}
 	}
 
+	car.surface_type = .Normal;
+
 	if small_array.len(manifold.contacts) > 0 {
 		set_spring_constraint_set(constraints, car, &manifold, dt);
+
+		// Check if car is on an oil slick
+		probe_start := car.position + extension_dir * SPRING_BODY_POINT_Y;
+		probe_end := probe_start + extension_dir * SPRING_MAX_LENGTH;
+		
+		probe_bounds_min := linalg.min(probe_start, probe_end);
+		probe_bounds_max := linalg.max(probe_start, probe_end);
+		probe_bounds := math2.Box3f32 { probe_bounds_min, probe_bounds_max };
+
+		// #performance
+		// Here, we're iterating over all the oil slicks and doing AABB checks against the oil slick probe. Perhaps we could use
+		// a spacial grid to only iterate over the nearby ones.
+		oil_slick_loop: for oil_slick_lookup in oil_slicks {
+			oil_slick := get_entity(oil_slick_lookup);
+
+			if math2.box_intersects(probe_bounds, oil_slick.bounds) {
+				oil_slick_hull := &oil_slick.collision_hulls[0];
+				indices := &oil_slick_hull.indices;
+				positions := &oil_slick_hull.positions;
+
+				for triangle_index in 0..<len(indices) / 3 {
+					a, b, c := math2.triangle_index_to_points(triangle_index, oil_slick_hull.indices[:], oil_slick_hull.positions[:]);
+
+					global_a := math2.matrix4_transform_point(oil_slick_hull.global_transform, a);
+					global_b := math2.matrix4_transform_point(oil_slick_hull.global_transform, b);
+					global_c := math2.matrix4_transform_point(oil_slick_hull.global_transform, c);
+
+					_, ok := spring_intersects_triangle(probe_start, extension_dir, global_a, global_b, global_c).?;
+					if !ok do continue;
+
+					car.surface_type = .Oil;
+					
+					break oil_slick_loop;
+				}
+			}
+		}
 	}
 }
 

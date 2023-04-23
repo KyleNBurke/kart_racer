@@ -41,6 +41,8 @@ Game :: struct {
 	// Let's keep in mind, we could have the entity manager keep track of entities by variant which would eliminate the need for this.
 	// We'll stick with this for now and change it if more situations like this arise.
 	status_effect_cloud_lookups: [dynamic]Entity_Lookup,
+
+	oil_slick_lookups: [dynamic]Entity_Lookup,
 }
 
 main :: proc() {
@@ -230,6 +232,7 @@ cleanup_game :: proc(game: ^Game) {
 	cleanup_font(&game.font);
 	ground_grid_cleanup(&game.ground_grid);
 	cleanup_entity_grid(&game.entity_grid);
+	cleanup_hull_helpers(&game.hull_helpers);
 	cleanup_constraints(&game.constraints);
 	cleanup_islands(&game.islands);
 	cleanup_runtime_assets(&game.runtime_assets);
@@ -240,6 +243,7 @@ cleanup_game :: proc(game: ^Game) {
 	
 	cleanup_entities_geos();
 
+	delete(game.oil_slick_lookups);
 	delete(game.status_effect_cloud_lookups);
 	delete(game.shock_entities);
 	delete(game.fire_entities);

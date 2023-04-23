@@ -200,6 +200,37 @@ def calculate_indices_global_positions(matrix, depsgraph: Depsgraph, object: Obj
 	
 	return indices, positions
 
+def calculate_indices_local_positions(depsgraph: Depsgraph, object: Object):
+	eval_object = object.evaluated_get(depsgraph)
+	eval_mesh: Mesh = bpy.data.meshes.new_from_object(eval_object)
+	eval_mesh.calc_loop_triangles()
+
+	vertex_map = {}
+	next_index = 0
+	indices = []
+
+	for triangle in eval_mesh.loop_triangles:
+		for i in range(3):
+			vertex_index = triangle.vertices[i]
+			vertex = eval_mesh.vertices[vertex_index].co
+			vertex_game = blender_position_to_game_position(vertex)
+
+			if vertex_game in vertex_map:
+				index = vertex_map[vertex_game]
+				indices.append(index)
+			else:
+				vertex_map[vertex_game] = next_index
+				indices.append(next_index)
+				next_index += 1
+	
+	positions = []
+
+	for vertex in vertex_map.keys():
+		for coord in vertex:
+			positions.append(coord)
+	
+	return indices, positions
+
 def calculate_indices_local_positions_normals_colors(depsgraph: Depsgraph, object: Object):
 	eval_object = object.evaluated_get(depsgraph)
 	eval_mesh: Mesh = bpy.data.meshes.new_from_object(eval_object)
