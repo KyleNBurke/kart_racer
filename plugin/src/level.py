@@ -122,7 +122,7 @@ def export_geometries(depsgraph: Depsgraph, graph, file):
 	util.write_u32(file, len(w_objects))
 	
 	for w_object in w_objects:
-		object = w_object.object
+		object: Object = w_object.object
 		util.write_string(file, object.data.name_full);
 		indices, attributes = util.calculate_indices_local_positions_normals_colors(depsgraph, object)
 		util.write_indices_attributes(file, indices, attributes)
@@ -149,6 +149,7 @@ def export_inanimate_entities(graph, file, mesh_name_to_index_map):
 	util.write_u32(file, len(w_objects))
 
 	for w_object in w_objects:
+		util.write_string(file, w_object.unique_name)
 		util.write_game_pos_ori_scale_from_blender_matrix(file, w_object.final_world_matrix)
 
 		mesh_index = mesh_name_to_index_map[w_object.object.data.name_full]
@@ -240,6 +241,7 @@ def export_rigid_bodies(graph, file, mesh_name_to_index_map):
 			
 			assert(status_effect is not None)
 			
+			util.write_string(file, w_object.unique_name)
 			util.write_game_pos_ori_scale_from_blender_matrix(file, w_object.final_world_matrix)
 			util.write_u32(file, mesh_index)
 			util.write_f32(file, object.kg_rigid_body_mass)
@@ -268,6 +270,7 @@ def export_oil_slicks(depsgraph: Depsgraph, graph, file, mesh_name_to_index_map)
 	util.write_u32(file, len(w_objects))
 
 	for w_object in w_objects:
+		util.write_string(file, w_object.unique_name)
 		util.write_game_pos_ori_scale_from_blender_matrix(file, w_object.final_world_matrix)
 
 		mesh_index = mesh_name_to_index_map[w_object.object.data.name_full]

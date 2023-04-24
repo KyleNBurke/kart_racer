@@ -119,16 +119,17 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 	}
 
 	{ // Inanimate entities
-		inanimate_entities_count := read_u32(&bytes, &pos);
+		entity_count := read_u32(&bytes, &pos);
 
-		for i in 0..<inanimate_entities_count {
+		for i in 0..<entity_count {
+			name := read_string(&bytes, &pos);
 			position := read_vec3(&bytes, &pos);
 			orientation := read_quat(&bytes, &pos);
 			size := read_vec3(&bytes, &pos);
 			geometry_index := read_u32(&bytes, &pos);
 			hull_count := read_u32(&bytes, &pos);
 
-			inanimate_entity := new_inanimate_entity(position, orientation, size);
+			inanimate_entity := new_inanimate_entity(name, position, orientation, size);
 			entity_lookup := add_entity(geometry_lookups[geometry_index], inanimate_entity);
 
 			for hull_index in 0..<hull_count {
@@ -160,6 +161,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 			bodies_count := read_u32(&bytes, &pos);
 			
 			for _ in 0..<bodies_count {
+				name := read_string(&bytes, &pos);
 				position := read_vec3(&bytes, &pos);
 				orientation := read_quat(&bytes, &pos);
 				size := read_vec3(&bytes, &pos);
@@ -178,7 +180,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 					case: unreachable()
 				}
 
-				rigid_body := new_rigid_body_entity(position, orientation, size, mass, dimensions, status_effect);
+				rigid_body := new_rigid_body_entity(name, position, orientation, size, mass, dimensions, status_effect);
 				rigid_body.collision_exclude = collision_exclude;
 				entity_lookup := add_entity(geometry_lookups[geometry_index], rigid_body);
 
@@ -220,12 +222,13 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 		oil_slicks_count := read_u32(&bytes, &pos);
 
 		for _ in 0..<oil_slicks_count {
+			name := read_string(&bytes, &pos);
 			position := read_vec3(&bytes, &pos);
 			orientation := read_quat(&bytes, &pos);
 			size := read_vec3(&bytes, &pos);
 			geometry_index := read_u32(&bytes, &pos);
 
-			entity := new_oil_slick_entity(position, orientation, size);
+			entity := new_oil_slick_entity(name, position, orientation, size);
 			entity_lookup := add_entity(geometry_lookups[geometry_index], entity);
 			append(&game.oil_slick_lookups, entity_lookup);
 
@@ -282,7 +285,7 @@ load_car :: proc(using game: ^Game, spawn_position: linalg.Vector3f32, spawn_ori
 		geometry_lookup := add_geometry(geometry);
 
 		for i in 0..<4 {
-			entity := new_inanimate_entity();
+			entity := new_inanimate_entity("wheel");
 			entity_lookup := add_entity(geometry_lookup, entity);
 			car.wheels[i].entity_lookup = entity_lookup;
 		}

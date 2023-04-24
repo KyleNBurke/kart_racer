@@ -23,6 +23,7 @@ Geometries count: u32
 	attributes        [f32]
 
 Inanimate entities count:  u32
+	name:                  string
 	position:              vec3
 	rotation:              quat
 	scale:                 vec3
@@ -40,6 +41,7 @@ Inanimate entities count:  u32
 
 Rigid body islands count: u32
 	Entities count: u32
+		name:                  string
 		position:              vec3
 		rotation:              quat
 		scale:                 vec3
@@ -60,7 +62,8 @@ Rigid body islands count: u32
 		position check         u32
 	...
 
-Oil slicks count: u32
+Oil slick entities count: u32
+	name:                  string
 	position:              vec3
 	rotation:              quat
 	scale:                 vec3

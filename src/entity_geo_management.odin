@@ -159,8 +159,10 @@ remove_entity :: proc(entity_lookup: Entity_Lookup) {
 	unordered_remove(&geometry_record.entity_lookups, removal_index);
 
 	if len(geometry_record.entity_lookups) == 0 && geometry_record.on_no_entities == .Free {
-		delete(geometry_record.geometry.indices);
-		delete(geometry_record.geometry.attributes);
+		geometry := &geometry_record.geometry;
+		delete(geometry.name);
+		delete(geometry.indices);
+		delete(geometry.attributes);
 
 		geometry_record.freed = true;
 		geometry_record.generation += 1;
@@ -176,6 +178,7 @@ remove_entity :: proc(entity_lookup: Entity_Lookup) {
 		delete(hull.positions);
 	}
 
+	delete(entity.name);
 	delete(entity.collision_hulls);
 	free(entity);
 	entity_record.generation += 1;
@@ -202,6 +205,7 @@ cleanup_entities_geos :: proc() {
 		if slice.contains(entities_geos.free_entity_records[:], i) do continue;
 
 		entity := record.entity;
+		delete(entity.name);
 
 		for hull in &entity.collision_hulls {
 			delete(hull.indices);

@@ -240,7 +240,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 				position := math2.matrix4_transform_point(rigid_body.transform, shrapnel.position);
 				orientation := rigid_body.orientation * shrapnel.orientation;
 				size := rigid_body.size * shrapnel.size;
-				shrapnel_rigid_body := new_rigid_body_entity(position, orientation, size, 1, shrapnel.dimensions);
+				shrapnel_rigid_body := new_rigid_body_entity("shrapnel", position, orientation, size, 1, shrapnel.dimensions);
 				shrapnel_rigid_body.collision_exclude = true;
 				shrapnel_lookup := add_entity(shrapnel.geometry_lookup, shrapnel_rigid_body);
 				hull := init_collision_hull(shrapnel.hull_local_transform, shrapnel_rigid_body.transform, .Box);

@@ -1,10 +1,12 @@
 package main;
 
 import "core:math/linalg";
+import "core:strings";
 import "math2";
 
 Entity :: struct {
 	lookup: Entity_Lookup,
+	name: string,
 	position: linalg.Vector3f32,
 	orientation: linalg.Quaternionf32,
 	size: linalg.Vector3f32,
@@ -98,7 +100,8 @@ Oil_Slick_Entity :: struct {
 	using entity: Entity,
 }
 
-init_entity :: proc(e: ^Entity, position: linalg.Vector3f32, orientation: linalg.Quaternionf32, size: linalg.Vector3f32) {
+init_entity :: proc(e: ^Entity, name: string, position: linalg.Vector3f32, orientation: linalg.Quaternionf32, size: linalg.Vector3f32) {
+	e.name = strings.clone(name);
 	e.position = position;
 	e.orientation = orientation;
 	e.size = size;
@@ -110,13 +113,14 @@ update_entity_transform :: proc(using entity: ^Entity) {
 }
 
 new_inanimate_entity :: proc(
+	name: string,
 	position := linalg.Vector3f32 {0.0, 0.0, 0.0},
 	orientation := linalg.QUATERNIONF32_IDENTITY,
 	size := linalg.Vector3f32 {1.0, 1.0, 1.0},
 ) -> ^Inanimate_Entity {
 	e := new(Inanimate_Entity);
 	e.variant = e;
-	init_entity(e, position, orientation, size);
+	init_entity(e, name, position, orientation, size);
 
 	return e;
 }
@@ -124,7 +128,7 @@ new_inanimate_entity :: proc(
 new_cloud_entity :: proc(position: linalg.Vector3f32, status_effect: Cloud_Status_Effect) -> ^Cloud_Entity {
 	e := new(Cloud_Entity);
 	e.variant = e;
-	init_entity(e, position, linalg.QUATERNIONF32_IDENTITY, linalg.Vector3f32 {1, 1, 1});
+	init_entity(e, "cloud", position, linalg.QUATERNIONF32_IDENTITY, linalg.Vector3f32 {1, 1, 1});
 
 	e.status_effect = status_effect;
 
@@ -132,6 +136,7 @@ new_cloud_entity :: proc(position: linalg.Vector3f32, status_effect: Cloud_Statu
 }
 
 new_rigid_body_entity :: proc(
+	name: string,
 	position := linalg.Vector3f32 {0.0, 0.0, 0.0},
 	orientation := linalg.QUATERNIONF32_IDENTITY,
 	size := linalg.Vector3f32 {1.0, 1.0, 1.0},
@@ -157,7 +162,7 @@ new_rigid_body_entity :: proc(
 
 	e := new(Rigid_Body_Entity);
 	e.variant = e;
-	init_entity(e, position, orientation, size);
+	init_entity(e, name, position, orientation, size);
 	
 	e.mass = mass;
 	e.inv_local_inertia_tensor = inv_local_inertia_tensor;
@@ -188,7 +193,7 @@ CAR_INV_LOCAL_INERTIA_TENSOR :: linalg.Matrix3f32 {
 new_car_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaternionf32) -> ^Car_Entity {
 	e := new(Car_Entity);
 	e.variant = e;
-	init_entity(e, position, orientation, linalg.Vector3f32 {1, 1, 1});
+	init_entity(e, "car", position, orientation, linalg.Vector3f32 {1, 1, 1});
 	
 	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
 	e.new_transform = linalg.MATRIX4F32_IDENTITY;
@@ -196,10 +201,15 @@ new_car_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaterni
 	return e;
 }
 
-new_oil_slick_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaternionf32, size: linalg.Vector3f32) -> ^Oil_Slick_Entity {
+new_oil_slick_entity :: proc(
+	name: string,
+	position: linalg.Vector3f32,
+	orientation: linalg.Quaternionf32,
+	size: linalg.Vector3f32,
+) -> ^Oil_Slick_Entity {
 	e := new(Oil_Slick_Entity);
 	e.variant = e;
-	init_entity(e, position, orientation, size);
+	init_entity(e, name, position, orientation, size);
 
 	return e;
 }

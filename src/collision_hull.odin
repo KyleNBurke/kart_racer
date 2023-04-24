@@ -155,7 +155,7 @@ update_entity_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 				continue;
 			}
 			
-			helper := new_inanimate_entity();
+			helper := new_inanimate_entity("hull helper");
 			helper.transform = hull.global_transform;
 
 			helper_lookup := add_entity(geo, helper);
