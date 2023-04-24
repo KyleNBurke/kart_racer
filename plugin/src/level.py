@@ -122,7 +122,9 @@ def export_geometries(depsgraph: Depsgraph, graph, file):
 	util.write_u32(file, len(w_objects))
 	
 	for w_object in w_objects:
-		indices, attributes = util.calculate_indices_local_positions_normals_colors(depsgraph, w_object.object)
+		object = w_object.object
+		util.write_string(file, object.data.name_full);
+		indices, attributes = util.calculate_indices_local_positions_normals_colors(depsgraph, object)
 		util.write_indices_attributes(file, indices, attributes)
 		util.write_cursor_check(file)
 

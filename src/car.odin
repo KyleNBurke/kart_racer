@@ -31,10 +31,10 @@ Car_Helpers :: struct {
 init_car_helpers :: proc() -> Car_Helpers {
 	using car_helpers: Car_Helpers;
 
-	front_tire_left_geo := Geometry { name = "Front tire left visualizer" };
+	front_tire_left_geo := init_empty_geometry("Front tire left visualizer");
 	front_tire_left_geo_lookup = add_geometry(front_tire_left_geo, .KeepRender);
 
-	back_tire_left_geo := Geometry { name = "Back tire left visualizer" };
+	back_tire_left_geo := init_empty_geometry("Back tire left visualizer");
 	back_tire_left_geo_lookup = add_geometry(back_tire_left_geo, .KeepRender);
 
 	return car_helpers;

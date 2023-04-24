@@ -2,6 +2,7 @@ package main;
 
 import "core:math";
 import "core:math/linalg";
+import "core:strings";
 
 NEG_ONE :: linalg.Vector3f32 {-1, -1, -1};
 POS_ONE :: linalg.Vector3f32 {1, 1, 1};
@@ -20,6 +21,11 @@ Geometry :: struct {
 
 Pipeline :: enum { Line, Basic, Lambert, LambertTwoSided }
 
+init_empty_geometry :: proc(name: string) -> Geometry {
+	name_copy := strings.clone(name);
+	return Geometry { name = name_copy };
+}
+
 init_triangle_geometry :: proc(name: string, indices: [dynamic]u16, attributes: [dynamic]f32, pipeline: Pipeline) -> Geometry {
 	when ODIN_DEBUG {
 		assert(len(indices) % 3 == 0);
@@ -27,7 +33,8 @@ init_triangle_geometry :: proc(name: string, indices: [dynamic]u16, attributes: 
 		assert(pipeline != .Line);
 	}
 
-	return Geometry { name, indices, attributes, pipeline };
+	name_copy := strings.clone(name);
+	return Geometry { name_copy, indices, attributes, pipeline };
 }
 
 init_box :: proc(name: string, color: [3]f32 = GREY) -> Geometry {
@@ -75,11 +82,13 @@ init_box :: proc(name: string, color: [3]f32 = GREY) -> Geometry {
 		1.0, -1.0, -1.0,  0.0,  0.0, -1.0, r, g, b,
    };
 
-	return Geometry { name, indices, attributes, .Lambert };
+	name_copy := strings.clone(name);
+	return Geometry { name_copy, indices, attributes, .Lambert };
 }
 
 init_line_helper :: proc(name: string, origin, vector: linalg.Vector3f32, color: [3]f32 = YELLOW) -> Geometry {
-	geo := Geometry { name = name };
+	name_copy := strings.clone(name);
+	geo := Geometry { name = name_copy };
 	set_line_helper(&geo, origin, vector, color);
 	return geo;
 }
@@ -127,11 +136,13 @@ init_box_helper :: proc(name: string, min: linalg.Vector3f32 = NEG_ONE, max: lin
 		min_x, min_y, min_z, r, g, b,
 	};
 
-	return Geometry { name, indices, attributes, .Line };
+	name_copy := strings.clone(name);
+	return Geometry { name_copy, indices, attributes, .Line };
 }
 
 init_cylinder_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
-	geo := Geometry { name = name, pipeline = .Line };
+	name_copy := strings.clone(name);
+	geo := Geometry { name = name_copy, pipeline = .Line };
 	r, g, b := color[0], color[1], color[2];
 
 	POINT_COUNT :: 8
@@ -158,7 +169,8 @@ init_cylinder_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
 }
 
 init_sphere_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
-	geo := Geometry { name = name, pipeline = .Line };
+	name_copy := strings.clone(name);
+	geo := Geometry { name = name_copy, pipeline = .Line };
 	r, g, b := color[0], color[1], color[2];
 
 	POINT_COUNT :: 8;

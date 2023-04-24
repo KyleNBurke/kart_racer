@@ -135,8 +135,10 @@ remove_geometry :: proc(lookup: Geometry_Lookup) {
 
 	assert(len(record.entity_lookups) == 0); // We just haven't yet needed to destroy a geometry with entities. Shouldn't be an issue to do.
 
-	delete(record.geometry.indices);
-	delete(record.geometry.attributes);
+	geometry := &record.geometry;
+	delete(geometry.name);
+	delete(geometry.indices);
+	delete(geometry.attributes);
 
 	record.freed = true;
 	record.generation += 1;
@@ -165,9 +167,8 @@ remove_entity :: proc(entity_lookup: Entity_Lookup) {
 		append(&entities_geos.free_geometry_records, entity_record.geometry_record_index);
 	}
 
-	#partial switch e in entity.variant {
-	case ^Rigid_Body_Entity:
-		delete(e.shock_particles);
+	if rigid_body, ok := entity.variant.(^Rigid_Body_Entity); ok {
+		delete(rigid_body.shock_particles);
 	}
 
 	for hull in &entity.collision_hulls {
@@ -187,8 +188,10 @@ cleanup_entities_geos :: proc() {
 		
 		if slice.contains(entities_geos.free_geometry_records[:], i) do continue;
 
-		delete(record.geometry.indices);
-		delete(record.geometry.attributes);
+		geometry := &record.geometry;
+		delete(geometry.name);
+		delete(geometry.indices);
+		delete(geometry.attributes);
 	}
 
 	delete(entities_geos.geometry_records);

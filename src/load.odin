@@ -3,6 +3,7 @@ package main
 import "core:os";
 import "core:math/linalg";
 import "core:fmt";
+import "core:strings";
 
 POSITION_CHECK_VALUE :: 0b10101010_10101010_10101010_10101010;
 
@@ -16,6 +17,13 @@ read_bool :: proc(bytes: ^[]byte, pos: ^int) -> bool {
 	v := cast(bool) (cast(^b8) raw_data(bytes[pos^:]))^;
 	pos^ += 1;
 	return v;
+}
+
+read_string :: proc(bytes: ^[]byte, pos: ^int) -> string {
+	length := cast(int) read_u32(bytes, pos);
+	s := strings.clone_from_bytes(bytes[pos^ : pos^ + length], context.temp_allocator);
+	pos^ += length;
+	return s;
 }
 
 read_f32 :: proc(bytes: ^[]byte, pos: ^int) -> f32 {
@@ -102,8 +110,9 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 	defer delete(geometry_lookups);
 
 	for i in 0..<geometries_count {
+		name := read_string(&bytes, &pos);
 		indices, attributes := read_indices_attributes(&bytes, &pos);
-		geometry := init_triangle_geometry("", indices, attributes, .Lambert);
+		geometry := init_triangle_geometry(name, indices, attributes, .Lambert);
 		geometry_lookups[i] = add_geometry(geometry);
 
 		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);

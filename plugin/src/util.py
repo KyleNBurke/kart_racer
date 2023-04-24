@@ -135,6 +135,10 @@ def write_u32(file, v):
 def write_f32(file, v):
 	file.write(struct.pack("<f", v))
 
+def write_string(file, v):
+	s = bytes(v, 'utf-8')
+	file.write(struct.pack("<I%ds" % len(s), len(s), s))
+
 def write_cursor_check(file):
 	file.write(struct.pack("<I", 0b10101010_10101010_10101010_10101010))
 

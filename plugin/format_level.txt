@@ -1,4 +1,5 @@
 POSITION_CHECK: u32 = 10101010_10101010_10101010_10101010
+string: u32 for length + utf-8 encoded bytes
 
 ---
 
@@ -15,10 +16,11 @@ Ground collision meshes count: u32
 	positions [f32]
 
 Geometries count: u32
-	indices count: u32
-	indices: [u16]
-	attributes count: u32
-	attributes [f32]
+	name:              string
+	indices count:     u32
+	indices:          [u16]
+	attributes count:  u32
+	attributes        [f32]
 
 Inanimate entities count:  u32
 	position:              vec3
