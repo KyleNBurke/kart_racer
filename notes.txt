@@ -78,6 +78,7 @@ Todo
 - Slow the car down when you hit a rigid body
 - Boost jets
 - The case where a geometry is marked as Free has a problem I believe. You see the free-ing logic only happens once you remove an entity from a geometry. So, if you create a geometry, mark it as Free and never assign an entity to it. I think the geometry really should be cleaned up but that'll never happen. Maybe we should add some debug logic that runs every frame to catch this potential memory leak. This is actually not currently an issue. There is an assert that will catch this in the rendering logic. Unless we have a good reason to add some cleanup logic, I say we view this assert as a feature because you shouldn't be adding a geometry and not assigning any entities to it. You can do that but it should be marked correctly i.e. on_no_entities = Keep or KeepRender.
+- Move the window stuff into a window file
 
 Good things to do on laptop
 - Improve car wheel helpers

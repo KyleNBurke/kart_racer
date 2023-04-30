@@ -5,10 +5,17 @@ import "core:fmt";
 import "core:unicode/utf8";
 import "core:strings";
 import "core:strconv";
+import "core:reflect";
+import "core:slice";
 
-config := Config {};
+CONFIG_FILE :: "res/config.txt";
+
+Window_State :: enum { Normal, Maximized };
 
 Config :: struct {
+	window_state: Window_State,
+	window_width: int,
+	window_height: int,
 	level: string,
 	contact_point_helpers: bool,
 	hull_helpers: bool,
@@ -18,12 +25,15 @@ Config :: struct {
 
 Config_Map :: map[string]string;
 
+config := Config {
+	window_width = 1280,
+	window_height = 720,
+};
+
 load_config :: proc() {
-	file_path :: "res/config.txt";
-
-	data, data_ok := os.read_entire_file_from_filename(file_path, context.temp_allocator);
-	assert(data_ok, fmt.tprintf("Failed to load config file %s", file_path));
-
+	data, data_ok := os.read_entire_file_from_filename(CONFIG_FILE, context.temp_allocator);
+	assert(data_ok, fmt.tprintf("Failed to load config file %s", CONFIG_FILE)); 
+	
 	data_map := make(Config_Map, 10, context.temp_allocator);
 	line := make([dynamic]rune, context.temp_allocator);
 	split_index, j: int;
@@ -57,27 +67,97 @@ load_config :: proc() {
 		}
 	}
 
-	get_string :: proc(data_map: ^Config_Map, key: string) -> string {
-		s, ok := data_map[key];
-		assert(ok);
-		return s;
+	set :: proc(field: reflect.Struct_Field, $T: typeid, v: T) {
+		ptr := cast(uintptr) &config + field.offset;
+		(cast(^T) ptr)^ = v;
 	}
-
-	get_bool :: proc(data_map: ^Config_Map, key: string) -> bool {
-		s, s_ok := data_map[key];
-		assert(s_ok);
-
-		b, b_ok := strconv.parse_bool(s);
-		assert(b_ok);
-
-		return b;
-	}
-
-	config.level = get_string(&data_map, "level");
-	config.contact_point_helpers = get_bool(&data_map, "contact_point_helpers");
-	config.hull_helpers = get_bool(&data_map, "hull_helpers");
-	config.island_helpers = get_bool(&data_map, "island_helpers");
-	config.init_sleeping_islands = get_bool(&data_map, "init_sleeping_islands");
 	
-	fmt.printf("Loaded config file %s\n", file_path);
+	fields := reflect.struct_fields_zipped(Config);
+
+	for field in &fields {
+		s, ok := data_map[field.name];
+
+		if !ok {
+			value := reflect.struct_field_value(config, field);
+			fmt.println(fmt.tprintf("%s not found, using default value %v", field.name, value));
+		}
+		
+		#partial switch field_variant in field.type.variant {
+		case reflect.Type_Info_Boolean:
+			b, ok := strconv.parse_bool(s);
+			assert(ok);
+			set(field, bool, b);
+			
+		case reflect.Type_Info_String:
+			s_copy := strings.clone(s);
+			set(field, string, s_copy);
+
+		case reflect.Type_Info_Named:
+			if field_base_variant, ok := field_variant.base.variant.(reflect.Type_Info_Enum); ok {
+				index, found := slice.linear_search(field_base_variant.names[:], s);
+				assert(found, fmt.tprintf("Enum variant %s not found for enum %s of field %s", s, field_variant.name, field.name));
+				
+				enum_value := field_base_variant.values[index];
+				set(field, reflect.Type_Info_Enum_Value, enum_value);
+			}
+
+		case reflect.Type_Info_Integer:
+			i, ok := strconv.parse_int(s);
+			assert(ok);
+			set(field, int, i);
+		}
+	}
+
+	fmt.printf("Loaded config file %s\n", CONFIG_FILE);
+}
+
+save_config :: proc() {
+	data := make([dynamic]u8, context.temp_allocator);
+	fields := reflect.struct_fields_zipped(Config);
+
+	for field in &fields {
+		name := transmute([]u8) field.name;
+		append(&data, ..name);
+
+		s := " = ";
+		s_u8 := transmute([]u8) s;
+		append(&data, ..s_u8);
+		
+		value := reflect.struct_field_value(config, field);
+		value_string: string;
+
+		#partial switch field_variant in field.type.variant {
+		case reflect.Type_Info_Boolean:
+			b, _ := reflect.as_bool(value);
+			value_string = b ? "t" : "f";
+
+		case reflect.Type_Info_String:
+			value_string, _ = reflect.as_string(value);
+
+		case reflect.Type_Info_Named:
+			if _, ok := field_variant.base.variant.(reflect.Type_Info_Enum); ok {
+				value_string = reflect.enum_string(value);
+			}
+
+		case reflect.Type_Info_Integer:
+			i, _ := reflect.as_int(value);
+			value_string = fmt.tprintf("%v", i);
+		}
+
+		value_u8 := transmute([]u8) value_string;
+		append(&data, ..value_u8);
+
+		s = "\n";
+		s_u8 = transmute([]u8) s;
+		append(&data, ..s_u8);
+	}
+
+	success := os.write_entire_file(CONFIG_FILE, data[:]);
+	assert(success);
+	
+	fmt.printf("Saved config file %s\n", CONFIG_FILE);
+}
+
+cleanup_config :: proc() {
+	delete(config.level);
 }
