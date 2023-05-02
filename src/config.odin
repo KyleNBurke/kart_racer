@@ -80,6 +80,7 @@ load_config :: proc() {
 		if !ok {
 			value := reflect.struct_field_value(config, field);
 			fmt.println(fmt.tprintf("%s not found, using default value %v", field.name, value));
+			continue;
 		}
 		
 		#partial switch field_variant in field.type.variant {
