@@ -16,6 +16,7 @@ MAX_UPDATES := 5;
 Callback_State :: struct {
 	framebuffer_size_change: bool,
 	minimized: bool,
+	config_changed: bool,
 	game: ^Game,
 }
 
@@ -57,12 +58,19 @@ main :: proc() {
 	assert(glfw.Init() == 1);
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
-	glfw.WindowHint(glfw.MAXIMIZED, 1);
-	window := glfw.CreateWindow(1280, 720, "Kart Guys", nil, nil);
+
+	if config.window_state == .Maximized {
+		glfw.WindowHint(glfw.MAXIMIZED, 1);
+	}
+	
+	window_width := cast(c.int) config.window_width;
+	window_height := cast(c.int) config.window_height;
+	window := glfw.CreateWindow(window_width, window_height, "Kart Guys", nil, nil);
 	assert(window != nil);
 
 	glfw.SetFramebufferSizeCallback(window, framebuffer_size_callback);
 	glfw.SetWindowIconifyCallback(window, iconify_callback);
+	glfw.SetWindowMaximizeCallback(window, maximized_callback);
 	glfw.SetWindowContentScaleCallback(window, content_scale_callback);
 	glfw.SetKeyCallback(window, key_callback);
 
@@ -87,6 +95,11 @@ main :: proc() {
 		if callback_state.minimized {
 			glfw.WaitEvents();
 			continue;
+		}
+
+		if callback_state.config_changed {
+			save_config();
+			callback_state.config_changed = false;
 		}
 
 		if callback_state.framebuffer_size_change || suboptimal_swapchain {
@@ -131,6 +144,7 @@ main :: proc() {
 
 	when ODIN_DEBUG {
 		cleanup_game(&game);
+		cleanup_config();
 
 		for _, leak in track.allocation_map {
 			fmt.printf("%v leaked %v bytes\n", leak.location, leak.size);
@@ -145,11 +159,25 @@ main :: proc() {
 framebuffer_size_callback : glfw.FramebufferSizeProc : proc "c" (window: glfw.WindowHandle, width, height: c.int) {
 	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
 	callback_state.framebuffer_size_change = true;
+	
+	context = runtime.default_context();
+	config.window_width = int(width);
+	config.window_height = int(height);
+
+	callback_state.config_changed = true;
 }
 
 iconify_callback : glfw.WindowIconifyProc : proc "c" (window: glfw.WindowHandle, iconified: c.int) {
 	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
 	callback_state.minimized = iconified == 1 ? true : false;
+}
+
+maximized_callback : glfw.WindowMaximizeProc : proc "c" (window: glfw.WindowHandle, maximized: c.int) {
+	context = runtime.default_context();
+	config.window_state = maximized == 1 ? .Maximized : .Normal;
+	
+	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
+	callback_state.config_changed = true;
 }
 
 content_scale_callback : glfw.WindowContentScaleProc : proc "c" (window: glfw.WindowHandle, xscale, yscale: f32) {
