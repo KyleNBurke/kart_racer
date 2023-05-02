@@ -6,6 +6,8 @@ import vk "vendor:vulkan";
 import "core:math/linalg";
 import "math2";
 
+import "core:fmt";
+
 begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, texts: ^[dynamic]Text) -> bool {
 	logical_device := vulkan_context.logical_device;
 
@@ -394,6 +396,8 @@ end_render_frame :: proc(using vulkan: ^Vulkan) -> bool {
 }
 
 draw_particle :: proc(using vulkan: ^Vulkan, particle: ^Particle) {
+	assert(particle_resources.first_instance < MAX_PARTICLES, fmt.tprintf("Too many particles, max is %v", MAX_PARTICLES));
+
 	mem.copy_non_overlapping(mem.ptr_offset(frame_resources.per_instance_buffer_ptr, particle_resources.instance_offset), particle, size_of(Particle));
 	particle_resources.instance_offset += PARTICLE_INSTANCE_ELEMENT_SIZE;
 

@@ -129,6 +129,21 @@ ground_grid_get_triangle :: proc(using ground_grid: ^Ground_Grid, index: int) ->
 	return &triangles[index];
 }
 
+ground_grid_get_triangle_points :: proc(ground_grid: ^Ground_Grid, triangle: ^Ground_Grid_Triangle) -> (a, b, c: linalg.Vector3f32) {
+	indices := &triangle.indices;
+	positions := &ground_grid.positions;
+	
+	a_index := indices[0] * 3;
+	b_index := indices[1] * 3;
+	c_index := indices[2] * 3;
+
+	a = linalg.Vector3f32 {positions[a_index], positions[a_index + 1], positions[a_index + 2]};
+	b = linalg.Vector3f32 {positions[b_index], positions[b_index + 1], positions[b_index + 2]};
+	c = linalg.Vector3f32 {positions[c_index], positions[c_index + 1], positions[c_index + 2]};
+
+	return;
+}
+
 ground_grid_find_nearby_triangles :: proc(using ground_grid: ^Ground_Grid, bounds: math2.Box3f32) -> [dynamic]int {
 	@(static) query_run: u32 = 0;
 

@@ -140,7 +140,6 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 				local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_size);
 				hull := init_collision_hull(local_transform, inanimate_entity.transform, kind);
-				
 				append(&inanimate_entity.collision_hulls, hull);
 			}
 
@@ -177,7 +176,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 					case 1: status_effect = .Shock;
 					case 2: status_effect = .Fire;
 					case 3: status_effect = .ExplodingShock;
-					case: unreachable()
+					case 4: status_effect = .ExplodingFire;
 				}
 
 				rigid_body := new_rigid_body_entity(name, position, orientation, size, mass, dimensions, status_effect);
@@ -193,7 +192,6 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 
 					local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_size);
 					hull := init_collision_hull(local_transform, rigid_body.transform, kind);
-
 					append(&rigid_body.collision_hulls, hull);
 				}
 
@@ -206,10 +204,11 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 					append(&awake_rigid_body_lookups, entity_lookup);
 				}
 				
-				#partial switch status_effect {
+				switch status_effect {
+					case .None:
 					case .Shock, .ExplodingShock:
 						append(&shock_entities, entity_lookup);
-					case .Fire:
+					case .Fire, .ExplodingFire:
 						append(&fire_entities, entity_lookup);
 				}
 
@@ -228,7 +227,8 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 			size := read_vec3(&bytes, &pos);
 			geometry_index := read_u32(&bytes, &pos);
 
-			entity := new_oil_slick_entity(name, position, orientation, size);
+			// #todo: The desired particles needs to come from the level file
+			entity := new_oil_slick_entity(name, position, orientation, size, 500);
 			entity_lookup := add_entity(geometry_lookups[geometry_index], entity);
 			append(&game.oil_slick_lookups, entity_lookup);
 
@@ -324,7 +324,7 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 			geo_lookup := add_geometry(geo, .Keep);
 			hull_local_transform := linalg.matrix4_from_trs(hull_position, hull_orientation, hull_size);
 
-			shrapnel := Shock_Barrel_Shrapnel {
+			shrapnel := Shock_Barrel_Shrapnel_Asset {
 				geo_lookup,
 				position,
 				orientation,
@@ -334,6 +334,34 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 			};
 
 			append(&runtime_assets.shock_barrel_shrapnel, shrapnel);
+
+			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+		}
+	}
+
+	{ // Oil slicks
+		count := read_u32(&bytes, &pos);
+
+		for _ in 0..<count {
+			indices, attributes := read_indices_attributes(&bytes, &pos);
+			hull_position := read_vec3(&bytes, &pos);
+			hull_orientation := read_quat(&bytes, &pos);
+			hull_size := read_vec3(&bytes, &pos);
+			hull_indices, hull_positions := read_indices_attributes(&bytes, &pos);
+
+			geo := init_triangle_geometry("oil_slick_asset", indices, attributes, .Lambert);
+			geo_lookup := add_geometry(geo, .Keep);
+			
+			hull_local_transform := linalg.matrix4_from_trs(hull_position, hull_orientation, hull_size);
+
+			oil_slick := Oil_Slick_Asset {
+				geo_lookup,
+				hull_local_transform,
+				hull_indices,
+				hull_positions,
+			};
+
+			append(&runtime_assets.oil_slicks, oil_slick);
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 		}

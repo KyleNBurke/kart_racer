@@ -27,6 +27,7 @@ PARTICLE_INSTANCE_ELEMENT_SIZE :: 32;
 @(private)
 MAX_ENTITIES :: 1000;
 
+@(private)
 MAX_PARTICLES :: 5000;
 
 INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE :: 5_000_000;
@@ -935,7 +936,7 @@ calculate_per_instance_buffer_metrics :: proc(physical_device: vk.PhysicalDevice
 	unaligned_particle_instance_block_offset := aligned_mesh_instance_block_offset + INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE;
 	aligned_particle_instance_block_offset := math2.align_forward(unaligned_particle_instance_block_offset, alignment);
 
-	total_size := aligned_particle_instance_block_offset + INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE;
+	total_size := aligned_particle_instance_block_offset + INSTANCE_BUFFER_PARTICLE_INSTANCE_BLOCK_SIZE;
 
 	return Per_Instance_Buffer_Metrics {
 		mesh_instance_block_offset = aligned_mesh_instance_block_offset,

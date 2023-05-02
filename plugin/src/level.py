@@ -238,6 +238,8 @@ def export_rigid_bodies(graph, file, mesh_name_to_index_map):
 					status_effect = 2
 				case 'exploding_shock_barrel':
 					status_effect = 3
+				case 'exploding_fire_barrel':
+					status_effect = 4
 			
 			assert(status_effect is not None)
 			

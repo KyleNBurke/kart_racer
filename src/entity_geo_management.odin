@@ -171,6 +171,7 @@ remove_entity :: proc(entity_lookup: Entity_Lookup) {
 
 	if rigid_body, ok := entity.variant.(^Rigid_Body_Entity); ok {
 		delete(rigid_body.shock_particles);
+		delete(rigid_body.fire_particles);
 	}
 
 	for hull in &entity.collision_hulls {
@@ -213,6 +214,25 @@ cleanup_entities_geos :: proc() {
 		}
 
 		delete(entity.collision_hulls);
+
+		switch e in entity.variant {
+		case ^Rigid_Body_Entity:
+			delete(e.fire_particles);
+			delete(e.shock_particles);
+			
+		case ^Oil_Slick_Entity:
+			delete(e.fire_particles);
+
+		case ^Cloud_Entity:
+			delete(e.particles);
+		
+		case ^Car_Entity:
+			delete(e.shock_particles);
+			delete(e.fire_particles);
+
+		case ^Inanimate_Entity:
+		}
+
 		free(entity);
 	}
 

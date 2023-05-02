@@ -40,11 +40,6 @@ init_car_helpers :: proc() -> Car_Helpers {
 	return car_helpers;
 }
 
-cleanup_car :: proc(car: ^Car_Entity) {
-	delete(car.shock_particles);
-	delete(car.fire_particles);
-}
-
 shock_car :: proc(car: ^Car_Entity) {
 	car.shock_remaining_time = 1;
 
@@ -52,7 +47,7 @@ shock_car :: proc(car: ^Car_Entity) {
 		car.shocked = true;
 
 		for _ in 0..<MAX_SHOCK_PARTICLES {
-			particle: Shock_Particle;
+			particle: Status_Effect_Particle;
 			particle.size = SHOCK_PARTICLE_SIZE;
 			reset_shock_particle(car, &particle);
 	
@@ -86,7 +81,7 @@ update_car_status_effects_and_particles :: proc(car: ^Car_Entity, camera_trans: 
 			particles_to_add := desired_particles - len(car.fire_particles);
 
 			for _ in 0..<particles_to_add {
-				particle: Fire_Particle;
+				particle: Status_Effect_Particle;
 				reset_fire_particle(car, &particle);
 				append(&car.fire_particles, particle);
 			}
@@ -138,12 +133,12 @@ update_car_status_effects_and_particles :: proc(car: ^Car_Entity, camera_trans: 
 			}
 		}
 
-		update_fire_particle(particle, dt);
+		update_rigid_body_fire_particle(particle, dt);
 	}
 }
 
 @(private="file")
-reset_shock_particle :: proc(car: ^Car_Entity, particle: ^Shock_Particle) {
+reset_shock_particle :: proc(car: ^Car_Entity, particle: ^Status_Effect_Particle) {
 	car_left    := math2.matrix4_left(car.transform);
 	car_up      := math2.matrix4_up(car.transform);
 	car_forward := math2.matrix4_forward(car.transform);
@@ -157,7 +152,7 @@ reset_shock_particle :: proc(car: ^Car_Entity, particle: ^Shock_Particle) {
 }
 
 @(private="file")
-reset_fire_particle :: proc(car: ^Car_Entity, particle: ^Fire_Particle) {
+reset_fire_particle :: proc(car: ^Car_Entity, particle: ^Status_Effect_Particle) {
 	left := math2.matrix4_left(car.transform);
 	forward := math2.matrix4_forward(car.transform);
 

@@ -51,7 +51,7 @@ init_collision_hull :: proc(
 			local_bounds_max = linalg.max(local_bounds_max, linalg.max(a, b, c));
 		}
 
-		local_bounds = math2.Box3f32 {local_bounds_min, local_bounds_max};
+		local_bounds = math2.Box3f32 { local_bounds_min, local_bounds_max };
 	}
 
 	hull := Collision_Hull {

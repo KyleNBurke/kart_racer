@@ -42,6 +42,7 @@ Game :: struct {
 	status_effect_cloud_lookups: [dynamic]Entity_Lookup,
 
 	oil_slick_lookups: [dynamic]Entity_Lookup,
+	on_fire_oil_slick_lookups: [dynamic]Entity_Lookup,
 }
 
 main :: proc() {
@@ -208,6 +209,7 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	update_fire_entity_particles(game.fire_entities[:], dt);
 	update_status_effect_cloud_particles(game.status_effect_cloud_lookups[:], dt);
 	update_car_status_effects_and_particles(game.car, game.camera.transform, dt);
+	update_on_fire_oil_slicks(game.on_fire_oil_slick_lookups[:], dt);
 
 	if config.hull_helpers {
 		update_entity_hull_helpers(&game.hull_helpers);
@@ -221,13 +223,10 @@ immediate_mode_render_game :: proc(vulkan: ^Vulkan, game: ^Game) {
 	draw_fire_entity_particles(vulkan, game.fire_entities[:]);
 	draw_car_status_effects(vulkan, game.car);
 	draw_status_effect_clouds(vulkan, game.status_effect_cloud_lookups[:]);
+	draw_on_fire_oil_slicks(vulkan, game.on_fire_oil_slick_lookups[:]);
 }
 
 cleanup_game :: proc(game: ^Game) {
-	cleanup_status_effect_clouds(game.status_effect_cloud_lookups[:]);
-	cleanup_shock_entity_particles(game.shock_entities[:]);
-	cleanup_fire_entity_particles(game.fire_entities[:]);
-	cleanup_car(game.car);
 	cleanup_font(&game.font);
 	ground_grid_cleanup(&game.ground_grid);
 	cleanup_entity_grid(&game.entity_grid);
@@ -242,6 +241,7 @@ cleanup_game :: proc(game: ^Game) {
 	
 	cleanup_entities_geos();
 
+	delete(game.on_fire_oil_slick_lookups);
 	delete(game.oil_slick_lookups);
 	delete(game.status_effect_cloud_lookups);
 	delete(game.shock_entities);

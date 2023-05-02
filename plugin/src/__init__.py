@@ -108,7 +108,8 @@ def register():
 		('none', "None", "", 0),
 		('shock', "Shock", "", 1),
 		('fire', "Fire", "", 2),
-		('exploding_shock_barrel', "Exploding shock barrel", "", 3)
+		('exploding_shock_barrel', "Exploding shock barrel", "", 3),
+		('exploding_fire_barrel', "Exploding fire barrel", "", 4)
 	])
 
 	# Runtime assets
@@ -122,6 +123,7 @@ def register():
 		('none', "None", "", 0),
 		('shock_barrel_shrapnel', "Shock barrel shrapnel", "", 1),
 		('hull', "Hull", "", 2),
+		('oil_slick', "Oil slick", "", 3)
 	])
 
 def unregister():

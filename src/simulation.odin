@@ -3,9 +3,13 @@ package main;
 import "core:math";
 import "core:math/linalg";
 import "core:container/small_array";
+import "core:slice";
+import "core:math/rand";
+import "core:mem";
 import "math2";
 
 GRAVITY: f32 : -20.0;
+EXPLOSION_RADIUS :: 10;
 
 simulate :: proc(game: ^Game, dt: f32) {
 	car := game.car;
@@ -211,18 +215,21 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 			// Remove from status effects entities list
 			switch rigid_body.status_effect {
-			case .Shock, .ExplodingShock:
-				remove_from_shock_entites(&game.shock_entities, lookup);
-			case .Fire:
-				unimplemented();
-			case .None:
+			case .ExplodingShock:
+				i, ok := slice.linear_search(game.shock_entities[:], lookup);
+				assert(ok);
+				unordered_remove(&game.shock_entities, i);
+			case .ExplodingFire:
+				i, ok := slice.linear_search(game.fire_entities[:], lookup);
+				assert(ok);
+				unordered_remove(&game.fire_entities, i);
+			case .None, .Shock, .Fire:
 				unreachable();
 			}
 
 			// Find nearby entities and add an explosion velocity to them
 			center := math2.box_center(rigid_body.bounds);
-			EXPLOSION_RANGE :: 10;
-			bounds := math2.Box3f32 { center - EXPLOSION_RANGE, center + EXPLOSION_RANGE };
+			bounds := math2.Box3f32 { center - EXPLOSION_RADIUS, center + EXPLOSION_RADIUS };
 			nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, bounds);
 
 			for lookup in nearby_lookups {
@@ -254,7 +261,9 @@ simulate :: proc(game: ^Game, dt: f32) {
 				shrapnel_rigid_body.velocity = dir * 30;
 			}
 			
-			{ // Spawn cloud
+			switch rigid_body.status_effect {
+			case .ExplodingShock:
+				// Spawn shock cloud
 				cloud := new_cloud_entity(rigid_body.position, .Shock);
 				cloud_lookup := add_entity(nil, cloud);
 
@@ -264,6 +273,100 @@ simulate :: proc(game: ^Game, dt: f32) {
 				insert_entity_into_grid(&game.entity_grid, cloud);
 
 				append(&game.status_effect_cloud_lookups, cloud_lookup);
+			
+			case .ExplodingFire:
+				// #performance: There is some code in here that iterates over all the oil slicks. We could use some spatial partitioning
+				// data structure to make that more efficient. All or most of this could also be done in a separate thread. The types of
+				// things in here don't need to be done all in a frame. They could finish in some time and they we display the results. It
+				// takes time for oil slick blobs to hit the floor so I think it would be fine.
+
+				{ // Light nearby oil slicks on fire
+					center := math2.box_center(rigid_body.bounds);
+					explosion_bounds := math2.Box3f32 { center - EXPLOSION_RADIUS, center + EXPLOSION_RADIUS };
+
+					for oil_slick_lookup in game.oil_slick_lookups {
+						oil_slick := get_entity(oil_slick_lookup).variant.(^Oil_Slick_Entity);
+
+						if math2.box_intersects(oil_slick.bounds, explosion_bounds) {
+							oil_slick.on_fire = true;
+							append(&game.on_fire_oil_slick_lookups, oil_slick_lookup);
+						}
+					}
+				}
+
+				origin := rigid_body.position + linalg.Vector3f32 {0, 3, 0};
+
+				HEIGHT :: 10;
+				RADIUS :: 8;
+
+				bounds := math2.Box3f32 {
+					origin - linalg.Vector3f32 { RADIUS, HEIGHT, RADIUS },
+					origin + linalg.Vector3f32 { RADIUS, 0, RADIUS },
+				};
+
+				// #todo: config option
+				// bounds_helper_geo := init_box_helper("", bounds.min, bounds.max);
+				// add_geometry(bounds_helper_geo, .KeepRender);
+
+				ground_triangles := ground_grid_find_nearby_triangles(&game.ground_grid, bounds);
+
+				SQUARES :: 4;
+				for x in 0..<SQUARES {
+					for z in 0..<SQUARES {
+						SQUARE_SIZE: f32 : f32(RADIUS * 2) / f32(SQUARES);
+
+						// Skip the squares whos centers are oustide the circle
+						square_center_x := -RADIUS + (SQUARE_SIZE / 2) + SQUARE_SIZE * f32(x);
+						square_center_z := -RADIUS + (SQUARE_SIZE / 2) + SQUARE_SIZE * f32(z);
+						if square_center_x * square_center_x + square_center_z * square_center_z > RADIUS * RADIUS {
+							continue;
+						}
+
+						x := rand.float32() * SQUARE_SIZE + bounds.min.x + f32(x) * SQUARE_SIZE;
+						z := rand.float32() * SQUARE_SIZE + bounds.min.z + f32(z) * SQUARE_SIZE;
+						y := bounds.min.y
+						p := linalg.Vector3f32 { x, y, z };
+
+						for triangle_index in ground_triangles {
+							segment := p - origin;
+							ray_direction := linalg.normalize(p - origin);
+							ray_length := linalg.length(segment);
+
+							// todo: should the triangle struct here just give back the points?
+							triangle := ground_grid_get_triangle(&game.ground_grid, triangle_index);
+							a, b, c := ground_grid_get_triangle_points(&game.ground_grid, triangle);
+							
+							if intersection, ok := math2.ray_intersects_triangle(origin, ray_direction, ray_length, a, b, c).?; ok {
+								// #todo: config option
+								// g2 := init_line_helper("", origin, segment);
+								// add_geometry(g2, .KeepRender);
+
+								intersection_point := origin + ray_direction * intersection.length;
+								i := rand.int_max(len(game.runtime_assets.oil_slicks));
+								oil_slick_asset := &game.runtime_assets.oil_slicks[i];
+
+								orientation := linalg.quaternion_between_two_vector3(linalg.VECTOR3F32_Y_AXIS, intersection.normal);
+								oil_slick_entity := new_oil_slick_entity("", intersection_point, orientation, linalg.Vector3f32 {1, 1, 1}, 13);
+								oil_slick_entity.on_fire = true;
+								oil_slick_entity_lookup := add_entity(oil_slick_asset.geometry_lookup, oil_slick_entity);
+								
+								hull_indices_copy := slice.clone_to_dynamic(oil_slick_asset.hull_indices[:]);
+								hull_positions_copy := slice.clone_to_dynamic(oil_slick_asset.hull_positions[:]);
+								hull := init_collision_hull(oil_slick_asset.hull_local_transform, oil_slick_entity.transform, .Mesh, hull_indices_copy, hull_positions_copy);
+								append(&oil_slick_entity.collision_hulls, hull);
+
+								update_entity_hull_transforms_and_bounds(oil_slick_entity, oil_slick_entity.transform);
+								append(&game.oil_slick_lookups, oil_slick_entity_lookup);
+								append(&game.on_fire_oil_slick_lookups, oil_slick_entity_lookup);
+
+								break;
+							}
+						}
+					}
+				}
+
+			case .None, .Shock, .Fire:
+				unreachable();
 			}
 
 			// Rmove from entity geos
@@ -283,7 +386,8 @@ process_rigid_body_ground_collision :: proc(
 	dt: f32,
 	contact_helpers: ^[dynamic]Geometry_Lookup,
 ) {
-	if provoking_rigid_body.status_effect == .ExplodingShock {
+	status_effect := provoking_rigid_body.status_effect;
+	if status_effect == .ExplodingShock || status_effect == .ExplodingFire {
 		// Check if we already exploded the barrel so we don't try to do it twice
 		if provoking_rigid_body.exploding_health <= 0 {
 			return;
@@ -360,7 +464,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 	MAX_COLLISION_NORMAL_ANGLE: f32 : math.PI / 4;
 
 	for spring_index in 0..<4 {
-		best_spring_contact := Spring_Contact_Intermediary {
+		best_spring_contact := math2.Ray_Triangle_Intersection {
 			length = max(f32),
 		};
 
@@ -378,7 +482,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 			b := linalg.Vector3f32 {positions[b_index], positions[b_index + 1], positions[b_index + 2]};
 			c := linalg.Vector3f32 {positions[c_index], positions[c_index + 1], positions[c_index + 2]};
 
-			if contact, ok := spring_intersects_triangle(spring_body_point, extension_dir, a, b, c).?; ok {
+			if contact, ok := math2.ray_intersects_triangle(spring_body_point, extension_dir, SPRING_MAX_LENGTH, a, b, c).?; ok {
 				if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
 					continue;
 				}
@@ -445,7 +549,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 		// Here, we're iterating over all the oil slicks and doing AABB checks against the oil slick probe. Perhaps we could use
 		// a spacial grid to only iterate over the nearby ones.
 		oil_slick_loop: for oil_slick_lookup in oil_slicks {
-			oil_slick := get_entity(oil_slick_lookup);
+			oil_slick := get_entity(oil_slick_lookup).variant.(^Oil_Slick_Entity);
 
 			if math2.box_intersects(probe_bounds, oil_slick.bounds) {
 				oil_slick_hull := &oil_slick.collision_hulls[0];
@@ -459,10 +563,14 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 					global_b := math2.matrix4_transform_point(oil_slick_hull.global_transform, b);
 					global_c := math2.matrix4_transform_point(oil_slick_hull.global_transform, c);
 
-					_, ok := spring_intersects_triangle(probe_start, extension_dir, global_a, global_b, global_c).?;
+					_, ok := math2.ray_intersects_triangle(probe_start, extension_dir, SPRING_MAX_LENGTH, global_a, global_b, global_c).?;
 					if !ok do continue;
 
 					car.surface_type = .Oil;
+
+					if oil_slick.on_fire {
+						light_car_on_fire(car);
+					}
 					
 					break oil_slick_loop;
 				}
@@ -471,47 +579,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 	}
 }
 
-Spring_Contact_Intermediary :: struct {
-	normal: linalg.Vector3f32,
-	length: f32,
-}
-
-spring_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, a, b, c: linalg.Vector3f32) -> Maybe(Spring_Contact_Intermediary) {
-	ab := b - a;
-	ac := c - a;
-
-	p := linalg.cross(direction, ac);
-	det := linalg.dot(p, ab);
-
-	if det < 0 {
-		return nil;
-	}
-	
-	t := origin - a;
-	u := linalg.dot(p, t);
-
-	if u < 0 || u > det {
-		return nil;
-	}
-
-	q := linalg.cross(t, ab);
-	v := linalg.dot(q, direction);
-
-	if v < 0 || u + v > det {
-		return nil;
-	}
-
-	dist := (1 / det) * linalg.dot(q, ac);
-
-	if dist <= 0 || dist > SPRING_MAX_LENGTH {
-		return nil;
-	}
-
-	n := linalg.normalize(linalg.cross(ab, ac));
-	return Spring_Contact_Intermediary {n, dist};
-}
-
-spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Collision_Hull) -> Maybe(Spring_Contact_Intermediary) {
+spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Collision_Hull) -> Maybe(math2.Ray_Triangle_Intersection) {
 	local_origin := math2.matrix4_transform_point(hull.inv_global_transform, origin);
 
 	// If the hull has a scale this will not be normalized. I think normalizing it changes the "scale" or "reference view" of the t value
@@ -648,17 +716,18 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 		return nil;
 	} else {
 		global_normal := linalg.normalize(math2.matrix4_transform_direction(hull.global_transform, local_normal));
-		return Spring_Contact_Intermediary { global_normal, length };
+		return math2.Ray_Triangle_Intersection { global_normal, length };
 	}
 }
 
 @(private="file")
 handle_status_effects :: proc(car: ^Car_Entity, rigid_body: ^Rigid_Body_Entity) {
-	#partial switch rigid_body.status_effect {
+	switch rigid_body.status_effect {
 	case .Shock, .ExplodingShock:
 		shock_car(car);
-	case .Fire:
+	case .Fire, .ExplodingFire:
 		light_car_on_fire(car);
+	case .None:
 	}
 }
 

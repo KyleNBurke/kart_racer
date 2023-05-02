@@ -24,7 +24,7 @@ Inanimate_Entity :: struct {
 Cloud_Entity :: struct {
 	using entity: Entity,
 	status_effect: Cloud_Status_Effect,
-	shock_particles: [dynamic]Shock_Particle, // We could just have one particle struct and not use some of the members, it's fine.
+	particles: [dynamic]Status_Effect_Particle,
 	ramp_up_duration: f32,
 }
 
@@ -47,8 +47,8 @@ Rigid_Body_Entity :: struct {
 	// I get not wanting to separate shock cubes from shock barrels due to the [dynamic]particle needed to be in both but what if I pull out the things below this into Rigid_Body_Status_Effect_Entity?
 	// We should hold off on this because we may want status effects for inanimate entities which would mean putting these things into the Entity anyway.
 	status_effect: Status_Effect,
-	shock_particles: [dynamic]Shock_Particle,
-	fire_particles: [dynamic]Fire_Particle,
+	shock_particles: [dynamic]Status_Effect_Particle,
+	fire_particles: [dynamic]Status_Effect_Particle,
 	exploding_health: f32,
 }
 
@@ -57,6 +57,7 @@ Status_Effect :: enum {
 	Shock,
 	Fire,
 	ExplodingShock,
+	ExplodingFire,
 }
 
 Surface_Type :: enum { Normal, Oil }
@@ -81,8 +82,8 @@ Car_Entity :: struct {
 	back_wheel_angular_velocity,
 	front_wheel_orientation,
 	back_wheel_orientation: f32,
-	shock_particles: [dynamic]Shock_Particle,
-	fire_particles: [dynamic]Fire_Particle,
+	shock_particles: [dynamic]Status_Effect_Particle,
+	fire_particles: [dynamic]Status_Effect_Particle,
 	surface_type: Surface_Type,
 
 	forward_helper_geo,
@@ -98,6 +99,10 @@ Wheel :: struct {
 
 Oil_Slick_Entity :: struct {
 	using entity: Entity,
+	on_fire: bool,
+	fire_particles: [dynamic]Status_Effect_Particle,
+	ramp_up_duration: f32,
+	desired_fire_particles: int,
 }
 
 init_entity :: proc(e: ^Entity, name: string, position: linalg.Vector3f32, orientation: linalg.Quaternionf32, size: linalg.Vector3f32) {
@@ -206,10 +211,13 @@ new_oil_slick_entity :: proc(
 	position: linalg.Vector3f32,
 	orientation: linalg.Quaternionf32,
 	size: linalg.Vector3f32,
+	desired_fire_paricles: int,
 ) -> ^Oil_Slick_Entity {
 	e := new(Oil_Slick_Entity);
 	e.variant = e;
 	init_entity(e, name, position, orientation, size);
+
+	e.desired_fire_particles = desired_fire_paricles;
 
 	return e;
 }

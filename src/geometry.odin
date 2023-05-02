@@ -4,12 +4,14 @@ import "core:math";
 import "core:math/linalg";
 import "core:strings";
 
+ZERO    :: linalg.Vector3f32 {0, 0, 0};
 NEG_ONE :: linalg.Vector3f32 {-1, -1, -1};
 POS_ONE :: linalg.Vector3f32 {1, 1, 1};
 
-GREEN :: [3]f32 {0, 1, 0};
-BLUE  :: [3]f32 {0, 0, 1};
-GREY :: [3]f32 {0.3, 0.3, 0.3};
+RED    :: [3]f32 {1, 0, 0};
+GREEN  :: [3]f32 {0, 1, 0};
+BLUE   :: [3]f32 {0, 0, 1};
+GREY   :: [3]f32 {0.3, 0.3, 0.3};
 YELLOW :: [3]f32 {1, 1, 0};
 
 Geometry :: struct {
@@ -168,7 +170,7 @@ init_cylinder_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
 	return geo;
 }
 
-init_sphere_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
+init_sphere_helper :: proc(name: string, center: linalg.Vector3f32 = ZERO, radius: f32 = 1, color: [3]f32 = YELLOW) -> Geometry {
 	name_copy := strings.clone(name);
 	geo := Geometry { name = name_copy, pipeline = .Line };
 	r, g, b := color[0], color[1], color[2];
@@ -178,16 +180,19 @@ init_sphere_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
 	ANGLE_INCREMENT_THETA :: math.TAU / f32(POINT_COUNT);
 	ANGLE_INCREMENT_PHI :: math.PI / f32(POINT_COUNT / 2);
 
-	append(&geo.attributes, 0, -1, 0, r, g, b); // Bottom point
+	bottom_x := center.x;
+	bottom_y := center.y - radius;
+	bottom_z := center.z;
+	append(&geo.attributes, bottom_x, bottom_y, bottom_z, r, g, b); // Bottom point
 
 	for x in 0..<POINT_COUNT {
 		for y in 0..<POINT_COUNT_THETA {
 			theta := f32(x) * ANGLE_INCREMENT_THETA;
 			phi   := f32(y + 1) * ANGLE_INCREMENT_PHI - math.PI;
 
-			pos_x := math.sin(phi) * math.cos(theta);
-			pos_y := math.cos(phi);
-			pos_z := math.sin(phi) * math.sin(theta);
+			pos_x := center.x + radius * math.sin(phi) * math.cos(theta);
+			pos_y := center.y + radius * math.cos(phi);
+			pos_z := center.z + radius * math.sin(phi) * math.sin(theta);
 
 			append(&geo.attributes, pos_x, pos_y, pos_z, r, g, b);
 
@@ -209,7 +214,10 @@ init_sphere_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
 		}
 	}
 
-	append(&geo.attributes, 0, 1, 0, r, g, b); // Top point
+	top_x := center.x;
+	top_y := center.y + radius;
+	top_z := center.z;
+	append(&geo.attributes, top_x, top_y, top_z, r, g, b); // Top point
 
 	return geo;
 }

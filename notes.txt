@@ -47,39 +47,20 @@ Improvements
 - Cylinder top and bottom faces can generate more than four contacts. This means we could implement manifold reduction. I did some investigation and it looks like it's not generating more than 5 contacts even though it could theoretically generate 8.
 
 Todo
-- Exploding shock barrels
+- Exploding barrels
 	- Explosion particle effect
-	- Rigid bodies should be affected by the cloud
+	- Rigid bodies should be affected by the cloud or on fire oil slicks
 	- Consider having little rigid bodies ignored from more things like the car suspension
-	- I think the thin rectangular shrapnel piece is too thin, seems like it's falling through the ground plane from high up. Should increase that hull size if that is happening.
-- Exploding fire barrels
-	- Oil slicks
-		- Mesh model
-		- Triangle hull
-		- Exporting
-		- Importing
-		- Gameplay logic - less friction
-			- How this work? When we have a ground constraint, form a little line segment at the constraint position in the direction of the surface normal. Then it's simply a ray-v-triangle check to know if that contact point is on an oil slick.
-		- Why even default entity positions, orentations, sizes? Just require it to be passed in. When do even want to not supply that information?
-	- Barrel
-		- Mesh model
-		- Exporting
-		- Importing
-		- Gameplay logic
-	- Explosion
-		- Oil blobs spawn on track using raycasting.
+	- I think the thin rectangular shrapnel piece is too thin, seems like it's falling through the ground plane from high up. Should increase that hull size if that is happening. Need to look into the fence bounds too.
+	- Fire barrel shrapnel pieces
 - Cylinder bumper
 	- Figure out how to do it. Use restitution? Should it even run through the constraint system?
-	- [done] Cylinder collision detection and resolution
 	- Blender design (should be consistent with rail bumper)
 	- Exporting
 	- Importing
 	- Gameplay logic
 - Slow the car down when you hit a rigid body
 - Boost jets
-- The case where a geometry is marked as Free has a problem I believe. You see the free-ing logic only happens once you remove an entity from a geometry. So, if you create a geometry, mark it as Free and never assign an entity to it. I think the geometry really should be cleaned up but that'll never happen. Maybe we should add some debug logic that runs every frame to catch this potential memory leak. This is actually not currently an issue. There is an assert that will catch this in the rendering logic. Unless we have a good reason to add some cleanup logic, I say we view this assert as a feature because you shouldn't be adding a geometry and not assigning any entities to it. You can do that but it should be marked correctly i.e. on_no_entities = Keep or KeepRender.
-
-Good things to do on laptop
 - Improve car wheel helpers
 	- Render them up to date
 	- Make config setting
@@ -88,6 +69,7 @@ Good things to do on laptop
 - Wireframe triangle geometry for mesh hull helpers.
 - Hull bounds helpers - this is different than the hull helpers, it would show you the axis aligned bounding boxes of the hulls.
 - Shader hot reloading?
+- Level and asset file versions
 
 Sequential impulse solver
 	- I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting

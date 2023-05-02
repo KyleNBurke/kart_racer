@@ -13,3 +13,19 @@ Shock barrel shrapnel count: u32
 		rotation: quat
 		scale:    vec3
 	Position check: u32
+
+Oil slicks count: u32
+	Geometry
+		indices count:    u32
+		indices:         [u16]
+		attributes count: u32
+		attributes:      [f32]
+	Hull
+		position:         vec3
+		rotation:         quat
+		scale:            vec3
+		indices count:    u32
+		indices:         [u16]
+		positions count:  u32
+		positions        [f32]
+	Position check:       u32
