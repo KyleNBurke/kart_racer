@@ -226,9 +226,9 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 			orientation := read_quat(&bytes, &pos);
 			size := read_vec3(&bytes, &pos);
 			geometry_index := read_u32(&bytes, &pos);
+			particles_count := cast(int) read_u32(&bytes, &pos);
 
-			// #todo: The desired particles needs to come from the level file
-			entity := new_oil_slick_entity(name, position, orientation, size, 500);
+			entity := new_oil_slick_entity(name, position, orientation, size, particles_count);
 			entity_lookup := add_entity(geometry_lookups[geometry_index], entity);
 			append(&game.oil_slick_lookups, entity_lookup);
 

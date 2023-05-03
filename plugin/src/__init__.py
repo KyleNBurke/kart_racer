@@ -62,6 +62,8 @@ class KartGuysObjectPanel(bpy.types.Panel):
 			self.layout.prop(context.object, "kg_rigid_body_status_effect", text="Status effect")
 		elif kg_type == 'hull':
 			self.layout.prop(context.object, "kg_hull_type", text="Hull type")
+		elif kg_type == 'oil_slick':
+			self.layout.prop(context.object, "kg_oil_slick_particles_count", text="Particles")
 
 class KartGuysRuntimeAssetsPanel(bpy.types.Panel):
 	bl_idname = 'PROPERTIES_PT_kart_guys_runtime_assets_panel'
@@ -111,6 +113,7 @@ def register():
 		('exploding_shock_barrel', "Exploding shock barrel", "", 3),
 		('exploding_fire_barrel', "Exploding fire barrel", "", 4)
 	])
+	bpy.types.Object.kg_oil_slick_particles_count = bpy.props.IntProperty(default=10)
 
 	# Runtime assets
 	bpy.utils.register_class(KartGuysRuntimeAssetsExporter)

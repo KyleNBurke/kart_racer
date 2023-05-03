@@ -68,6 +68,7 @@ Oil slick entities count: u32
 	rotation:              quat
 	scale:                 vec3
 	geometry index:        u32
+	particles count        u32
 	hull local position    vec3
 	hull local orientation quat
 	hull local size        vec3

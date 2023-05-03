@@ -278,6 +278,8 @@ def export_oil_slicks(depsgraph: Depsgraph, graph, file, mesh_name_to_index_map)
 		mesh_index = mesh_name_to_index_map[w_object.object.data.name_full]
 		util.write_u32(file, mesh_index)
 
+		util.write_u32(file, w_object.object.kg_oil_slick_particles_count)
+
 		# Find hull
 		hull_w_object = None
 
