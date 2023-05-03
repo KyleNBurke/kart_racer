@@ -65,11 +65,9 @@ Todo
 	- Render them up to date
 	- Make config setting
 - Clean up the -vet things
-- Export and import names - This would've saved me some time in debugging an issue. Specifically, attaching the Blender geometry name to the Geometry struct would've been nice.
 - Wireframe triangle geometry for mesh hull helpers.
 - Hull bounds helpers - this is different than the hull helpers, it would show you the axis aligned bounding boxes of the hulls.
 - Shader hot reloading?
-- Level and asset file versions
 
 Sequential impulse solver
 	- I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting
