@@ -21,6 +21,7 @@ Config :: struct {
 	hull_helpers: bool,
 	island_helpers: bool,
 	init_sleeping_islands: bool,
+	explosion_helpers: bool,
 }
 
 Config_Map :: map[string]string;
@@ -79,7 +80,7 @@ load_config :: proc() {
 
 		if !ok {
 			value := reflect.struct_field_value(config, field);
-			fmt.println(fmt.tprintf("%s not found, using default value %v", field.name, value));
+			fmt.println(fmt.tprintf("[config] %s not found, using default value %v", field.name, value));
 			continue;
 		}
 		
@@ -96,7 +97,7 @@ load_config :: proc() {
 		case reflect.Type_Info_Named:
 			if field_base_variant, ok := field_variant.base.variant.(reflect.Type_Info_Enum); ok {
 				index, found := slice.linear_search(field_base_variant.names[:], s);
-				assert(found, fmt.tprintf("Enum variant %s not found for enum %s of field %s", s, field_variant.name, field.name));
+				assert(found, fmt.tprintf("[config] Enum variant %s not found for enum %s of field %s", s, field_variant.name, field.name));
 				
 				enum_value := field_base_variant.values[index];
 				set(field, reflect.Type_Info_Enum_Value, enum_value);

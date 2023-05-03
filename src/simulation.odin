@@ -300,9 +300,10 @@ simulate :: proc(game: ^Game, dt: f32) {
 					origin + linalg.Vector3f32 { RADIUS, 0, RADIUS },
 				};
 
-				// #todo: config option
-				// bounds_helper_geo := init_box_helper("", bounds.min, bounds.max);
-				// add_geometry(bounds_helper_geo, .KeepRender);
+				if config.explosion_helpers {
+					bounds_helper_geo := init_box_helper("", bounds.min, bounds.max);
+					add_geometry(bounds_helper_geo, .KeepRender);
+				}
 
 				ground_triangles := ground_grid_find_nearby_triangles(&game.ground_grid, bounds);
 
@@ -329,9 +330,10 @@ simulate :: proc(game: ^Game, dt: f32) {
 							ray_length := linalg.length(segment);
 							
 							if intersection, ok := math2.ray_intersects_triangle(origin, ray_direction, ray_length, ground_triangle.a, ground_triangle.b, ground_triangle.c).?; ok {
-								// #todo: config option
-								// g2 := init_line_helper("", origin, segment);
-								// add_geometry(g2, .KeepRender);
+								if config.explosion_helpers {
+									g2 := init_line_helper("", origin, segment);
+									add_geometry(g2, .KeepRender);
+								}
 
 								intersection_point := origin + ray_direction * intersection.length;
 								i := rand.int_max(len(game.runtime_assets.oil_slicks));
