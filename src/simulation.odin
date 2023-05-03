@@ -57,13 +57,11 @@ simulate :: proc(game: ^Game, dt: f32) {
 	// Car collisions
 	{
 		// Ground collisions
-		nearby_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, car.bounds);
+		nearby_triangles := ground_grid_find_nearby_triangles(&game.ground_grid, car.bounds);
 
 		for provoking_hull in &car.collision_hulls {
-			for nearby_triangle_index in nearby_triangle_indices {
-				nearby_triangle := ground_grid_get_triangle(&game.ground_grid, nearby_triangle_index);
-
-				if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], nearby_triangle, &provoking_hull).?; ok {
+			for nearby_triangle in &nearby_triangles {
+				if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], &nearby_triangle, &provoking_hull).?; ok {
 					add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
 				}
 			}
@@ -110,13 +108,11 @@ simulate :: proc(game: ^Game, dt: f32) {
 		provoking_rigid_body := get_entity(provoking_lookup).variant.(^Rigid_Body_Entity);
 
 		// Collisions with the ground
-		nearby_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, provoking_rigid_body.bounds);
+		nearby_triangles := ground_grid_find_nearby_triangles(&game.ground_grid, provoking_rigid_body.bounds);
 
 		for provoking_hull in &provoking_rigid_body.collision_hulls {
-			for nearby_triangle_index in nearby_triangle_indices {
-				nearby_triangle := ground_grid_get_triangle(&game.ground_grid, nearby_triangle_index);
-
-				if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], nearby_triangle, &provoking_hull).?; ok {
+			for nearby_triangle in &nearby_triangles {
+				if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], &nearby_triangle, &provoking_hull).?; ok {
 					process_rigid_body_ground_collision(provoking_rigid_body, provoking_hull.kind, &game.constraints, &manifold, dt, &game.contact_helpers);
 				}
 			}
@@ -327,16 +323,12 @@ simulate :: proc(game: ^Game, dt: f32) {
 						y := bounds.min.y
 						p := linalg.Vector3f32 { x, y, z };
 
-						for triangle_index in ground_triangles {
+						for ground_triangle in &ground_triangles {
 							segment := p - origin;
 							ray_direction := linalg.normalize(p - origin);
 							ray_length := linalg.length(segment);
-
-							// todo: should the triangle struct here just give back the points?
-							triangle := ground_grid_get_triangle(&game.ground_grid, triangle_index);
-							a, b, c := ground_grid_get_triangle_points(&game.ground_grid, triangle);
 							
-							if intersection, ok := math2.ray_intersects_triangle(origin, ray_direction, ray_length, a, b, c).?; ok {
+							if intersection, ok := math2.ray_intersects_triangle(origin, ray_direction, ray_length, ground_triangle.a, ground_triangle.b, ground_triangle.c).?; ok {
 								// #todo: config option
 								// g2 := init_line_helper("", origin, segment);
 								// add_geometry(g2, .KeepRender);
@@ -453,7 +445,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 
 	spring_bounds := math2.box_union(spring_bounds_fl, spring_bounds_fr, spring_bounds_bl, spring_bounds_br);
 
-	triangle_indices := ground_grid_find_nearby_triangles(ground_grid, spring_bounds);
+	nearby_triangles := ground_grid_find_nearby_triangles(ground_grid, spring_bounds);
 	nearby_lookups := find_nearby_entities_in_grid(entity_grid, spring_bounds);
 
 	manifold := Spring_Contact_Manifold {
@@ -470,19 +462,8 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 
 		spring_body_point := spring_body_points[spring_index];
 
-		for triangle_index in triangle_indices {
-			triangle := ground_grid_get_triangle(ground_grid, triangle_index);
-
-			a_index := triangle.indices[0] * 3;
-			b_index := triangle.indices[1] * 3;
-			c_index := triangle.indices[2] * 3;
-
-			positions := &ground_grid.positions;
-			a := linalg.Vector3f32 {positions[a_index], positions[a_index + 1], positions[a_index + 2]};
-			b := linalg.Vector3f32 {positions[b_index], positions[b_index + 1], positions[b_index + 2]};
-			c := linalg.Vector3f32 {positions[c_index], positions[c_index + 1], positions[c_index + 2]};
-
-			if contact, ok := math2.ray_intersects_triangle(spring_body_point, extension_dir, SPRING_MAX_LENGTH, a, b, c).?; ok {
+		for nearby_triangle in &nearby_triangles {
+			if contact, ok := math2.ray_intersects_triangle(spring_body_point, extension_dir, SPRING_MAX_LENGTH, nearby_triangle.a, nearby_triangle.b, nearby_triangle.c).?; ok {
 				if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
 					continue;
 				}

@@ -41,8 +41,8 @@ init_collision_hull :: proc(
 		assert(indices_ok);
 		assert(positions_ok);
 
-		local_bounds_min := linalg.Vector3f32 { math.INF_F32,  math.INF_F32,  math.INF_F32};
-		local_bounds_max := linalg.Vector3f32 {-math.INF_F32, -math.INF_F32, -math.INF_F32};
+		local_bounds_min := VEC3_INF;
+		local_bounds_max := VEC3_NEG_INF;
 
 		for triangle_index in 0..<len(indices) / 3 {
 			a, b, c := math2.triangle_index_to_points(triangle_index, indices[:], positions[:]);
@@ -72,8 +72,8 @@ init_collision_hull :: proc(
 // not be able to find the correct grid cells to remove the hulls. This can, of course be changed, it's just currently implemented this way.
 update_entity_hull_transforms_and_bounds :: proc(entity: ^Entity, transform: linalg.Matrix4f32) {
 	assert(len(entity.collision_hulls) > 0);
-	entity_min: linalg.Vector3f32 = linalg.Vector3f32 { math.INF_F32,  math.INF_F32,  math.INF_F32};
-	entity_max: linalg.Vector3f32 = linalg.Vector3f32 {-math.INF_F32, -math.INF_F32, -math.INF_F32};
+	entity_min: linalg.Vector3f32 = VEC3_INF;
+	entity_max: linalg.Vector3f32 = VEC3_NEG_INF;
 
 	for hull in &entity.collision_hulls {
 		hull.global_transform = transform * hull.local_transform;

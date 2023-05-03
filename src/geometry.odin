@@ -4,10 +4,6 @@ import "core:math";
 import "core:math/linalg";
 import "core:strings";
 
-ZERO    :: linalg.Vector3f32 {0, 0, 0};
-NEG_ONE :: linalg.Vector3f32 {-1, -1, -1};
-POS_ONE :: linalg.Vector3f32 {1, 1, 1};
-
 RED    :: [3]f32 {1, 0, 0};
 GREEN  :: [3]f32 {0, 1, 0};
 BLUE   :: [3]f32 {0, 0, 1};
@@ -116,7 +112,7 @@ set_line_helper :: proc(using geometry: ^Geometry, origin, vector: linalg.Vector
 	pipeline = .Line;
 }
 
-init_box_helper :: proc(name: string, min: linalg.Vector3f32 = NEG_ONE, max: linalg.Vector3f32 = POS_ONE, color: [3]f32 = YELLOW) -> Geometry {
+init_box_helper :: proc(name: string, min: linalg.Vector3f32 = VEC3_NEG_ONE, max: linalg.Vector3f32 = VEC3_ONE, color: [3]f32 = YELLOW) -> Geometry {
 	indices := [dynamic]u16 {
 		0, 1, 0, 2, 3, 1, 3, 2,
 		5, 4, 5, 7, 6, 4, 6, 7,
@@ -170,7 +166,7 @@ init_cylinder_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
 	return geo;
 }
 
-init_sphere_helper :: proc(name: string, center: linalg.Vector3f32 = ZERO, radius: f32 = 1, color: [3]f32 = YELLOW) -> Geometry {
+init_sphere_helper :: proc(name: string, center: linalg.Vector3f32 = VEC3_ZERO, radius: f32 = 1, color: [3]f32 = YELLOW) -> Geometry {
 	name_copy := strings.clone(name);
 	geo := Geometry { name = name_copy, pipeline = .Line };
 	r, g, b := color[0], color[1], color[2];

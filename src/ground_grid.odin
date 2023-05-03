@@ -21,6 +21,11 @@ Ground_Grid_Triangle :: struct {
 	bounds: math2.Box3f32,
 }
 
+Ground_Grid_Evaluated_Triangle :: struct {
+	a, b, c, g1, g2, g3: linalg.Vector3f32,
+	bounds: math2.Box3f32,
+}
+
 reset_ground_grid :: proc(using ground_grid: ^Ground_Grid, half_size: f32) {
 	delete(positions);
 	delete(triangles);
@@ -125,51 +130,59 @@ insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: []
 	delete(edge_to_vertex_map);
 }
 
-ground_grid_get_triangle :: proc(using ground_grid: ^Ground_Grid, index: int) -> ^Ground_Grid_Triangle {
-	return &triangles[index];
-}
-
-ground_grid_get_triangle_points :: proc(ground_grid: ^Ground_Grid, triangle: ^Ground_Grid_Triangle) -> (a, b, c: linalg.Vector3f32) {
-	indices := &triangle.indices;
-	positions := &ground_grid.positions;
-	
-	a_index := indices[0] * 3;
-	b_index := indices[1] * 3;
-	c_index := indices[2] * 3;
-
-	a = linalg.Vector3f32 {positions[a_index], positions[a_index + 1], positions[a_index + 2]};
-	b = linalg.Vector3f32 {positions[b_index], positions[b_index + 1], positions[b_index + 2]};
-	c = linalg.Vector3f32 {positions[c_index], positions[c_index + 1], positions[c_index + 2]};
-
-	return;
-}
-
-ground_grid_find_nearby_triangles :: proc(using ground_grid: ^Ground_Grid, bounds: math2.Box3f32) -> [dynamic]int {
+ground_grid_find_nearby_triangles :: proc(ground_grid: ^Ground_Grid, bounds: math2.Box3f32) -> [dynamic]Ground_Grid_Evaluated_Triangle {
 	@(static) query_run: u32 = 0;
 
 	if query_run == max(u32) {
-		slice.fill(query_flags[:], 0);
+		slice.fill(ground_grid.query_flags[:], 0);
 		query_run = 0;
 	}
 
 	query_run += 1;
-	indices := make([dynamic]int, context.temp_allocator);
+	triangles := make([dynamic]Ground_Grid_Evaluated_Triangle, context.temp_allocator);
 
-	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(half_cell_count, CELL_SIZE, bounds);
-	if !ok do return indices;
+	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(ground_grid.half_cell_count, CELL_SIZE, bounds);
+	if !ok do return triangles;
+	
+	positions := &ground_grid.positions;
 
 	for x in grid_min_x..<grid_max_x {
 		for y in grid_min_y..<grid_max_y {
-			for index in &grid[x][y] {
-				if query_flags[index] != query_run {
-					append(&indices, index);
-					query_flags[index] = query_run;
+			for index in &ground_grid.grid[x][y] {
+				if ground_grid.query_flags[index] == query_run {
+					continue;
 				}
+
+				triangle := &ground_grid.triangles[index];
+				indices := &triangle.indices;
+
+				a_index  := indices[0] * 3;
+				b_index  := indices[1] * 3;
+				c_index  := indices[2] * 3;
+				g1_index := indices[3] * 3;
+				g2_index := indices[4] * 3;
+				g3_index := indices[5] * 3;
+
+				a  := linalg.Vector3f32 {positions[a_index],  positions[a_index + 1],  positions[a_index + 2]};
+				b  := linalg.Vector3f32 {positions[b_index],  positions[b_index + 1],  positions[b_index + 2]};
+				c  := linalg.Vector3f32 {positions[c_index],  positions[c_index + 1],  positions[c_index + 2]};
+				g1 := linalg.Vector3f32 {positions[g1_index], positions[g1_index + 1], positions[g1_index + 2]};
+				g2 := linalg.Vector3f32 {positions[g2_index], positions[g2_index + 1], positions[g2_index + 2]};
+				g3 := linalg.Vector3f32 {positions[g3_index], positions[g3_index + 1], positions[g3_index + 2]};
+
+				evaluated_triangle := Ground_Grid_Evaluated_Triangle {
+					a, b, c, g1, g2, g3,
+					triangle.bounds,
+				};
+
+				append(&triangles, evaluated_triangle);
+
+				ground_grid.query_flags[index] = query_run;
 			}
 		}
 	}
 
-	return indices;
+	return triangles;
 }
 
 ground_grid_cleanup :: proc(using ground_grid: ^Ground_Grid) {

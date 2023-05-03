@@ -10,19 +10,23 @@ Triangle :: struct { a, b, c, normal: linalg.Vector3f32 }
 
 GroundHull :: small_array.Small_Array(6, linalg.Vector3f32);
 
-evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangle: ^Ground_Grid_Triangle, entity_hull: ^Collision_Hull) -> Maybe(Contact_Manifold) {
+evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangle: ^Ground_Grid_Evaluated_Triangle, entity_hull: ^Collision_Hull) -> Maybe(Contact_Manifold) {
 	if !math2.box_intersects(entity_hull.global_bounds, ground_grid_triangle.bounds) {
 		return nil;
 	}
 
-	triangle := form_triangle(triangle_positions, ground_grid_triangle.indices);
+	triangle := form_triangle(ground_grid_triangle);
 
 	simplex, ok_colliding := colliding(&triangle, entity_hull).?;
-	if !ok_colliding do return nil;
+	if !ok_colliding {
+		return nil;
+	}
 
-	ground_hull := form_convex_ground_hull(&triangle, triangle_positions, &ground_grid_triangle.indices);
+	ground_hull := form_convex_ground_hull(triangle.normal, ground_grid_triangle);
 	normal, ok_normal := find_collision_normal(&simplex, &ground_hull, entity_hull).?;
-	if !ok_normal do return nil;
+	if !ok_normal {
+		return nil;
+	}
 
 	triangle_normal := triangle.normal;
 	triangle_polygon := make([dynamic]linalg.Vector3f32, context.temp_allocator);
@@ -58,15 +62,7 @@ evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangl
 	return Contact_Manifold { normal, contacts };
 }
 
-form_triangle :: proc(positions: []f32, indices: [6]int) -> Triangle {
-	a_index := indices[0] * 3;
-	b_index := indices[1] * 3;
-	c_index := indices[2] * 3;
-
-	a := linalg.Vector3f32 {positions[a_index], positions[a_index + 1], positions[a_index + 2]};
-	b := linalg.Vector3f32 {positions[b_index], positions[b_index + 1], positions[b_index + 2]};
-	c := linalg.Vector3f32 {positions[c_index], positions[c_index + 1], positions[c_index + 2]};
-
+form_triangle :: proc(using ground_grid_triangle: ^Ground_Grid_Evaluated_Triangle) -> Triangle {
 	ab := b - a;
 	ac := c - a;
 	normal := linalg.normalize(linalg.cross(ab, ac));
@@ -135,71 +131,65 @@ furthest_point_triangle :: proc(triangle: ^Triangle, direction: linalg.Vector3f3
 	return furthest_vertex;
 }
 
-form_convex_ground_hull :: proc(triangle: ^Triangle, positions: []f32, indices: ^[6]int) -> GroundHull {
+form_convex_ground_hull :: proc(triangle_normal: linalg.Vector3f32, using g_triangle: ^Ground_Grid_Evaluated_Triangle) -> GroundHull {
 	hull: GroundHull;
-	small_array.append(&hull, triangle.a, triangle.b, triangle.c);
+	small_array.append(&hull, a, b, c);
 
-	if indices[3] != 0 {
-		g1_index := indices[3] * 3;
-		g1 := linalg.Vector3f32 {positions[g1_index], positions[g1_index + 1], positions[g1_index + 2]};
-		ag1 := g1 - triangle.a;
-		ab := triangle.b - triangle.a;
+	if g1 != VEC3_ZERO {
+		ag1 := g1 - a;
+		ab := b - a;
 		adjacent_normal := linalg.normalize(linalg.cross(ag1, ab));
 
-		ab_normal := linalg.normalize(linalg.cross(ab, triangle.normal));
+		ab_normal := linalg.normalize(linalg.cross(ab, triangle_normal));
 
 		if linalg.dot(adjacent_normal, ab_normal) > 0.0001 {
 			small_array.append(&hull, g1);
 		} else {
-			ca := linalg.normalize(triangle.a - triangle.c);
+			ca := linalg.normalize(a - c);
 			ca_len := 3.0 / linalg.dot(ca, ab_normal);
 			hull.data[0] += ca * ca_len;
 
-			cb := linalg.normalize(triangle.b - triangle.c);
+			cb := linalg.normalize(b - c);
 			cb_len := 3.0 / linalg.dot(cb, ab_normal);
 			hull.data[1] += cb * cb_len;
 		}
 	}
 
-	if indices[4] != 0 {
-		g2_index := indices[4] * 3;
-		g2 := linalg.Vector3f32{positions[g2_index], positions[g2_index + 1], positions[g2_index + 2]};
-		bg2 := g2 - triangle.b;
-		bc := triangle.c - triangle.b;
+	if g2 != VEC3_ZERO {
+		bg2 := g2 - b;
+		bc := c - b;
 		adjacent_normal := linalg.normalize(linalg.cross(bg2, bc));
 
-		bc_normal := linalg.normalize(linalg.cross(bc, triangle.normal));
+		bc_normal := linalg.normalize(linalg.cross(bc, triangle_normal));
 
 		if linalg.dot(adjacent_normal, bc_normal) > 0.0001 {
 			small_array.append(&hull, g2);
 		} else {
-			ab := linalg.normalize(triangle.b - triangle.a);
+			ab := linalg.normalize(b - a);
 			ab_len := 3.0 / linalg.dot(ab, bc_normal);
 			hull.data[1] += ab * ab_len;
 
-			ac := linalg.normalize(triangle.c - triangle.a);
+			ac := linalg.normalize(c - a);
 			ac_len := 3.0 / linalg.dot(ac, bc_normal);
 			hull.data[2] += ac * ac_len;
 		}
 	}
 
-	if indices[5] != 0 {
-		g3_index := indices[5] * 3;
-		g3 := linalg.Vector3f32{positions[g3_index], positions[g3_index + 1], positions[g3_index + 2]};
-		cg3 := g3 - triangle.c;
-		ca := triangle.a - triangle.c;
+	if g3 != VEC3_ZERO {
+		cg3 := g3 - c;
+		ca := a - c;
 		adjacent_normal := linalg.normalize(linalg.cross(cg3, ca));
 
-		ca_normal := linalg.normalize(linalg.cross(ca, triangle.normal));
+		ca_normal := linalg.normalize(linalg.cross(ca, triangle_normal));
 
 		if linalg.dot(adjacent_normal, ca_normal) > 0.0001 {
 			small_array.append(&hull, g3);
 		} else {
-			bc := linalg.normalize(triangle.c - triangle.b);
+			bc := linalg.normalize(c - b);
 			bc_len := 3.0 / linalg.dot(bc, ca_normal);
 			hull.data[2] += bc * bc_len;
 
-			ba := linalg.normalize(triangle.a - triangle.b);
+			ba := linalg.normalize(a - b);
 			ba_len := 3.0 / linalg.dot(ba, ca_normal);
 			hull.data[0] += ba * ba_len;
 		}
