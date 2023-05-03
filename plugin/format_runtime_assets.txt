@@ -1,3 +1,5 @@
+Version: u32
+
 Shock barrel shrapnel count: u32
 	Geometry
 		indices count:    u32

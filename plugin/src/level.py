@@ -2,13 +2,16 @@ from bpy.types import Context, Depsgraph, Object, Mesh
 from . import util
 from .util import WObject
 
+VERSION = 1
+
 def export(operator, context: Context):
 	depsgraph: Depsgraph = context.evaluated_depsgraph_get()
 	graph = util.create_scene_graph(depsgraph)
 	util.print_graph(graph, 0)
 	util.debug_export_graph(graph, operator.filepath)
-
 	file = open(operator.filepath, 'wb')
+
+	util.write_u32(file, VERSION)
 
 	export_spawn_point(graph, file)
 	export_ground_collision_meshes(depsgraph, graph, file)

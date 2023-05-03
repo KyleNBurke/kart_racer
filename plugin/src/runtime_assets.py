@@ -2,11 +2,15 @@ from bpy.types import Context, Depsgraph
 from . import util
 from .util import WObject
 
+VERSION = 1
+
 def export(operator, context: Context):
 	depsgraph: Depsgraph = context.evaluated_depsgraph_get()
 	graph = util.create_scene_graph(depsgraph)
 	util.print_graph(graph, 1)
 	file = open(operator.filepath, 'wb')
+
+	util.write_u32(file, VERSION)
 
 	export_shock_barrel_shrapnel(depsgraph, graph, file)
 	export_oil_slicks(depsgraph, graph, file)

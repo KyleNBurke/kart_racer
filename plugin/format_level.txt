@@ -3,6 +3,8 @@ string: u32 for length + utf-8 encoded bytes
 
 ---
 
+Version: u32
+
 Spawn point
 	position: vec3
 	rotation: quat

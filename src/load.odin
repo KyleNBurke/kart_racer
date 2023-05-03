@@ -76,12 +76,18 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 }
 
 load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
+	REQUIRED_VERSION :: 1;
+	
 	file_path := fmt.tprintf("res/maps/%s.kgl", config.level);
 	bytes, success := os.read_entire_file_from_filename(file_path);
 	defer delete(bytes);
 	assert(success, fmt.tprintf("Failed to load level file %s", file_path));
-
+	
 	pos := 0;
+
+	version := read_u32(&bytes, &pos);
+	assert(REQUIRED_VERSION == version, fmt.tprintf("[level loading] Required version %v but found %v.", REQUIRED_VERSION, version));
+
 	spawn_position = read_vec3(&bytes, &pos);
 	spawn_orientation = read_quat(&bytes, &pos);
 
@@ -301,11 +307,16 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 		size := linalg.Vector3f32 {4, 2, 4};
 		runtime_assets.cloud_hull_transform = linalg.matrix4_from_trs(position, orientation, size);
 	}
+
+	REQUIRED_VERSION :: 1;
 	
 	bytes, success := os.read_entire_file_from_filename("res/runtime_assets.kga");
 	defer delete(bytes);
 	assert(success);
 	pos := 0;
+
+	version := read_u32(&bytes, &pos);
+	assert(REQUIRED_VERSION == version, fmt.tprintf("[runtime assets loading] Required version %v but found %v.", REQUIRED_VERSION, version));
 
 	{ // Shock barrel shrapnel
 		count := read_u32(&bytes, &pos);
