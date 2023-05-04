@@ -21,6 +21,7 @@ Ground_Grid_Triangle :: struct {
 	bounds: math2.Box3f32,
 }
 
+// #nocheckin: Should we also calculate the triangle normal here?
 Ground_Grid_Evaluated_Triangle :: struct {
 	a, b, c, g1, g2, g3: linalg.Vector3f32,
 	bounds: math2.Box3f32,
@@ -130,7 +131,7 @@ insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: []
 	delete(edge_to_vertex_map);
 }
 
-ground_grid_find_nearby_triangles :: proc(ground_grid: ^Ground_Grid, bounds: math2.Box3f32) -> [dynamic]Ground_Grid_Evaluated_Triangle {
+ground_grid_find_nearby_triangles :: proc(ground_grid: ^Ground_Grid, bounds: math2.Box3f32) -> [dynamic]int {
 	@(static) query_run: u32 = 0;
 
 	if query_run == max(u32) {
@@ -139,10 +140,10 @@ ground_grid_find_nearby_triangles :: proc(ground_grid: ^Ground_Grid, bounds: mat
 	}
 
 	query_run += 1;
-	triangles := make([dynamic]Ground_Grid_Evaluated_Triangle, context.temp_allocator);
+	triangle_indices := make([dynamic]int, context.temp_allocator);
 
 	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(ground_grid.half_cell_count, CELL_SIZE, bounds);
-	if !ok do return triangles;
+	if !ok do return triangle_indices;
 	
 	positions := &ground_grid.positions;
 
@@ -153,36 +154,41 @@ ground_grid_find_nearby_triangles :: proc(ground_grid: ^Ground_Grid, bounds: mat
 					continue;
 				}
 
-				triangle := &ground_grid.triangles[index];
-				indices := &triangle.indices;
-
-				a_index  := indices[0] * 3;
-				b_index  := indices[1] * 3;
-				c_index  := indices[2] * 3;
-				g1_index := indices[3] * 3;
-				g2_index := indices[4] * 3;
-				g3_index := indices[5] * 3;
-
-				a  := linalg.Vector3f32 {positions[a_index],  positions[a_index + 1],  positions[a_index + 2]};
-				b  := linalg.Vector3f32 {positions[b_index],  positions[b_index + 1],  positions[b_index + 2]};
-				c  := linalg.Vector3f32 {positions[c_index],  positions[c_index + 1],  positions[c_index + 2]};
-				g1 := linalg.Vector3f32 {positions[g1_index], positions[g1_index + 1], positions[g1_index + 2]};
-				g2 := linalg.Vector3f32 {positions[g2_index], positions[g2_index + 1], positions[g2_index + 2]};
-				g3 := linalg.Vector3f32 {positions[g3_index], positions[g3_index + 1], positions[g3_index + 2]};
-
-				evaluated_triangle := Ground_Grid_Evaluated_Triangle {
-					a, b, c, g1, g2, g3,
-					triangle.bounds,
-				};
-
-				append(&triangles, evaluated_triangle);
-
+				append(&triangle_indices, index);
 				ground_grid.query_flags[index] = query_run;
 			}
 		}
 	}
 
-	return triangles;
+	return triangle_indices;
+}
+
+ground_grid_form_triangle :: proc(ground_grid: ^Ground_Grid, triangle_index: int) -> Ground_Grid_Evaluated_Triangle {
+	positions := &ground_grid.positions;
+
+	triangle := &ground_grid.triangles[triangle_index];
+	indices := &triangle.indices;
+
+	a_index  := indices[0] * 3;
+	b_index  := indices[1] * 3;
+	c_index  := indices[2] * 3;
+	g1_index := indices[3] * 3;
+	g2_index := indices[4] * 3;
+	g3_index := indices[5] * 3;
+
+	a  := linalg.Vector3f32 {positions[a_index],  positions[a_index + 1],  positions[a_index + 2]};
+	b  := linalg.Vector3f32 {positions[b_index],  positions[b_index + 1],  positions[b_index + 2]};
+	c  := linalg.Vector3f32 {positions[c_index],  positions[c_index + 1],  positions[c_index + 2]};
+	g1 := linalg.Vector3f32 {positions[g1_index], positions[g1_index + 1], positions[g1_index + 2]};
+	g2 := linalg.Vector3f32 {positions[g2_index], positions[g2_index + 1], positions[g2_index + 2]};
+	g3 := linalg.Vector3f32 {positions[g3_index], positions[g3_index + 1], positions[g3_index + 2]};
+
+	evaluated_triangle := Ground_Grid_Evaluated_Triangle {
+		a, b, c, g1, g2, g3,
+		triangle.bounds,
+	};
+
+	return evaluated_triangle;
 }
 
 ground_grid_cleanup :: proc(using ground_grid: ^Ground_Grid) {
