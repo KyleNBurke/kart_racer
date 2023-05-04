@@ -66,8 +66,8 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 
 	if action == glfw.PRESS {
 		switch key {
-			case glfw.KEY_ESCAPE:
-				glfw.SetWindowShouldClose(window, true);
+		case glfw.KEY_ESCAPE:
+			glfw.SetWindowShouldClose(window, true);
 		}
 
 		camera_handle_key_press(&callback_state.game.camera, key, window);

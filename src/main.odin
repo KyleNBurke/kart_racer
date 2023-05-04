@@ -1,9 +1,6 @@
 package main;
 
-import "core:fmt";
-import "core:c";
 import "core:time";
-import "core:runtime";
 import "vendor:glfw";
 
 when ODIN_DEBUG {
