@@ -25,6 +25,7 @@ Ground_Grid_Triangle :: struct {
 Ground_Grid_Evaluated_Triangle :: struct {
 	a, b, c, g1, g2, g3: linalg.Vector3f32,
 	bounds: math2.Box3f32,
+	normal: linalg.Vector3f32,
 }
 
 reset_ground_grid :: proc(using ground_grid: ^Ground_Grid, half_size: f32) {
@@ -183,9 +184,14 @@ ground_grid_form_triangle :: proc(ground_grid: ^Ground_Grid, triangle_index: int
 	g2 := linalg.Vector3f32 {positions[g2_index], positions[g2_index + 1], positions[g2_index + 2]};
 	g3 := linalg.Vector3f32 {positions[g3_index], positions[g3_index + 1], positions[g3_index + 2]};
 
+	ab := b - a;
+	ac := c - a;
+	normal := linalg.normalize(linalg.cross(ab, ac));
+
 	evaluated_triangle := Ground_Grid_Evaluated_Triangle {
 		a, b, c, g1, g2, g3,
 		triangle.bounds,
+		normal,
 	};
 
 	return evaluated_triangle;

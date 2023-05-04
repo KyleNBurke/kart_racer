@@ -151,12 +151,7 @@ triangle_index_to_points :: proc(triangle_index: int, indices: []u16, positions:
 	return a, b, c;
 }
 
-Ray_Triangle_Intersection :: struct {
-	normal: linalg.Vector3f32,
-	length: f32,
-}
-
-ray_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, length: f32, a, b, c: linalg.Vector3f32) -> Maybe(Ray_Triangle_Intersection) {
+ray_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, length: f32, a, b, c: linalg.Vector3f32) -> f32 {
 	ab := b - a;
 	ac := c - a;
 
@@ -164,31 +159,30 @@ ray_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, length: f3
 	det := linalg.dot(p, ab);
 
 	if det < 0 {
-		return nil;
+		return 0;
 	}
 	
 	t := origin - a;
 	u := linalg.dot(p, t);
 
 	if u < 0 || u > det {
-		return nil;
+		return 0;
 	}
 
 	q := linalg.cross(t, ab);
 	v := linalg.dot(q, direction);
 
 	if v < 0 || u + v > det {
-		return nil;
+		return 0;
 	}
 
 	dist := (1 / det) * linalg.dot(q, ac);
 
 	if dist <= 0 || dist > length {
-		return nil;
+		return 0;
 	}
 
-	n := linalg.normalize(linalg.cross(ab, ac));
-	return Ray_Triangle_Intersection { n, dist };
+	return dist;
 }
 
 @(test, private)

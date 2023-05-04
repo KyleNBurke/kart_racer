@@ -6,23 +6,19 @@ import "core:container/small_array";
 import "core:fmt";
 import "math2";
 
-Triangle :: struct { a, b, c, normal: linalg.Vector3f32 }
-
 GroundHull :: small_array.Small_Array(6, linalg.Vector3f32);
 
-evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangle: ^Ground_Grid_Evaluated_Triangle, entity_hull: ^Collision_Hull) -> Maybe(Contact_Manifold) {
-	if !math2.box_intersects(entity_hull.global_bounds, ground_grid_triangle.bounds) {
+evaluate_ground_collision :: proc(triangle_positions: []f32, triangle: ^Ground_Grid_Evaluated_Triangle, entity_hull: ^Collision_Hull) -> Maybe(Contact_Manifold) {
+	if !math2.box_intersects(entity_hull.global_bounds, triangle.bounds) {
 		return nil;
 	}
 
-	triangle := form_triangle(ground_grid_triangle);
-
-	simplex, ok_colliding := colliding(&triangle, entity_hull).?;
+	simplex, ok_colliding := colliding(triangle, entity_hull).?;
 	if !ok_colliding {
 		return nil;
 	}
 
-	ground_hull := form_convex_ground_hull(triangle.normal, ground_grid_triangle);
+	ground_hull := form_convex_ground_hull(triangle.normal, triangle);
 	normal, ok_normal := find_collision_normal(&simplex, &ground_hull, entity_hull).?;
 	if !ok_normal {
 		return nil;
@@ -62,16 +58,8 @@ evaluate_ground_collision :: proc(triangle_positions: []f32, ground_grid_triangl
 	return Contact_Manifold { normal, contacts };
 }
 
-form_triangle :: proc(using ground_grid_triangle: ^Ground_Grid_Evaluated_Triangle) -> Triangle {
-	ab := b - a;
-	ac := c - a;
-	normal := linalg.normalize(linalg.cross(ab, ac));
-
-	return Triangle { a, b, c, normal };
-}
-
 @(private="file")
-colliding :: proc(triangle: ^Triangle, entity_hull: ^Collision_Hull) -> Maybe(Simplex) {
+colliding :: proc(triangle: ^Ground_Grid_Evaluated_Triangle, entity_hull: ^Collision_Hull) -> Maybe(Simplex) {
 	direction := linalg.Vector3f32 {0.0, 0.0, 1.0};
 	v := support_gjk(triangle, entity_hull, direction);
 	zero := linalg.Vector3f32 {0.0, 0.0, 0.0};
@@ -106,14 +94,14 @@ colliding :: proc(triangle: ^Triangle, entity_hull: ^Collision_Hull) -> Maybe(Si
 }
 
 @(private="file")
-support_gjk :: proc(triangle: ^Triangle, hull: ^Collision_Hull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
+support_gjk :: proc(triangle: ^Ground_Grid_Evaluated_Triangle, hull: ^Collision_Hull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
 	v1 := furthest_point_triangle(triangle, direction);
 	v2 := furthest_point_hull(hull, -direction);
 
 	return v1 - v2;
 }
 
-furthest_point_triangle :: proc(triangle: ^Triangle, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
+furthest_point_triangle :: proc(triangle: ^Ground_Grid_Evaluated_Triangle, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
 	furthest_dot := linalg.dot(direction, triangle.a);
 	furthest_vertex := triangle.a;
 
@@ -131,7 +119,7 @@ furthest_point_triangle :: proc(triangle: ^Triangle, direction: linalg.Vector3f3
 	return furthest_vertex;
 }
 
-form_convex_ground_hull :: proc(triangle_normal: linalg.Vector3f32, using g_triangle: ^Ground_Grid_Evaluated_Triangle) -> GroundHull {
+form_convex_ground_hull :: proc(triangle_normal: linalg.Vector3f32, using triangle: ^Ground_Grid_Evaluated_Triangle) -> GroundHull {
 	hull: GroundHull;
 	small_array.append(&hull, a, b, c);
 

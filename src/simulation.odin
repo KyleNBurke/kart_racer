@@ -334,33 +334,36 @@ simulate :: proc(game: ^Game, dt: f32) {
 							ray_length := linalg.length(segment);
 
 							ground_triangle := ground_grid_form_triangle(&game.ground_grid, ground_triangle_index);
-							
-							if intersection, ok := math2.ray_intersects_triangle(origin, ray_direction, ray_length, ground_triangle.a, ground_triangle.b, ground_triangle.c).?; ok {
-								if config.explosion_helpers {
-									g2 := init_line_helper("", origin, segment);
-									add_geometry(g2, .KeepRender);
-								}
 
-								intersection_point := origin + ray_direction * intersection.length;
-								i := rand.int_max(len(game.runtime_assets.oil_slicks));
-								oil_slick_asset := &game.runtime_assets.oil_slicks[i];
-
-								orientation := linalg.quaternion_between_two_vector3(linalg.VECTOR3F32_Y_AXIS, intersection.normal);
-								oil_slick_entity := new_oil_slick_entity("", intersection_point, orientation, linalg.Vector3f32 {1, 1, 1}, 13);
-								oil_slick_entity.on_fire = true;
-								oil_slick_entity_lookup := add_entity(oil_slick_asset.geometry_lookup, oil_slick_entity);
-								
-								hull_indices_copy := slice.clone_to_dynamic(oil_slick_asset.hull_indices[:]);
-								hull_positions_copy := slice.clone_to_dynamic(oil_slick_asset.hull_positions[:]);
-								hull := init_collision_hull(oil_slick_asset.hull_local_transform, oil_slick_entity.transform, .Mesh, hull_indices_copy, hull_positions_copy);
-								append(&oil_slick_entity.collision_hulls, hull);
-
-								update_entity_hull_transforms_and_bounds(oil_slick_entity, oil_slick_entity.transform);
-								append(&game.oil_slick_lookups, oil_slick_entity_lookup);
-								append(&game.on_fire_oil_slick_lookups, oil_slick_entity_lookup);
-
-								break;
+							intersection_length := math2.ray_intersects_triangle(origin, ray_direction, ray_length, ground_triangle.a, ground_triangle.b, ground_triangle.c);
+							if intersection_length == 0 {
+								continue;
 							}
+							
+							if config.explosion_helpers {
+								g2 := init_line_helper("", origin, segment);
+								add_geometry(g2, .KeepRender);
+							}
+
+							intersection_point := origin + ray_direction * intersection_length;
+							i := rand.int_max(len(game.runtime_assets.oil_slicks));
+							oil_slick_asset := &game.runtime_assets.oil_slicks[i];
+
+							orientation := linalg.quaternion_between_two_vector3(linalg.VECTOR3F32_Y_AXIS, ground_triangle.normal);
+							oil_slick_entity := new_oil_slick_entity("", intersection_point, orientation, linalg.Vector3f32 {1, 1, 1}, 13);
+							oil_slick_entity.on_fire = true;
+							oil_slick_entity_lookup := add_entity(oil_slick_asset.geometry_lookup, oil_slick_entity);
+							
+							hull_indices_copy := slice.clone_to_dynamic(oil_slick_asset.hull_indices[:]);
+							hull_positions_copy := slice.clone_to_dynamic(oil_slick_asset.hull_positions[:]);
+							hull := init_collision_hull(oil_slick_asset.hull_local_transform, oil_slick_entity.transform, .Mesh, hull_indices_copy, hull_positions_copy);
+							append(&oil_slick_entity.collision_hulls, hull);
+
+							update_entity_hull_transforms_and_bounds(oil_slick_entity, oil_slick_entity.transform);
+							append(&game.oil_slick_lookups, oil_slick_entity_lookup);
+							append(&game.on_fire_oil_slick_lookups, oil_slick_entity_lookup);
+
+							break;
 						}
 					}
 				}
@@ -422,6 +425,11 @@ Spring_Contact :: struct {
 	length: f32,
 }
 
+Spring_Contact_Intermediary :: struct {
+	length: f32,
+	normal: linalg.Vector3f32,
+}
+
 SPRING_BODY_POINT_Z: f32 : 1.1;
 SPRING_MAX_LENGTH: f32 : 0.8;
 
@@ -464,7 +472,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 	MAX_COLLISION_NORMAL_ANGLE: f32 : math.PI / 4;
 
 	for spring_index in 0..<4 {
-		best_spring_contact := math2.Ray_Triangle_Intersection {
+		best_spring_contact := Spring_Contact_Intermediary {
 			length = max(f32),
 		};
 
@@ -473,14 +481,20 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 		for nearby_triangle_index in nearby_triangle_indices {
 			nearby_triangle := ground_grid_form_triangle(ground_grid, nearby_triangle_index);
 
-			if contact, ok := math2.ray_intersects_triangle(spring_body_point, extension_dir, SPRING_MAX_LENGTH, nearby_triangle.a, nearby_triangle.b, nearby_triangle.c).?; ok {
-				if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
-					continue;
-				}
+			intersection_length := math2.ray_intersects_triangle(spring_body_point, extension_dir, SPRING_MAX_LENGTH, nearby_triangle.a, nearby_triangle.b, nearby_triangle.c);
+			if intersection_length == 0 {
+				continue;
+			}
 
-				if contact.length < best_spring_contact.length {
-					best_spring_contact = contact;
-				}
+			if math.acos(linalg.dot(-extension_dir, nearby_triangle.normal)) > MAX_COLLISION_NORMAL_ANGLE {
+				continue;
+			}
+
+			if intersection_length < best_spring_contact.length {
+				best_spring_contact = Spring_Contact_Intermediary {
+					intersection_length,
+					nearby_triangle.normal,
+				};
 			}
 		}
 
@@ -492,16 +506,21 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 			}
 
 			for nearby_hull in &nearby_entity.collision_hulls {
-				if !math2.box_intersects(spring_bounds, nearby_hull.global_bounds) do continue;
+				if !math2.box_intersects(spring_bounds, nearby_hull.global_bounds) {
+					continue;
+				}
 
-				if contact, ok := spring_intersects_hull(spring_body_point, extension_dir, &nearby_hull).?; ok {
-					if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
-						continue;
-					}
+				contact, ok := spring_intersects_hull(spring_body_point, extension_dir, &nearby_hull).?;
+				if !ok {
+					continue;
+				}
 
-					if contact.length < best_spring_contact.length {
-						best_spring_contact = contact;
-					}
+				if math.acos(linalg.dot(-extension_dir, contact.normal)) > MAX_COLLISION_NORMAL_ANGLE {
+					continue;
+				}
+
+				if contact.length < best_spring_contact.length {
+					best_spring_contact = contact;
 				}
 			}
 		}
@@ -554,8 +573,8 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 					global_b := math2.matrix4_transform_point(oil_slick_hull.global_transform, b);
 					global_c := math2.matrix4_transform_point(oil_slick_hull.global_transform, c);
 
-					_, ok := math2.ray_intersects_triangle(probe_start, extension_dir, SPRING_MAX_LENGTH, global_a, global_b, global_c).?;
-					if !ok do continue;
+					intersection_length := math2.ray_intersects_triangle(probe_start, extension_dir, SPRING_MAX_LENGTH, global_a, global_b, global_c);
+					if intersection_length == 0 do continue;
 
 					car.surface_type = .Oil;
 
@@ -570,7 +589,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 	}
 }
 
-spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Collision_Hull) -> Maybe(math2.Ray_Triangle_Intersection) {
+spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Collision_Hull) -> Maybe(Spring_Contact_Intermediary) {
 	local_origin := math2.matrix4_transform_point(hull.inv_global_transform, origin);
 
 	// If the hull has a scale this will not be normalized. I think normalizing it changes the "scale" or "reference view" of the t value
@@ -707,7 +726,7 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 		return nil;
 	} else {
 		global_normal := linalg.normalize(math2.matrix4_transform_direction(hull.global_transform, local_normal));
-		return math2.Ray_Triangle_Intersection { global_normal, length };
+		return Spring_Contact_Intermediary { length, global_normal };
 	}
 }
 
