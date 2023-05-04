@@ -13,14 +13,9 @@ when ODIN_DEBUG {
 MAX_FRAME_DURATION := time.Duration(33333333); // 1 / 30 seconds
 MAX_UPDATES := 5;
 
-Callback_State :: struct {
-	framebuffer_size_change: bool,
-	minimized: bool,
-	config_changed: bool,
-	game: ^Game,
-}
-
 Game :: struct {
+	window: glfw.WindowHandle,
+	vulkan: Vulkan,
 	camera: Camera,
 	font: Font,
 	texts: [dynamic]Text,
@@ -53,43 +48,65 @@ main :: proc() {
 		context.allocator = mem.tracking_allocator(&track);
 	}
 
+	game: Game;
+
+	init(&game);
+	run(&game);
+	cleanup(&game);
+
+	when ODIN_DEBUG {
+		debug_cleanup(&game);
+
+		for _, leak in track.allocation_map {
+			fmt.printf("%v leaked %v bytes\n", leak.location, leak.size);
+		}
+
+		for bad_free in track.bad_free_array {
+			fmt.printf("%v allocation %p was freed badly\n", bad_free.location, bad_free.memory);
+		}
+	}
+}
+
+init :: proc(game: ^Game) {
 	load_config();
 
-	assert(glfw.Init() == 1);
-
-	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
-
-	if config.window_state == .Maximized {
-		glfw.WindowHint(glfw.MAXIMIZED, 1);
-	}
-	
-	window_width := cast(c.int) config.window_width;
-	window_height := cast(c.int) config.window_height;
-	window := glfw.CreateWindow(window_width, window_height, "Kart Guys", nil, nil);
-	assert(window != nil);
-
-	glfw.SetFramebufferSizeCallback(window, framebuffer_size_callback);
-	glfw.SetWindowIconifyCallback(window, iconify_callback);
-	glfw.SetWindowMaximizeCallback(window, maximized_callback);
-	glfw.SetWindowContentScaleCallback(window, content_scale_callback);
-	glfw.SetKeyCallback(window, key_callback);
-
-	vulkan := init_vulkan(window);
+	init_window(&game.window);
+	init_vulkan(&game.vulkan, game.window);
 	init_entities_geos();
-	game := init_game(&vulkan, window);
+	
+	camera_aspect := f32(game.vulkan.extent.width) / f32(game.vulkan.extent.height);
+	game.camera = init_camera(camera_aspect, 75.0, game.window);
+
+	content_scale_x, _ := glfw.GetWindowContentScale(game.window);
+	game.font = init_font("roboto", 20, content_scale_x);
+	submit_font(&game.vulkan, &game.font);
+
+	game.frame_metrics = init_frame_metrics(&game.font, &game.texts);
+
+	spawn_position, spawn_orientation := load_level(game);
+	load_car(game, spawn_position, spawn_orientation);
+	load_runtime_assets(&game.runtime_assets);
+
+	init_hull_helpers(&game.hull_helpers);
+	game.car_helpers = init_car_helpers();
+
+	init_shock_particles(game.shock_entities[:]);
+	init_fire_particles(game.fire_entities[:]);
 
 	free_all(context.temp_allocator);
+}
 
+run :: proc(game: ^Game) {
 	callback_state := Callback_State {
-		game = &game,
+		game = game,
 	};
 
-	glfw.SetWindowUserPointer(window, &callback_state);
+	glfw.SetWindowUserPointer(game.window, &callback_state);
 
 	frame_start := time.now();
 	suboptimal_swapchain := false;
 
-	for !glfw.WindowShouldClose(window) {
+	for !glfw.WindowShouldClose(game.window) {
 		glfw.PollEvents();
 
 		if callback_state.minimized {
@@ -105,13 +122,15 @@ main :: proc() {
 		if callback_state.framebuffer_size_change || suboptimal_swapchain {
 			callback_state.framebuffer_size_change = false;
 
-			width_i32, height_i32 := glfw.GetFramebufferSize(window);
+			width_i32, height_i32 := glfw.GetFramebufferSize(game.window);
 			width := u32(width_i32);
 			height := u32(height_i32);
 
-			if width != vulkan.extent.width || height != vulkan.extent.height {
-				recreate_swapchain(&vulkan, width, height);
-				update_aspect_ratio(&game.camera, f32(vulkan.extent.width) / f32(vulkan.extent.height));
+			vulkan_extent := game.vulkan.extent;
+
+			if width != vulkan_extent.width || height != vulkan_extent.height {
+				recreate_swapchain(&game.vulkan, width, height);
+				update_aspect_ratio(&game.camera, f32(vulkan_extent.width) / f32(vulkan_extent.height));
 			}
 		}
 
@@ -124,113 +143,29 @@ main :: proc() {
 			frame_duration_capped := min(frame_duration, MAX_FRAME_DURATION);
 			frame_duration_capped_secs := cast(f32) time.duration_seconds(frame_duration_capped)
 
-			update_game(window, &game, frame_duration_capped_secs);
+			update(game, frame_duration_capped_secs);
 
 			frame_duration -= frame_duration_capped;
 			updates += 1;
 		}
 
-		suboptimal_swapchain = begin_render_frame(&vulkan, &game.camera, &game.texts);
+		suboptimal_swapchain = begin_render_frame(&game.vulkan, &game.camera, &game.texts);
 
 		if !suboptimal_swapchain {
-			immediate_mode_render_game(&vulkan, &game);
-			suboptimal_swapchain = end_render_frame(&vulkan);
-		}
-	}
-
-	cleanup_vulkan(&vulkan);
-	glfw.DestroyWindow(window);
-	glfw.Terminate();
-
-	when ODIN_DEBUG {
-		cleanup_game(&game);
-		cleanup_config();
-
-		for _, leak in track.allocation_map {
-			fmt.printf("%v leaked %v bytes\n", leak.location, leak.size);
-		}
-
-		for bad_free in track.bad_free_array {
-			fmt.printf("%v allocation %p was freed badly\n", bad_free.location, bad_free.memory);
+			immediate_mode_render_game(game);
+			suboptimal_swapchain = end_render_frame(&game.vulkan);
 		}
 	}
 }
 
-framebuffer_size_callback : glfw.FramebufferSizeProc : proc "c" (window: glfw.WindowHandle, width, height: c.int) {
-	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
-	callback_state.framebuffer_size_change = true;
-	
-	context = runtime.default_context();
-	config.window_width = int(width);
-	config.window_height = int(height);
-
-	callback_state.config_changed = true;
-}
-
-iconify_callback : glfw.WindowIconifyProc : proc "c" (window: glfw.WindowHandle, iconified: c.int) {
-	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
-	callback_state.minimized = iconified == 1 ? true : false;
-}
-
-maximized_callback : glfw.WindowMaximizeProc : proc "c" (window: glfw.WindowHandle, maximized: c.int) {
-	context = runtime.default_context();
-	config.window_state = maximized == 1 ? .Maximized : .Normal;
-	
-	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
-	callback_state.config_changed = true;
-}
-
-content_scale_callback : glfw.WindowContentScaleProc : proc "c" (window: glfw.WindowHandle, xscale, yscale: f32) {
-	
-}
-
-key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: c.int) {
-	context = runtime.default_context()
-	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
-
-	if action == glfw.PRESS {
-		switch key {
-			case glfw.KEY_ESCAPE:
-				glfw.SetWindowShouldClose(window, true);
-		}
-
-		camera_handle_key_press(&callback_state.game.camera, key, window);
-	}
-}
-
-init_game :: proc(vulkan: ^Vulkan, window: glfw.WindowHandle) -> Game {
-	game: Game;
-
-	camera_aspect := f32(vulkan.extent.width) / f32(vulkan.extent.height);
-	game.camera = init_camera(camera_aspect, 75.0, window);
-
-	content_scale_x, _ := glfw.GetWindowContentScale(window);
-	game.font = init_font("roboto", 20, content_scale_x);
-	submit_font(vulkan, &game.font);
-
-	game.frame_metrics = init_frame_metrics(&game.font, &game.texts);
-
-	spawn_position, spawn_orientation := load_level(&game);
-	load_car(&game, spawn_position, spawn_orientation);
-	load_runtime_assets(&game.runtime_assets);
-
-	init_hull_helpers(&game.hull_helpers);
-	game.car_helpers = init_car_helpers();
-
-	init_shock_particles(game.shock_entities[:]);
-	init_fire_particles(game.fire_entities[:]);
-
-	return game;
-}
-
-update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
+update :: proc(game: ^Game, dt: f32) {
 	if game.camera.state != .First_Person {
-		move_car(window, game.car, dt, &game.car_helpers);
+		move_car(game.window, game.car, dt, &game.car_helpers);
 	}
 	
 	simulate(game, dt);
 	position_and_orient_wheels(game.car, dt);
-	move_camera(&game.camera, window, game.car, dt);
+	move_camera(&game.camera, game.window, game.car, dt);
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
 
 	update_shock_entity_particles(game.shock_entities[:], dt);
@@ -246,16 +181,22 @@ update_game :: proc(window: glfw.WindowHandle, game: ^Game, dt: f32) {
 	free_all(context.temp_allocator);
 }
 
-immediate_mode_render_game :: proc(vulkan: ^Vulkan, game: ^Game) {
-	draw_shock_entity_particles(vulkan, game.shock_entities[:]);
-	draw_fire_entity_particles(vulkan, game.fire_entities[:]);
-	draw_car_status_effects(vulkan, game.car);
-	draw_status_effect_clouds(vulkan, game.status_effect_cloud_lookups[:]);
-	draw_on_fire_oil_slicks(vulkan, game.on_fire_oil_slick_lookups[:]);
+immediate_mode_render_game :: proc(using game: ^Game) {
+	draw_shock_entity_particles(&vulkan, shock_entities[:]);
+	draw_fire_entity_particles(&vulkan, fire_entities[:]);
+	draw_car_status_effects(&vulkan, car);
+	draw_status_effect_clouds(&vulkan, status_effect_cloud_lookups[:]);
+	draw_on_fire_oil_slicks(&vulkan, on_fire_oil_slick_lookups[:]);
 }
 
-cleanup_game :: proc(game: ^Game) {
-	cleanup_font(&game.font);
+cleanup :: proc(game: ^Game) {
+	cleanup_vulkan(&game.vulkan);
+	glfw.DestroyWindow(game.window);
+	glfw.Terminate();
+}
+
+debug_cleanup :: proc(using game: ^Game) {
+	cleanup_font(&font);
 	ground_grid_cleanup(&game.ground_grid);
 	cleanup_entity_grid(&game.entity_grid);
 	cleanup_hull_helpers(&game.hull_helpers);
@@ -277,4 +218,6 @@ cleanup_game :: proc(game: ^Game) {
 	delete(game.texts);
 	delete(game.awake_rigid_body_lookups);
 	delete(game.contact_helpers);
+
+	cleanup_config();
 }

@@ -156,22 +156,24 @@ Particle :: struct #align 4 {
 }
 
 @(private)
-init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
+init_vulkan :: proc(using vulkan: ^Vulkan, window: glfw.WindowHandle) {
 	framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(window);
 	
-	using vulkan_context := init_vulkan_context(window);
-	surface_format := find_color_surface_format(physical_device, window_surface);
-	depth_format := find_depth_format(physical_device);
-	render_pass := create_render_pass(logical_device, surface_format.format, depth_format);
-	extent := create_extent(physical_device, window_surface, u32(framebuffer_width), u32(framebuffer_height));
-	depth_image := create_depth_image(logical_device, physical_device, depth_format, extent);
-	swapchain, swapchain_frames := create_swapchain(&vulkan_context, surface_format, extent, render_pass, depth_image.image_view);
-	descriptor_pool := create_descriptor_pool(logical_device, 1);
-	command_pool := create_command_pool(logical_device, graphics_queue_family);
-	image_available_semaphores := create_semaphores(logical_device);
-	render_finished_semaphores := create_semaphores(logical_device);
-	fences := create_fences(logical_device);
-	primary_command_buffers := create_primary_command_buffers(logical_device, command_pool);
+	vulkan_context = init_vulkan_context(window);
+	using vulkan_context;
+
+	surface_format = find_color_surface_format(physical_device, vulkan_context.window_surface);
+	depth_format = find_depth_format(physical_device);
+	render_pass = create_render_pass(logical_device, surface_format.format, depth_format);
+	extent = create_extent(physical_device, window_surface, u32(framebuffer_width), u32(framebuffer_height));
+	depth_image = create_depth_image(logical_device, physical_device, depth_format, extent);
+	swapchain, swapchain_frames = create_swapchain(&vulkan_context, surface_format, extent, render_pass, depth_image.image_view);
+	descriptor_pool = create_descriptor_pool(logical_device, 1);
+	command_pool = create_command_pool(logical_device, graphics_queue_family);
+	image_available_semaphores = create_semaphores(logical_device);
+	render_finished_semaphores = create_semaphores(logical_device);
+	fences = create_fences(logical_device);
+	primary_command_buffers = create_primary_command_buffers(logical_device, command_pool);
 	secondary_command_buffers := create_secondary_command_buffers(logical_device, command_pool);
 	
 	frame_descriptor_set_layout, frame_descriptor_sets := create_frame_descriptor_sets(logical_device, descriptor_pool);
@@ -180,7 +182,7 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 	per_instance_buffer_metrics := calculate_per_instance_buffer_metrics(physical_device);
 	per_instance_buffers, per_instance_buffers_memory := create_per_instance_buffers(physical_device, logical_device, per_instance_buffer_metrics.total_size);
 	
-	frame_resources := FrameResources {
+	frame_resources = FrameResources {
 		descriptor_set_layout = frame_descriptor_set_layout,
 		descriptor_sets = frame_descriptor_sets,
 		per_frame_buffers = per_frame_buffers,
@@ -208,7 +210,7 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 
 	sampler := create_sampler(logical_device, sampler_descriptor_set);
 
-	mesh_resources := MeshResources {
+	mesh_resources = MeshResources {
 		per_instance_buffer_instance_block_offset = per_instance_buffer_metrics.mesh_instance_block_offset, // this needs to be rename to per_instance_buffer_mesh_instance_block_offset
 		line_secondary_command_buffers = secondary_command_buffers.line,
 		basic_secondary_command_buffers = secondary_command_buffers.basic,
@@ -223,7 +225,7 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		lambert_two_sided_pipeline = pipelines[3],
 	};
 
-	particle_resources := ParticleResources {
+	particle_resources = ParticleResources {
 		per_instance_buffer_instance_block_offset = per_instance_buffer_metrics.particle_instance_block_offset,
 		secondary_command_buffers = secondary_command_buffers.particle,
 		instance_descriptor_set_layout = particle_instance_descriptor_set_layout,
@@ -232,7 +234,7 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		pipeline = pipelines[4],
 	}
 
-	ui_resources := UiResources {
+	ui_resources = UiResources {
 		text_secondary_command_buffer = secondary_command_buffers.text,
 		sampler_descriptor_set_layout = sampler_descriptor_set_layout,
 		atlas_description_set_layout = atlas_descriptor_set_layout,
@@ -241,29 +243,6 @@ init_vulkan :: proc(window: glfw.WindowHandle) -> Vulkan {
 		text_pipeline_layout = text_pipeline_layout,
 		text_pipeline = pipelines[5],
 		sampler = sampler,
-	};
-
-	return Vulkan {
-		vulkan_context,
-		surface_format,
-		depth_format,
-		render_pass,
-		extent,
-		depth_image,
-		swapchain,
-		swapchain_frames,
-		descriptor_pool,
-		command_pool,
-		image_available_semaphores,
-		render_finished_semaphores,
-		fences,
-		primary_command_buffers,
-		frame_resources,
-		mesh_resources,
-		particle_resources,
-		ui_resources, 
-		0,
-		0,
 	};
 }
 
