@@ -21,7 +21,6 @@ Ground_Grid_Triangle :: struct {
 	bounds: math2.Box3f32,
 }
 
-// #nocheckin: Should we also calculate the triangle normal here?
 Ground_Grid_Evaluated_Triangle :: struct {
 	a, b, c, g1, g2, g3: linalg.Vector3f32,
 	bounds: math2.Box3f32,
