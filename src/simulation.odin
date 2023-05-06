@@ -227,9 +227,17 @@ simulate :: proc(game: ^Game, dt: f32) {
 				unreachable();
 			}
 
-			// Find nearby entities and add an explosion velocity to them
+			// Create explosion bounds
 			center := math2.box_center(rigid_body.bounds);
 			bounds := math2.Box3f32 { center - EXPLOSION_RADIUS, center + EXPLOSION_RADIUS };
+			
+			// Appy explosion impulse to car if nearby
+			if math2.box_intersects(bounds, car.bounds) {
+				dir := linalg.normalize(car.position - rigid_body.position);
+				car.velocity += dir * 30;
+			}
+			
+			// Apply explosion impulse to nearby rigid bodies
 			nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, bounds);
 
 			for lookup in nearby_lookups {

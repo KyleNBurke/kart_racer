@@ -1,6 +1,7 @@
 package main;
 
 import "core:time";
+import "core:fmt";
 import "vendor:glfw";
 
 when ODIN_DEBUG {
