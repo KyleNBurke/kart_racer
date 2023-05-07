@@ -1,6 +1,7 @@
 package main;
 
 import "core:time";
+import "core:fmt";
 import "vendor:glfw";
 
 when ODIN_DEBUG {
@@ -36,6 +37,7 @@ Game :: struct {
 
 	oil_slick_lookups: [dynamic]Entity_Lookup,
 	on_fire_oil_slick_lookups: [dynamic]Entity_Lookup,
+	bumper_lookups: [dynamic]Entity_Lookup,
 }
 
 main :: proc() {
@@ -170,6 +172,7 @@ update :: proc(game: ^Game, dt: f32) {
 	update_status_effect_cloud_particles(game.status_effect_cloud_lookups[:], dt);
 	update_car_status_effects_and_particles(game.car, game.camera.transform, dt);
 	update_on_fire_oil_slicks(game.on_fire_oil_slick_lookups[:], dt);
+	animate_bumpers(game.bumper_lookups[:], dt);
 
 	if config.hull_helpers {
 		update_entity_hull_helpers(&game.hull_helpers);

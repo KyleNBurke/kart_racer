@@ -97,6 +97,13 @@ simulate :: proc(game: ^Game, dt: f32) {
 						// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
 						// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
 						add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
+					case ^Bumper_Entity:
+						// #todo Should there be an explosion constraint? I.e. a constraint that tries to get the car to a target velocity?
+						dir := linalg.normalize(car.position - e.position);
+						car.velocity = dir * 30;
+
+						e.animating = true;
+						e.animation_duration = 0;
 					case ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity:
 						unreachable();
 					}
@@ -157,6 +164,9 @@ simulate :: proc(game: ^Game, dt: f32) {
 						unreachable();
 					case ^Cloud_Entity:
 						unimplemented();
+					case ^Bumper_Entity:
+						// #todo
+						// unimplemented();
 					}
 				}
 			}

@@ -76,7 +76,7 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 }
 
 load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
-	REQUIRED_VERSION :: 1;
+	REQUIRED_VERSION :: 2;
 	
 	file_path := fmt.tprintf("res/maps/%s.kgl", config.level);
 	bytes, success := os.read_entire_file_from_filename(file_path);
@@ -246,6 +246,34 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 			hull := init_collision_hull(local_transform, entity.transform, .Mesh, indices, positions);
 			append(&entity.collision_hulls, hull);
 			update_entity_hull_transforms_and_bounds(entity, entity.transform);
+
+			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+		}
+	}
+
+	{ // Bumpers
+		count := read_u32(&bytes, &pos);
+
+		for _ in 0..<count {
+			name := read_string(&bytes, &pos);
+			position := read_vec3(&bytes, &pos);
+			orientation := read_quat(&bytes, &pos);
+			size := read_vec3(&bytes, &pos);
+			geometry_index := read_u32(&bytes, &pos);
+
+			entity := new_bumper_entity(name, position, orientation, size);
+			entity_lookup := add_entity(geometry_lookups[geometry_index], entity);
+			append(&game.bumper_lookups, entity_lookup);
+
+			hull_position := read_vec3(&bytes, &pos);
+			hull_orientation := read_quat(&bytes, &pos);
+			hull_size := read_vec3(&bytes, &pos);
+			local_transform := linalg.matrix4_from_trs(hull_position, hull_orientation, hull_size);
+			hull := init_collision_hull(local_transform, entity.transform, .Cylinder);
+			append(&entity.collision_hulls, hull);
+			update_entity_hull_transforms_and_bounds(entity, entity.transform);
+
+			insert_entity_into_grid(&entity_grid, entity);
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 		}

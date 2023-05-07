@@ -114,6 +114,28 @@ def debug_export_graph(graph, filepath):
 
 	file.close()
 
+def iterate_graph(graph, func):
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop(0)
+		to_visit.extend(w_object.children_w_objects)
+		
+		func(w_object)
+
+def search_graph(graph, func):
+	w_objects = []
+	to_visit = graph.copy()
+
+	while to_visit:
+		w_object: WObject = to_visit.pop(0)
+		to_visit.extend(w_object.children_w_objects)
+
+		if func(w_object):
+			w_objects.append(w_object)
+	
+	return w_objects
+
 def blender_position_to_game_position(pos):
 	return (pos[0], pos[2], -pos[1])
 

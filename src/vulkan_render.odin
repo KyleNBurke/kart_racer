@@ -154,7 +154,8 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, texts: ^[dyna
 
 			when ODIN_DEBUG {
 				if len(record.entity_lookups) == 0 {
-					assert(record.on_no_entities == .KeepRender);
+					error_message := fmt.tprintf("Geometry '%s' was created and marked to be freed on no entity lookups but it was never assigned an entity lookup", record.geometry.name);
+					assert(record.on_no_entities == .KeepRender, error_message);
 				}
 
 				assert(geometry_offset <= instance_offset);
@@ -289,19 +290,6 @@ end_render_frame :: proc(using vulkan: ^Vulkan) -> bool {
 		command_buffer_begin_info := vk.CommandBufferBeginInfo {
 			sType = .COMMAND_BUFFER_BEGIN_INFO,
 			flags = {.ONE_TIME_SUBMIT},
-		};
-
-		color_clear_value := vk.ClearValue {
-			color = vk.ClearColorValue {
-				float32 = [4]f32 {0.0, 0.0, 0.0, 1.0},
-			},
-		};
-
-		depth_clear_value := vk.ClearValue {
-			depthStencil = vk.ClearDepthStencilValue {
-				depth = 1.0,
-				stencil = 0,
-			},
 		};
 
 		clear_values := [2]vk.ClearValue {

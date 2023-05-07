@@ -230,7 +230,7 @@ cleanup_entities_geos :: proc() {
 			delete(e.shock_particles);
 			delete(e.fire_particles);
 
-		case ^Inanimate_Entity:
+		case ^Inanimate_Entity, ^Bumper_Entity:
 		}
 
 		free(entity);

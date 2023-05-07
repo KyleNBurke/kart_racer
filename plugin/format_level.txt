@@ -16,6 +16,7 @@ Ground collision meshes count: u32
 	indices: [u16]
 	positions count: u32
 	positions [f32]
+	...
 
 Geometries count: u32
 	name:              string
@@ -23,6 +24,7 @@ Geometries count: u32
 	indices:          [u16]
 	attributes count:  u32
 	attributes        [f32]
+	...
 
 Inanimate entities count:  u32
 	name:                  string
@@ -39,7 +41,9 @@ Inanimate entities count:  u32
 		indices:          [u16] (if hull type is mesh)
 		attributes_count:  u32  (if hull type is mesh)
 		attributes:       [u32] (if hull type is mesh)
+		...
 	position check         u32
+	...
 
 Rigid body islands count: u32
 	Entities count: u32
@@ -62,6 +66,7 @@ Rigid body islands count: u32
 			attributes_count:  u32  (if hull type is mesh)
 			attributes:       [u32] (if hull type is mesh)
 		position check         u32
+		...
 	...
 
 Oil slick entities count: u32
@@ -78,3 +83,16 @@ Oil slick entities count: u32
 	hull indices:         [u16]
 	hull positions count:  u32
 	hull positions        [f32]
+	...
+
+Bumpers count: u32
+	name:                  string
+	position:              vec3
+	rotation:              quat
+	scale:                 vec3
+	geometry index:        u32
+	hull local position    vec3
+	hull local orientation quat
+	hull local size        vec3
+	position check         u32
+	...

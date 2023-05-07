@@ -14,7 +14,7 @@ Entity :: struct {
 	collision_hulls: [dynamic]Collision_Hull,
 	bounds: math2.Box3f32,
 	query_run: u32,
-	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity, ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity},
+	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity, ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity},
 }
 
 Inanimate_Entity :: struct {
@@ -103,6 +103,12 @@ Oil_Slick_Entity :: struct {
 	fire_particles: [dynamic]Status_Effect_Particle,
 	ramp_up_duration: f32,
 	desired_fire_particles: int,
+}
+
+Bumper_Entity :: struct {
+	using entity: Entity,
+	animating: bool,
+	animation_duration: f32,
 }
 
 init_entity :: proc(e: ^Entity, name: string, position: linalg.Vector3f32, orientation: linalg.Quaternionf32, size: linalg.Vector3f32) {
@@ -218,6 +224,19 @@ new_oil_slick_entity :: proc(
 	init_entity(e, name, position, orientation, size);
 
 	e.desired_fire_particles = desired_fire_paricles;
+
+	return e;
+}
+
+new_bumper_entity :: proc(
+	name: string,
+	position: linalg.Vector3f32,
+	orientation: linalg.Quaternionf32,
+	size: linalg.Vector3f32,
+) -> ^Bumper_Entity {
+	e := new(Bumper_Entity);
+	e.variant = e;
+	init_entity(e, name, position, orientation, size);
 
 	return e;
 }

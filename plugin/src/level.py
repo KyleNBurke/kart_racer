@@ -2,7 +2,7 @@ from bpy.types import Context, Depsgraph, Object, Mesh
 from . import util
 from .util import WObject
 
-VERSION = 1
+VERSION = 2
 
 def export(operator, context: Context):
 	depsgraph: Depsgraph = context.evaluated_depsgraph_get()
@@ -19,6 +19,7 @@ def export(operator, context: Context):
 	export_inanimate_entities(graph, file, mesh_name_to_index_max)
 	export_rigid_bodies(graph, file, mesh_name_to_index_max)
 	export_oil_slicks(depsgraph, graph, file, mesh_name_to_index_max)
+	export_bumpers(depsgraph, graph, file, mesh_name_to_index_max)
 
 	file.close()
 	print("Exported", operator.filepath)
@@ -106,7 +107,7 @@ def export_geometries(depsgraph: Depsgraph, graph, file):
 		object: Object = w_object.object
 
 		kg_type = object.kg_type
-		if kg_type == 'inanimate' or kg_type == 'rigid_body' or kg_type == 'oil_slick':
+		if kg_type == 'inanimate' or kg_type == 'rigid_body' or kg_type == 'oil_slick' or kg_type == 'bumper':
 			mesh: Mesh = object.data
 
 			if mesh.name_full in mesh_name_to_index_map:
@@ -126,7 +127,7 @@ def export_geometries(depsgraph: Depsgraph, graph, file):
 	
 	for w_object in w_objects:
 		object: Object = w_object.object
-		util.write_string(file, object.data.name_full);
+		util.write_string(file, object.data.name_full)
 		indices, attributes = util.calculate_indices_local_positions_normals_colors(depsgraph, object)
 		util.write_indices_attributes(file, indices, attributes)
 		util.write_cursor_check(file)
@@ -300,3 +301,38 @@ def export_oil_slicks(depsgraph: Depsgraph, graph, file, mesh_name_to_index_map)
 		util.write_indices_attributes(file, indices, positions)
 
 		util.write_cursor_check(file)
+
+def export_bumpers(depsgraph: Depsgraph, graph, file, mesh_name_to_index_map):
+	print("--- Bumpers ---")
+
+	def compare(w_object: WObject):
+		return w_object.object.kg_type == 'bumper'
+	
+	w_objects = util.search_graph(graph, compare)
+
+	util.write_u32(file, len(w_objects))
+
+	for w_object in w_objects:
+		print(w_object.unique_name)
+
+		util.write_string(file, w_object.unique_name)
+		util.write_game_pos_ori_scale_from_blender_matrix(file, w_object.final_world_matrix)
+
+		mesh_index = mesh_name_to_index_map[w_object.object.data.name_full]
+		util.write_u32(file, mesh_index)
+	
+		# Find hull
+		hull_w_object = None
+
+		for child_w_object in w_object.children_w_objects:
+			if child_w_object.object.kg_type == 'hull':
+				hull_w_object = child_w_object
+				break
+		
+		hull_object = hull_w_object.object
+		assert hull_object.kg_hull_type == 'cylinder'
+		util.write_game_pos_ori_scale_from_blender_matrix(file, hull_object.matrix_local)
+
+		util.write_cursor_check(file)
+	
+	print()

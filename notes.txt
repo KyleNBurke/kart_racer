@@ -54,11 +54,8 @@ Todo
 	- I think the thin rectangular shrapnel piece is too thin, seems like it's falling through the ground plane from high up. Should increase that hull size if that is happening. Need to look into the fence bounds too.
 	- Fire barrel shrapnel pieces
 - Cylinder bumper
-	- Figure out how to do it. Use restitution? Should it even run through the constraint system?
-	- Blender design (should be consistent with rail bumper)
-	- Exporting
-	- Importing
-	- Gameplay logic
+	- Should we use a collision resolution constraint with restitution? Should we use a constraint that just tries to give it a target velocity? Should we just assign to the velocity?
+	- Rigid body vs bumper collisions
 - Slow the car down when you hit a rigid body
 - Boost jets
 - Improve car wheel helpers
@@ -68,6 +65,9 @@ Todo
 - Wireframe triangle geometry for mesh hull helpers.
 - Hull bounds helpers - this is different than the hull helpers, it would show you the axis aligned bounding boxes of the hulls.
 - Shader hot reloading?
+- Versioning for font file
+- If you push a box using your car. It scoots away orthogonally. Maybe the friction direction could be in the direction the thing is moving in?
+- [plugin] Utilize the new function that gives you back a list of w_objects
 
 Sequential impulse solver
 	- I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting

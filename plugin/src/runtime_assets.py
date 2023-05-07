@@ -61,7 +61,6 @@ def export_shock_barrel_shrapnel(depsgraph: Depsgraph, graph, file):
 def export_oil_slicks(depsgraph: Depsgraph, graph, file):
 	print("--- Oil slicks ---")
 
-	#todo: Can this be made into a function? You give it a function maybe to check the w_object against?
 	w_objects = []
 	to_visit = graph.copy()
 
