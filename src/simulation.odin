@@ -5,7 +5,6 @@ import "core:math/linalg";
 import "core:container/small_array";
 import "core:slice";
 import "core:math/rand";
-import "core:mem";
 import "math2";
 
 GRAVITY: f32 : -20.0;
@@ -575,7 +574,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 				positions := &oil_slick_hull.positions;
 
 				for triangle_index in 0..<len(indices) / 3 {
-					a, b, c := math2.triangle_index_to_points(triangle_index, oil_slick_hull.indices[:], oil_slick_hull.positions[:]);
+					a, b, c := math2.triangle_index_to_points(triangle_index, indices[:], positions[:]);
 
 					global_a := math2.matrix4_transform_point(oil_slick_hull.global_transform, a);
 					global_b := math2.matrix4_transform_point(oil_slick_hull.global_transform, b);

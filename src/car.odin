@@ -321,8 +321,8 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, car_helpe
 				car.velocity -= tire_lat_dir * tire_fric;
 				car.angular_velocity -= body_tensor * body_up * tire_fric;
 	
-				front_tire_left_geo := get_geometry(car_helpers.front_tire_left_geo_lookup);
-				set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, tire_lat_dir * 2, GREEN);
+				// front_tire_left_geo := get_geometry(car_helpers.front_tire_left_geo_lookup);
+				// set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, tire_lat_dir * 2, GREEN);
 			}
 
 			if back_left_contact_normal_ok || back_right_contact_normal_ok {
@@ -335,8 +335,8 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, car_helpe
 				car.velocity -= body_surface_lat_dir * tire_fric;
 				car.angular_velocity -= body_tensor * -body_up * tire_fric;
 
-				back_tire_left_geo := get_geometry(car_helpers.back_tire_left_geo_lookup);
-				set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, GREEN);
+				// back_tire_left_geo := get_geometry(car_helpers.back_tire_left_geo_lookup);
+				// set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, GREEN);
 			}
 
 			top_speed = full_grip_top_speed;
