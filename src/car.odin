@@ -297,11 +297,11 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, car_helpe
 			top_speed_multiplier := max((20 - abs(lat_vel)) / 20, 0);
 			top_speed = (full_grip_top_speed - 10) * top_speed_multiplier + 10;
 
-			front_tire_left_geo := get_geometry(car_helpers.front_tire_left_geo_lookup);
-			set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
+			// front_tire_left_geo := get_geometry(car_helpers.front_tire_left_geo_lookup);
+			// set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
 
-			back_tire_left_geo := get_geometry(car_helpers.back_tire_left_geo_lookup);
-			set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
+			// back_tire_left_geo := get_geometry(car_helpers.back_tire_left_geo_lookup);
+			// set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
 		} else {
 			if front_left_contact_normal_ok || front_right_contact_normal_ok {
 				surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
