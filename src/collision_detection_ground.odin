@@ -78,7 +78,7 @@ colliding :: proc(triangle: ^Ground_Grid_Evaluated_Triangle, entity_hull: ^Colli
 			return nil;
 		}
 
-		v := support_gjk(triangle, entity_hull, direction);
+		v = support_gjk(triangle, entity_hull, direction);
 		simplex.vertices[simplex.overwrite_index] = v;
 
 		if linalg.dot(direction, v) <= 0.0 {

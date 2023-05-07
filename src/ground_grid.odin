@@ -90,9 +90,9 @@ insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: []
 		c_index := cast(int) new_indices[triangle_index * 3 + 2] + current_indices_count;
 
 		// Find ghost vertices
-		g1_index, ok1 := edge_to_vertex_map[[?]int {a_index, b_index}];
-		g2_index, ok2 := edge_to_vertex_map[[?]int {b_index, c_index}];
-		g3_index, ok3 := edge_to_vertex_map[[?]int {c_index, a_index}];
+		g1_index, _ := edge_to_vertex_map[[?]int {a_index, b_index}];
+		g2_index, _ := edge_to_vertex_map[[?]int {b_index, c_index}];
+		g3_index, _ := edge_to_vertex_map[[?]int {c_index, a_index}];
 
 		// Calculate triangle bounds
 		a_pos_index := a_index * 3;
@@ -144,8 +144,6 @@ ground_grid_find_nearby_triangles :: proc(ground_grid: ^Ground_Grid, bounds: mat
 
 	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(ground_grid.half_cell_count, CELL_SIZE, bounds);
 	if !ok do return triangle_indices;
-	
-	positions := &ground_grid.positions;
 
 	for x in grid_min_x..<grid_max_x {
 		for y in grid_min_y..<grid_max_y {

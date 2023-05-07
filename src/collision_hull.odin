@@ -1,7 +1,6 @@
 package main;
 
 import "core:slice";
-import "core:math";
 import "core:math/linalg";
 import "math2";
 
