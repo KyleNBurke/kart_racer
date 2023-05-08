@@ -164,8 +164,11 @@ simulate :: proc(game: ^Game, dt: f32) {
 					case ^Cloud_Entity:
 						unimplemented();
 					case ^Bumper_Entity:
-						// #todo
-						// unimplemented();
+						dir := linalg.normalize(provoking_rigid_body.position - e.position);
+						provoking_rigid_body.velocity = dir * 30;
+
+						e.animating = true;
+						e.animation_duration = 0;
 					}
 				}
 			}

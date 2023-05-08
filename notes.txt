@@ -55,7 +55,6 @@ Todo
 	- Fire barrel shrapnel pieces
 - Cylinder bumper
 	- Should we use a collision resolution constraint with restitution? Should we use a constraint that just tries to give it a target velocity? Should we just assign to the velocity?
-	- Rigid body vs bumper collisions
 - Slow the car down when you hit a rigid body
 - Boost jets
 - Improve car wheel helpers
