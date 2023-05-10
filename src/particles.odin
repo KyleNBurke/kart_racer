@@ -7,7 +7,7 @@ import "math2";
 
 SHOCK_PARTICLE_MAX_OFFSET :: 1.4;
 
-Status_Effect_Particle :: struct {
+Game_Particle :: struct {
 	using particle: Particle,
 	velocity: linalg.Vector3f32,
 	life_time: f32,
@@ -19,7 +19,7 @@ init_shock_particles :: proc(shock_entities: []Entity_Lookup) {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		for _ in 0..<150 {
-			particle: Status_Effect_Particle;
+			particle: Game_Particle;
 			particle.size = SHOCK_PARTICLE_SIZE;
 			
 			append(&rigid_body.shock_particles, particle);
@@ -32,7 +32,7 @@ init_fire_particles :: proc(fire_entities: []Entity_Lookup) {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		for _ in 0..<200 {
-			particle: Status_Effect_Particle;
+			particle: Game_Particle;
 			append(&rigid_body.fire_particles, particle);
 		}
 	}
@@ -54,7 +54,7 @@ update_shock_entity_particles :: proc(shock_entities: []Entity_Lookup, dt: f32) 
 	}
 }
 
-update_shock_particle :: proc(body_velocity: linalg.Vector3f32, particle: ^Status_Effect_Particle, dt: f32) {
+update_shock_particle :: proc(body_velocity: linalg.Vector3f32, particle: ^Game_Particle, dt: f32) {
 	MAX_VEL_CHANGE :: 1;
 	MAX_VEL :: 2;
 
@@ -89,7 +89,7 @@ update_shock_particle :: proc(body_velocity: linalg.Vector3f32, particle: ^Statu
 }
 
 @(private="file")
-reset_shock_particle :: proc(rigid_body: ^Rigid_Body_Entity, particle: ^Status_Effect_Particle) {
+reset_shock_particle :: proc(rigid_body: ^Rigid_Body_Entity, particle: ^Game_Particle) {
 	offset_x := rand.float32_range(-SHOCK_PARTICLE_MAX_OFFSET, SHOCK_PARTICLE_MAX_OFFSET);
 	offset_y := rand.float32_range(-SHOCK_PARTICLE_MAX_OFFSET, SHOCK_PARTICLE_MAX_OFFSET);
 	offset_z := rand.float32_range(-SHOCK_PARTICLE_MAX_OFFSET, SHOCK_PARTICLE_MAX_OFFSET);
@@ -115,7 +115,7 @@ update_fire_entity_particles :: proc(fire_entities: []Entity_Lookup, dt: f32) {
 	}
 }
 
-update_rigid_body_fire_particle :: proc(particle: ^Status_Effect_Particle, dt: f32) {
+update_rigid_body_fire_particle :: proc(particle: ^Game_Particle, dt: f32) {
 	DRAG :: 20;
 	particle.velocity.x -= math.clamp(particle.velocity.x, -DRAG * dt, DRAG * dt);
 	particle.velocity.z -= math.clamp(particle.velocity.z, -DRAG * dt, DRAG * dt);
@@ -127,7 +127,7 @@ update_rigid_body_fire_particle :: proc(particle: ^Status_Effect_Particle, dt: f
 }
 
 @(private="file")
-reset_fire_particle :: proc(rigid_body: ^Rigid_Body_Entity, particle: ^Status_Effect_Particle) {
+reset_fire_particle :: proc(rigid_body: ^Rigid_Body_Entity, particle: ^Game_Particle) {
 	RANGE :: 1.1;
 
 	offset_x := rand.float32_range(-RANGE, RANGE);
@@ -174,7 +174,7 @@ update_status_effect_cloud_particles :: proc(clouds: []Entity_Lookup, dt: f32) {
 	FIRE_DESIRED_PARTICLES :: 300;
 	FIRE_RAMP_UP_PARTICLES_PER_SECOND :: FIRE_DESIRED_PARTICLES / FIRE_RAMP_UP_TIME;
 
-	reset_shock_particle :: proc(transform: linalg.Matrix4f32, particle: ^Status_Effect_Particle) {
+	reset_shock_particle :: proc(transform: linalg.Matrix4f32, particle: ^Game_Particle) {
 		// https://math.stackexchange.com/a/1113326/825984
 		// Uniformly pick a random point the surface of a sphere
 		u1 := rand.float32();
@@ -201,7 +201,7 @@ update_status_effect_cloud_particles :: proc(clouds: []Entity_Lookup, dt: f32) {
 				cloud.ramp_up_duration += dt;
 
 				for _ in 0..<particles_to_add {
-					particle: Status_Effect_Particle;
+					particle: Game_Particle;
 					particle.size = SHOCK_PARTICLE_SIZE;
 					reset_shock_particle(hull.global_transform, &particle);
 					append(&cloud.particles, particle);
@@ -231,7 +231,7 @@ draw_status_effect_clouds :: proc(vulkan: ^Vulkan, clouds: []Entity_Lookup) {
 	}
 }
 
-set_fire_particle_color :: proc(particle: ^Status_Effect_Particle) {
+set_fire_particle_color :: proc(particle: ^Game_Particle) {
 	life_time_multiplier := min(particle.time_alive / particle.life_time, 1);
 	particle.size = max((1 - life_time_multiplier) * 0.2, 0.08);
 
@@ -246,7 +246,7 @@ set_fire_particle_color :: proc(particle: ^Status_Effect_Particle) {
 update_on_fire_oil_slicks :: proc(oil_slick_lookups: []Entity_Lookup, dt: f32) {
 	RAMP_UP_TIME :: 2.5;
 
-	reset_particle :: proc(entity: ^Entity, particle: ^Status_Effect_Particle) {
+	reset_particle :: proc(entity: ^Entity, particle: ^Game_Particle) {
 		phi := rand.float32() * math.TAU;
 		rho := rand.float32() * 1.2;
 		x := math.sqrt(rho) * math.cos(phi);
@@ -262,7 +262,7 @@ update_on_fire_oil_slicks :: proc(oil_slick_lookups: []Entity_Lookup, dt: f32) {
 		particle.time_alive = 0;
 	}
 
-	update_particle :: proc(particle: ^Status_Effect_Particle, dt: f32) {
+	update_particle :: proc(particle: ^Game_Particle, dt: f32) {
 		particle.position.y += 5 * dt;
 		set_fire_particle_color(particle);
 		particle.time_alive += dt;
@@ -279,7 +279,7 @@ update_on_fire_oil_slicks :: proc(oil_slick_lookups: []Entity_Lookup, dt: f32) {
 			oil_slick.ramp_up_duration += dt;
 
 			for _ in 0..<particles_to_add {
-				particle: Status_Effect_Particle;
+				particle: Game_Particle;
 				reset_particle(oil_slick, &particle);
 				append(&oil_slick.fire_particles, particle);
 			}
@@ -300,6 +300,62 @@ draw_on_fire_oil_slicks :: proc(vulkan: ^Vulkan, oil_slick_lookups: []Entity_Loo
 		oil_slick := get_entity(lookup).variant.(^Oil_Slick_Entity);
 
 		for particle in &oil_slick.fire_particles {
+			draw_particle(vulkan, &particle);
+		}
+	}
+}
+
+reset_boost_jet_particle :: proc(particle: ^Game_Particle, hull_transform: linalg.Matrix4f32) {
+	x := rand.float32_range(-1, 1);
+	y := rand.float32_range(-1, 1);
+	z: f32 = -1;
+	local_pos := linalg.Vector3f32 { x, y, z };
+	particle.position = math2.matrix4_transform_point(hull_transform, local_pos);
+
+	particle.life_time = 0.5 + rand.float32_range(-0.1, 0.1);
+	particle.time_alive = rand.float32() * particle.life_time;
+}
+
+init_boost_jet_particles :: proc(boost_jet_lookups: []Entity_Lookup) {
+	for lookup in boost_jet_lookups {
+		boost_jet := get_entity(lookup).variant.(^Boost_Jet_Entity);
+		hull_transform := boost_jet.collision_hulls[0].global_transform;
+		
+		for _ in 0..<150 {
+			particle: Game_Particle;
+			particle.size = 0.1;
+			particle.color = [3]f32 { 0.9, 0.9, 0.9 };
+
+			reset_boost_jet_particle(&particle, hull_transform);
+			append(&boost_jet.particles, particle);
+		}
+	}
+}
+
+update_boost_jet_particles :: proc(boost_jet_lookups: []Entity_Lookup, dt: f32) {
+	SPEED :: 20;
+	
+	for lookup in boost_jet_lookups {
+		boost_jet := get_entity(lookup).variant.(^Boost_Jet_Entity);
+		hull_transform := boost_jet.collision_hulls[0].global_transform;
+		forward := linalg.normalize(math2.matrix4_forward(boost_jet.transform));
+
+		for particle in &boost_jet.particles {
+			if particle.time_alive > particle.life_time {
+				reset_boost_jet_particle(&particle, hull_transform);
+			}
+
+			particle.position += forward * SPEED * dt;
+			particle.time_alive += dt;
+		}
+	}
+}
+
+draw_boost_jet_particles :: proc(vulkan: ^Vulkan, boost_jet_lookups: []Entity_Lookup) {
+	for lookup in boost_jet_lookups {
+		boost_jet := get_entity(lookup).variant.(^Boost_Jet_Entity);
+
+		for particle in &boost_jet.particles {
 			draw_particle(vulkan, &particle);
 		}
 	}

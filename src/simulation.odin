@@ -79,9 +79,29 @@ simulate :: proc(game: ^Game, dt: f32) {
 					simplex, colliding := hulls_colliding(&provoking_hull, &nearby_hull).?;
 					if !colliding do continue;
 
-					if _, is_cloud_entity := nearby_entity.variant.(^Cloud_Entity); is_cloud_entity {
+					switch e in nearby_entity.variant {
+					case ^Cloud_Entity:
 						shock_car(car);
 						continue;
+
+					case ^Bumper_Entity:
+						// #todo Should there be an explosion constraint? I.e. a constraint that tries to get the car to a target velocity? (Is this what a motor constraint is?)
+						dir := linalg.normalize(car.position - e.position);
+						car.velocity = dir * 30;
+
+						e.animating = true;
+						e.animation_duration = 0;
+						continue;
+					
+					case ^Boost_Jet_Entity:
+						dir := linalg.normalize(math2.matrix4_forward(e.transform));
+						car.velocity += dir * 150 * dt;
+						continue;
+
+					case ^Car_Entity, ^Oil_Slick_Entity:
+						unreachable();
+
+					case ^Inanimate_Entity, ^Rigid_Body_Entity:
 					}
 
 					manifold, has_manifold := hulls_find_collision_manifold(&provoking_hull, &nearby_hull, simplex).?;
@@ -92,18 +112,13 @@ simulate :: proc(game: ^Game, dt: f32) {
 						add_car_movable_constraint_set(&game.constraints, car, e, &manifold, dt);
 						car_collision_maybe_wake_island(&game.islands, &additional_awake_entities, e);
 						handle_status_effects(car, e);
+
 					case ^Inanimate_Entity:
 						// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
 						// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
 						add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
-					case ^Bumper_Entity:
-						// #todo Should there be an explosion constraint? I.e. a constraint that tries to get the car to a target velocity?
-						dir := linalg.normalize(car.position - e.position);
-						car.velocity = dir * 30;
 
-						e.animating = true;
-						e.animation_duration = 0;
-					case ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity:
+					case ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
 						unreachable();
 					}
 				}
@@ -157,12 +172,20 @@ simulate :: proc(game: ^Game, dt: f32) {
 					case ^Rigid_Body_Entity:
 						add_movable_constraint_set(&game.constraints, provoking_rigid_body, e, &manifold, dt);
 						rigid_body_collision_merge_islands(&game.islands, &additional_awake_entities, provoking_lookup, provoking_rigid_body, e);
+					
 					case ^Inanimate_Entity:
 						add_fixed_constraint_set(&game.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
+					
 					case ^Car_Entity, ^Oil_Slick_Entity:
 						unreachable();
+					
 					case ^Cloud_Entity:
 						unimplemented();
+
+					case ^Boost_Jet_Entity:
+						dir := linalg.normalize(math2.matrix4_forward(e.transform));
+						provoking_rigid_body.velocity += dir * 50 * dt;
+
 					case ^Bumper_Entity:
 						dir := linalg.normalize(provoking_rigid_body.position - e.position);
 						provoking_rigid_body.velocity = dir * 30;
@@ -523,6 +546,16 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 
 			if _, is_cloud_entity := nearby_entity.variant.(^Cloud_Entity); is_cloud_entity {
 				continue;
+			}
+
+			switch _ in nearby_entity.variant {
+			case ^Rigid_Body_Entity, ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
+				continue;
+
+			case ^Car_Entity:
+				unreachable();
+
+			case ^Inanimate_Entity:
 			}
 
 			for nearby_hull in &nearby_entity.collision_hulls {

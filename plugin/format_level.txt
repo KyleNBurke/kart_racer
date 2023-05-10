@@ -96,3 +96,15 @@ Bumpers count: u32
 	hull local size        vec3
 	position check         u32
 	...
+
+Boost jets count: u32
+	name:                  string
+	position:              vec3
+	rotation:              quat
+	scale:                 vec3
+	geometry index:        u32
+	hull local position    vec3
+	hull local orientation quat
+	hull local size        vec3
+	position check         u32
+	...

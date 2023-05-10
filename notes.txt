@@ -57,6 +57,7 @@ Todo
 	- Should we use a collision resolution constraint with restitution? Should we use a constraint that just tries to give it a target velocity? Should we just assign to the velocity?
 - Slow the car down when you hit a rigid body
 - Boost jets
+	- Need to decide whether we should be using a constraint instead of applying impulses/accelerations.
 - Improve car wheel helpers
 	- Render them up to date
 	- Make config setting

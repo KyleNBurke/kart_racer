@@ -98,7 +98,8 @@ def register():
 		('rigid_body', "Rigid body", "", 5),
 		('hull', "Hull", "", 6),
 		('oil_slick', "Oil slick", "", 7),
-		('bumper', "Bumpler", "", 8)
+		('bumper', "Bumpler", "", 8),
+		('boost_jet', "Boost jet", "", 9),
 	])
 	bpy.types.Object.kg_hull_type = bpy.props.EnumProperty(items=[
 		('box', "Box", "", 0),

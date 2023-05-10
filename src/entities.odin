@@ -14,7 +14,15 @@ Entity :: struct {
 	collision_hulls: [dynamic]Collision_Hull,
 	bounds: math2.Box3f32,
 	query_run: u32,
-	variant: union {^Inanimate_Entity, ^Rigid_Body_Entity, ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity},
+	variant: union {
+		^Inanimate_Entity,
+		^Rigid_Body_Entity,
+		^Car_Entity,
+		^Cloud_Entity,
+		^Oil_Slick_Entity,
+		^Bumper_Entity,
+		^Boost_Jet_Entity,
+	},
 }
 
 Inanimate_Entity :: struct {
@@ -24,7 +32,7 @@ Inanimate_Entity :: struct {
 Cloud_Entity :: struct {
 	using entity: Entity,
 	status_effect: Cloud_Status_Effect,
-	particles: [dynamic]Status_Effect_Particle,
+	particles: [dynamic]Game_Particle,
 	ramp_up_duration: f32,
 }
 
@@ -47,8 +55,8 @@ Rigid_Body_Entity :: struct {
 	// I get not wanting to separate shock cubes from shock barrels due to the [dynamic]particle needed to be in both but what if I pull out the things below this into Rigid_Body_Status_Effect_Entity?
 	// We should hold off on this because we may want status effects for inanimate entities which would mean putting these things into the Entity anyway.
 	status_effect: Status_Effect,
-	shock_particles: [dynamic]Status_Effect_Particle,
-	fire_particles: [dynamic]Status_Effect_Particle,
+	shock_particles: [dynamic]Game_Particle,
+	fire_particles: [dynamic]Game_Particle,
 	exploding_health: f32,
 }
 
@@ -82,8 +90,8 @@ Car_Entity :: struct {
 	back_wheel_angular_velocity,
 	front_wheel_orientation,
 	back_wheel_orientation: f32,
-	shock_particles: [dynamic]Status_Effect_Particle,
-	fire_particles: [dynamic]Status_Effect_Particle,
+	shock_particles: [dynamic]Game_Particle,
+	fire_particles: [dynamic]Game_Particle,
 	surface_type: Surface_Type,
 
 	forward_helper_geo,
@@ -100,7 +108,7 @@ Wheel :: struct {
 Oil_Slick_Entity :: struct {
 	using entity: Entity,
 	on_fire: bool,
-	fire_particles: [dynamic]Status_Effect_Particle,
+	fire_particles: [dynamic]Game_Particle,
 	ramp_up_duration: f32,
 	desired_fire_particles: int,
 }
@@ -109,6 +117,11 @@ Bumper_Entity :: struct {
 	using entity: Entity,
 	animating: bool,
 	animation_duration: f32,
+}
+
+Boost_Jet_Entity :: struct {
+	using entity: Entity,
+	particles: [dynamic]Game_Particle,
 }
 
 init_entity :: proc(e: ^Entity, name: string, position: linalg.Vector3f32, orientation: linalg.Quaternionf32, size: linalg.Vector3f32) {
@@ -235,6 +248,19 @@ new_bumper_entity :: proc(
 	size: linalg.Vector3f32,
 ) -> ^Bumper_Entity {
 	e := new(Bumper_Entity);
+	e.variant = e;
+	init_entity(e, name, position, orientation, size);
+
+	return e;
+}
+
+new_boost_jet_entity :: proc(
+	name: string,
+	position: linalg.Vector3f32,
+	orientation: linalg.Quaternionf32,
+	size: linalg.Vector3f32,
+) -> ^Boost_Jet_Entity {
+	e := new(Boost_Jet_Entity);
 	e.variant = e;
 	init_entity(e, name, position, orientation, size);
 

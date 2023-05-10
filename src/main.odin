@@ -38,6 +38,7 @@ Game :: struct {
 	oil_slick_lookups: [dynamic]Entity_Lookup,
 	on_fire_oil_slick_lookups: [dynamic]Entity_Lookup,
 	bumper_lookups: [dynamic]Entity_Lookup,
+	boost_jet_lookups: [dynamic]Entity_Lookup,
 }
 
 main :: proc() {
@@ -91,6 +92,7 @@ init :: proc(game: ^Game) {
 
 	init_shock_particles(game.shock_entities[:]);
 	init_fire_particles(game.fire_entities[:]);
+	init_boost_jet_particles(game.boost_jet_lookups[:]);
 
 	free_all(context.temp_allocator);
 }
@@ -173,6 +175,7 @@ update :: proc(game: ^Game, dt: f32) {
 	update_car_status_effects_and_particles(game.car, game.camera.transform, dt);
 	update_on_fire_oil_slicks(game.on_fire_oil_slick_lookups[:], dt);
 	animate_bumpers(game.bumper_lookups[:], dt);
+	update_boost_jet_particles(game.boost_jet_lookups[:], dt);
 
 	if config.hull_helpers {
 		update_entity_hull_helpers(&game.hull_helpers);
@@ -187,6 +190,7 @@ immediate_mode_render_game :: proc(using game: ^Game) {
 	draw_car_status_effects(&vulkan, car);
 	draw_status_effect_clouds(&vulkan, status_effect_cloud_lookups[:]);
 	draw_on_fire_oil_slicks(&vulkan, on_fire_oil_slick_lookups[:]);
+	draw_boost_jet_particles(&vulkan, boost_jet_lookups[:]);
 }
 
 cleanup :: proc(game: ^Game) {
@@ -218,6 +222,8 @@ debug_cleanup :: proc(using game: ^Game) {
 	delete(game.texts);
 	delete(game.awake_rigid_body_lookups);
 	delete(game.contact_helpers);
+	delete(game.bumper_lookups);
+	delete(game.boost_jet_lookups);
 
 	cleanup_config();
 }
