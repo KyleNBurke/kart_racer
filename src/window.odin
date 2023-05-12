@@ -25,7 +25,12 @@ init_window :: proc(window: ^glfw.WindowHandle) {
 	window^ = glfw.CreateWindow(window_width, window_height, "Kart Guys", nil, nil);
 	assert(window != nil);
 
+	window_pos_x := cast(c.int) config.window_pos_x;
+	window_pos_y := cast(c.int) config.window_pos_y;
+	glfw.SetWindowPos(window^, window_pos_x, window_pos_y);
+
 	glfw.SetFramebufferSizeCallback(window^, framebuffer_size_callback);
+	glfw.SetWindowPosCallback(window^, pos_callback);
 	glfw.SetWindowIconifyCallback(window^, iconify_callback);
 	glfw.SetWindowMaximizeCallback(window^, maximized_callback);
 	glfw.SetWindowContentScaleCallback(window^, content_scale_callback);
@@ -40,6 +45,15 @@ framebuffer_size_callback : glfw.FramebufferSizeProc : proc "c" (window: glfw.Wi
 	config.window_width = int(width);
 	config.window_height = int(height);
 
+	callback_state.config_changed = true;
+}
+
+pos_callback : glfw.WindowPosProc : proc "c" (window: glfw.WindowHandle, xpos, ypos: c.int) {
+	context = runtime.default_context();
+	config.window_pos_x = int(xpos);
+	config.window_pos_y = int(ypos);
+
+	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
 	callback_state.config_changed = true;
 }
 

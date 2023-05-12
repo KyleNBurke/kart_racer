@@ -16,6 +16,8 @@ Config :: struct {
 	window_state: Window_State,
 	window_width: int,
 	window_height: int,
+	window_pos_x: int,
+	window_pos_y: int,
 	level: string,
 	contact_point_helpers: bool,
 	hull_helpers: bool,
@@ -33,7 +35,7 @@ config := Config {
 
 load_config :: proc() {
 	data, data_ok := os.read_entire_file_from_filename(CONFIG_FILE, context.temp_allocator);
-	assert(data_ok, fmt.tprintf("Failed to load config file %s", CONFIG_FILE)); 
+	assert(data_ok, fmt.tprintf("Failed to load config file %s", CONFIG_FILE));
 	
 	data_map := make(Config_Map, 10, context.temp_allocator);
 	line := make([dynamic]rune, context.temp_allocator);
