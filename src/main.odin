@@ -131,7 +131,9 @@ run :: proc(game: ^Game) {
 
 			if width != vulkan_extent.width || height != vulkan_extent.height {
 				recreate_swapchain(&game.vulkan, width, height);
-				update_aspect_ratio(&game.camera, f32(vulkan_extent.width) / f32(vulkan_extent.height));
+
+				new_vulkan_extent := game.vulkan.extent;
+				update_aspect_ratio(&game.camera, f32(new_vulkan_extent.width) / f32(new_vulkan_extent.height));
 			}
 		}
 
