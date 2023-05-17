@@ -198,7 +198,7 @@ new_rigid_body_entity :: proc(
 	return e;
 }
 
-CAR_MASS: f32 : 1000;
+CAR_MASS: f32 : 300;
 CAR_K :: CAR_MASS / 12;
 CAR_WIDTH :: 2.0;
 CAR_HEIGHT :: 1.2;

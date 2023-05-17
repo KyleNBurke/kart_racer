@@ -31,6 +31,8 @@ Config_Map :: map[string]string;
 config := Config {
 	window_width = 1280,
 	window_height = 720,
+	window_pos_x = 50,
+	window_pos_y = 50,
 };
 
 load_config :: proc() {

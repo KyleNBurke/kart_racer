@@ -68,6 +68,9 @@ Todo
 - Versioning for font file
 - If you push a box using your car. It scoots away orthogonally. Maybe the friction direction could be in the direction the thing is moving in?
 - [plugin] Utilize the new function that gives you back a list of w_objects
+- Jumps
+	- [done] Left stick should control the x-axis rotation.
+	- Landing upside down should always roll you over automatically.
 
 Sequential impulse solver
 	- I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting

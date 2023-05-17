@@ -220,11 +220,7 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, car_helpe
 		if glfw.GetKey(window, glfw.KEY_D) == glfw.PRESS do steer_multiplier -= 1;
 
 		if len(axes) > 0 {
-			left_stick_pos := axes[0];
-
-			if abs(left_stick_pos) > 0.25 {
-				steer_multiplier = -(left_stick_pos - 0.25 * math.sign(left_stick_pos)) / 0.75;
-			}
+			steer_multiplier = adjust_stick_pos_for_deadzone(axes[0]);
 		}
 	}
 
@@ -367,7 +363,35 @@ move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, car_helpe
 		}
 
 		car.velocity += body_surface_long_dir * accel;
+	} else {
+		pitch_multiplier: f32 = 0;
+
+		if len(axes) > 0 {
+			pitch_multiplier = adjust_stick_pos_for_deadzone(axes[1]);
+		}
+
+		if pitch_multiplier == 0 {
+			AIR_PITCH_DRAG :: 2;
+
+			ang_vel_pitch := linalg.dot(body_left, car.angular_velocity);
+			fric := clamp(ang_vel_pitch, -AIR_PITCH_DRAG * dt, AIR_PITCH_DRAG * dt);
+			car.angular_velocity += body_left * -fric;
+		} else {
+			AIR_PITCH_ACCEL :: 3;
+			
+			car.angular_velocity += body_left * pitch_multiplier * AIR_PITCH_ACCEL * dt;
+		}
 	}
+}
+
+adjust_stick_pos_for_deadzone :: proc(pos: f32) -> f32 {
+	adjusted_pos: f32 = 0;
+
+	if abs(pos) > 0.25 {
+		adjusted_pos = -(pos - 0.25 * math.sign(pos)) / 0.75;
+	}
+
+	return adjusted_pos;
 }
 
 position_and_orient_wheels :: proc(car: ^Car_Entity, dt: f32) {
