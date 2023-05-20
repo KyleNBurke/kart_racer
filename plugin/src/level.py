@@ -64,7 +64,8 @@ def export_ground_collision_meshes(depsgraph: Depsgraph, graph, file):
 		w_object: WObject = to_visit.pop(0)
 		to_visit.extend(w_object.children_w_objects)
 
-		if w_object.object.kg_type == 'ground_collision_mesh':
+		kg_type = w_object.object.kg_type
+		if kg_type == 'ground_collision_mesh' or kg_type == 'ground_collision_mesh_and_inanimate':
 			print(w_object.unique_name)
 			w_objects.append(w_object)
 	
@@ -107,8 +108,16 @@ def export_geometries(depsgraph: Depsgraph, graph, file):
 		to_visit.extend(w_object.children_w_objects)
 		object: Object = w_object.object
 
-		kg_type = object.kg_type
-		if kg_type == 'inanimate' or kg_type == 'rigid_body' or kg_type == 'oil_slick' or kg_type == 'bumper' or kg_type == 'boost_jet':
+		kg_types = [
+			'inanimate',
+			'rigid_body',
+			'oil_slick',
+			'bumper',
+			'boost_jet',
+			'ground_collision_mesh_and_inanimate'
+		]
+		
+		if object.kg_type in kg_types:
 			mesh: Mesh = object.data
 
 			if mesh.name_full in mesh_name_to_index_map:
@@ -144,9 +153,9 @@ def export_inanimate_entities(graph, file, mesh_name_to_index_map):
 	while to_visit:
 		w_object: WObject = to_visit.pop(0)
 		to_visit.extend(w_object.children_w_objects)
-		object: Object = w_object.object
 
-		if object.kg_type == 'inanimate':
+		kg_type = w_object.object.kg_type
+		if kg_type == 'inanimate' or kg_type == 'ground_collision_mesh_and_inanimate':
 			print(w_object.unique_name)
 			w_objects.append(w_object)
 	
