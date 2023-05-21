@@ -42,12 +42,13 @@ Rigid_Body_Entity :: struct {
 	using entity: Entity,
 	checked_collision: bool,
 	mass: f32,
+	tentative_position: linalg.Vector3f32,
+	tentative_orientation: linalg.Quaternionf32,
 	tentative_transform: linalg.Matrix4f32,
 	inv_local_inertia_tensor: linalg.Matrix3f32,
-	inv_global_inertia_tensor: linalg.Matrix3f32,
+	tentative_inv_global_inertia_tensor: linalg.Matrix3f32,
 	velocity: linalg.Vector3f32,
 	angular_velocity: linalg.Vector3f32,
-	new_position: linalg.Vector3f32,
 	collision_exclude: bool,
 	island_index: int,
 	sleep_duration: f32,
@@ -72,11 +73,11 @@ Surface_Type :: enum { Normal, Oil }
 
 Car_Entity :: struct {
 	using entity: Entity,
-	inv_global_inertia_tensor: linalg.Matrix3f32,
+	tentative_inv_global_inertia_tensor: linalg.Matrix3f32,
 	velocity: linalg.Vector3f32,
 	angular_velocity: linalg.Vector3f32,
-	new_position: linalg.Vector3f32,
-	new_transform: linalg.Matrix4f32,
+	tentative_position: linalg.Vector3f32,
+	tentative_transform: linalg.Matrix4f32,
 	shocked: bool,
 	shock_remaining_time: f32,
 	on_fire: bool,
@@ -190,7 +191,7 @@ new_rigid_body_entity :: proc(
 	
 	e.mass = mass;
 	e.inv_local_inertia_tensor = inv_local_inertia_tensor;
-	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
+	e.tentative_inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
 	e.island_index = -1;
 	e.status_effect = status_effect;
 	e.exploding_health = 100;
@@ -219,8 +220,8 @@ new_car_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaterni
 	e.variant = e;
 	init_entity(e, "car", position, orientation, linalg.Vector3f32 {1, 1, 1});
 	
-	e.inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
-	e.new_transform = linalg.MATRIX4F32_IDENTITY;
+	e.tentative_inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
+	e.tentative_transform = linalg.MATRIX4F32_IDENTITY;
 
 	return e;
 }

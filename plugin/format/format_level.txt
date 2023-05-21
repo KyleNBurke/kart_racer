@@ -1,8 +1,3 @@
-POSITION_CHECK: u32 = 10101010_10101010_10101010_10101010
-string: u32 for length + utf-8 encoded bytes
-
----
-
 Version: u32
 
 Spawn point

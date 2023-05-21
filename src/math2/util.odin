@@ -151,7 +151,7 @@ triangle_index_to_points :: proc(triangle_index: int, indices: []u16, positions:
 	return a, b, c;
 }
 
-ray_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, length: f32, a, b, c: linalg.Vector3f32) -> f32 {
+ray_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, a, b, c: linalg.Vector3f32) -> f32 {
 	ab := b - a;
 	ac := c - a;
 
@@ -177,11 +177,6 @@ ray_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, length: f3
 	}
 
 	dist := (1 / det) * linalg.dot(q, ac);
-
-	if dist <= 0 || dist > length {
-		return 0;
-	}
-
 	return dist;
 }
 
@@ -222,4 +217,3 @@ test_matrix4_transform_direction :: proc(t: ^testing.T) {
 	p := linalg.Vector3f32 {1.0, 1.0, 1.0};
 	testing.expect_value(t, matrix4_transform_direction(m, p), linalg.Vector3f32 {14.0, 17.0, 8.0});
 }
-

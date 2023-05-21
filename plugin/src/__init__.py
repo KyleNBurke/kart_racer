@@ -16,12 +16,16 @@ if "bpy" in locals():
 	
 	if "runtime_assets" in locals():
 		importlib.reload(runtime_assets)
+	
+	if "car" in locals():
+		importlib.reload(car)
 
 import bpy
 from bpy_extras.io_utils import ExportHelper
 from . import util
 from . import level
 from . import runtime_assets
+from . import car
 
 class KartGuysLevelExporter(bpy.types.Operator, ExportHelper):
 	bl_idname = "level.kgl"
@@ -42,6 +46,16 @@ class KartGuysRuntimeAssetsExporter(bpy.types.Operator, ExportHelper):
 
 	def execute(self, context):
 		return runtime_assets.export(self, context)
+
+class KartGuysCarExporter(bpy.types.Operator, ExportHelper):
+	bl_idname = "level.kgc"
+	bl_label = "Export"
+
+	filename_ext = ".kgc"
+	filter_glob: bpy.props.StringProperty(default="*.kgc", options={'HIDDEN'}, maxlen=255)
+
+	def execute(self, context):
+		return car.export(self, context)
 
 class KartGuysObjectPanel(bpy.types.Panel):
 	bl_idname = 'PROPERTIES_PT_kart_guys_object_panel'
@@ -81,6 +95,9 @@ def level_exporter_menu_item(self, context):
 
 def runtime_assets_exporter_menu_item(self, context):
 	self.layout.operator(KartGuysRuntimeAssetsExporter.bl_idname, text="Kart Guys runtime assets (.kga)")
+
+def car_exporter_menu_item(self, context):
+	self.layout.operator(KartGuysCarExporter.bl_idname, text="Kart Guys car (.kgc)")
 
 def register():
 	# Level
@@ -131,6 +148,10 @@ def register():
 		('oil_slick', "Oil slick", "", 3)
 	])
 
+	# Car
+	bpy.utils.register_class(KartGuysCarExporter)
+	bpy.types.TOPBAR_MT_file_export.append(car_exporter_menu_item)
+
 def unregister():
 	# Level
 	bpy.utils.unregister_class(KartGuysLevelExporter)
@@ -152,6 +173,10 @@ def unregister():
 
 	del bpy.types.Object.kg_shared_ignore
 	del bpy.types.Object.kg_rta_type
+
+	# Car
+	bpy.utils.unregister_class(KartGuysCarExporter)
+	bpy.types.TOPBAR_MT_file_export.remove(car_exporter_menu_item)
 
 if __name__ == '__main__':
 	register()

@@ -1,0 +1,26 @@
+version: u32
+
+[Geometry]
+indices count:     u32
+indices:          [u16]
+attributes count:  u32
+attributes:       [f32]
+position check: u32
+
+[Bottom hull]
+local position:    vec3
+local rotation:    quat
+local scale:       vec3
+
+[Upper dome]
+local position:    vec3
+local rotation:    quat
+local scale:       vec3
+
+[Wheel]
+indices count:     u32
+indices:          [u16]
+attributes count:  u32
+attributes:       [f32]
+radius:            f32
+position check: u32

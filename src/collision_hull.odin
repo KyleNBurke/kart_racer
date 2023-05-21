@@ -5,9 +5,11 @@ import "core:math/linalg";
 import "math2";
 
 Collision_Hull :: struct {
-	local_transform,
-	global_transform,
-	inv_global_transform: linalg.Matrix4f32,
+	local_orientation:      linalg.Quaternionf32,
+	local_transform:        linalg.Matrix4f32,
+	global_transform:       linalg.Matrix4f32,
+	inv_global_orientation: linalg.Quaternionf32,
+	inv_global_transform:   linalg.Matrix4f32,
 	kind: Hull_Kind,
 	local_bounds,
 	global_bounds: math2.Box3f32,
@@ -15,28 +17,29 @@ Collision_Hull :: struct {
 	positions: [dynamic]f32,
 }
 
-Hull_Kind :: enum {Box, Cylinder, Sphere, Mesh}
+Hull_Kind :: enum { Box, Cylinder, Sphere, Mesh }
 
 init_collision_hull :: proc(
-	local_transform,
-	entity_global_transform: linalg.Matrix4f32,
-	kind: Hull_Kind,
-	maybe_indices: Maybe([dynamic]u16) = nil,
-	maybe_positions: Maybe([dynamic]f32) = nil,
+	local_position:    linalg.Vector3f32,
+	local_orientation: linalg.Quaternionf32,
+	local_size:        linalg.Vector3f32,
+	kind:              Hull_Kind,
+	maybe_indices:     Maybe([dynamic]u16) = nil,
+	maybe_positions:   Maybe([dynamic]f32) = nil,
 ) -> Collision_Hull {
+	hull: Collision_Hull;
+	hull.local_orientation = local_orientation;
+	hull.local_transform = linalg.matrix4_from_trs(local_position, local_orientation, local_size);
+	hull.kind = kind;
+
 	local_bounds: math2.Box3f32;
-	indices: [dynamic]u16;
-	positions: [dynamic]f32;
 
 	switch kind {
 	case .Box, .Cylinder, .Sphere:
-		local_bounds = math2.BOX3F32_STANDARD;
+		hull.local_bounds = math2.BOX3F32_STANDARD; // #todo This doesn't seem right to me if there is a local scale.
 	case .Mesh:
-		indices_ok, positions_ok: bool;
-
-		indices, indices_ok = maybe_indices.?;
-		positions, positions_ok = maybe_positions.?;
-
+		indices, indices_ok := maybe_indices.?;
+		positions, positions_ok := maybe_positions.?;
 		assert(indices_ok);
 		assert(positions_ok);
 
@@ -50,31 +53,25 @@ init_collision_hull :: proc(
 			local_bounds_max = linalg.max(local_bounds_max, linalg.max(a, b, c));
 		}
 
-		local_bounds = math2.Box3f32 { local_bounds_min, local_bounds_max };
+		hull.local_bounds = math2.Box3f32 { local_bounds_min, local_bounds_max };
+		hull.indices = indices;
+		hull.positions = positions;
 	}
-
-	hull := Collision_Hull {
-		local_transform,
-		linalg.MATRIX4F32_IDENTITY,
-		linalg.MATRIX4F32_IDENTITY,
-		kind,
-		local_bounds,
-		math2.BOX3F32_ZERO,
-		indices,
-		positions,
-	};
 
 	return hull;
 }
 
 // Be careful about calling this. The collision hull grid relies on the hull bounds to be exactly where it was during the last grid update. If this is called haphazardly, the collision hull grid may
 // not be able to find the correct grid cells to remove the hulls. This can, of course be changed, it's just currently implemented this way.
-update_entity_hull_transforms_and_bounds :: proc(entity: ^Entity, transform: linalg.Matrix4f32) {
+update_entity_hull_transforms_and_bounds :: proc(entity: ^Entity, orientation: linalg.Quaternionf32, transform: linalg.Matrix4f32) {
 	assert(len(entity.collision_hulls) > 0);
 	entity_min: linalg.Vector3f32 = VEC3_INF;
 	entity_max: linalg.Vector3f32 = VEC3_NEG_INF;
 
 	for hull in &entity.collision_hulls {
+		global_orientation := orientation * hull.local_orientation;
+		hull.inv_global_orientation = linalg.quaternion_inverse(global_orientation);
+
 		hull.global_transform = transform * hull.local_transform;
 		hull.inv_global_transform = linalg.matrix4_inverse(hull.global_transform);
 

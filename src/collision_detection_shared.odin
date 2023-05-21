@@ -29,25 +29,34 @@ Polytope :: struct {
 Face :: struct {a, b, c: int, normal: linalg.Vector3f32 }
 
 furthest_point_hull :: proc(hull: ^Collision_Hull, direction: linalg.Vector3f32) -> linalg.Vector3f32 {
-	d := linalg.normalize(math2.matrix4_transform_direction(hull.inv_global_transform, direction));
+	// Note, the direction is not normalized so neither would the local_direction be.
+	local_direction := math2.quaternion_transform_direction(hull.inv_global_orientation, direction);
 	point: linalg.Vector3f32;
 
 	switch hull.kind {
 		case .Box:
-			point = linalg.Vector3f32 {math.sign_f32(d.x), math.sign_f32(d.y), math.sign_f32(d.z)};
+			point = linalg.Vector3f32 {
+				math.sign_f32(local_direction.x),
+				math.sign_f32(local_direction.y),
+				math.sign_f32(local_direction.z),
+			};
 
 		case .Cylinder:
 			xz: linalg.Vector2f32;
-			if d.x == 0 && d.z == 0 {
+			if local_direction.x == 0 && local_direction.z == 0 {
 				xz = linalg.Vector2f32 {0, 1};
 			} else {
-				xz = linalg.normalize(linalg.Vector2f32 {d.x, d.z});
+				xz = linalg.normalize(linalg.Vector2f32 {local_direction.x, local_direction.z});
 			}
 
-			point = linalg.Vector3f32 {xz.x, math.sign_f32(d.y), xz.y};
+			point = linalg.Vector3f32 {
+				xz.x,
+				math.sign_f32(local_direction.y),
+				xz.y
+			};
 
 		case .Sphere:
-			point = d;
+			point = linalg.normalize(local_direction);
 
 		case .Mesh:
 			unimplemented();
@@ -213,7 +222,7 @@ develop_unique_edges :: proc(edges: ^[dynamic][2]int, a_index, b_index: int) {
 }
 
 find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: linalg.Vector3f32) -> (plane_normal: linalg.Vector3f32, polygon: [dynamic]linalg.Vector3f32) {
-	d := math2.matrix4_transform_direction(hull.inv_global_transform, collision_normal);
+	d := math2.quaternion_transform_direction(hull.inv_global_orientation, collision_normal);
 	polygon = make([dynamic]linalg.Vector3f32, context.temp_allocator);
 	
 	switch hull.kind {
@@ -313,7 +322,10 @@ find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: l
 					linalg.Vector3f32 {xz.x, -1, xz.y});
 			}
 		
-		case .Sphere, .Mesh:
+		case .Sphere:
+			unreachable();
+		
+		case .Mesh:
 			unimplemented();
 	}
 

@@ -8,6 +8,7 @@ import "math2";
 
 GroundHull :: small_array.Small_Array(6, linalg.Vector3f32);
 
+// Collision normal points from the ground triangle to the entity hull
 evaluate_ground_collision :: proc(triangle_positions: []f32, triangle: ^Ground_Grid_Evaluated_Triangle, entity_hull: ^Collision_Hull) -> Maybe(Contact_Manifold) {
 	if !math2.box_intersects(entity_hull.global_bounds, triangle.bounds) {
 		return nil;
@@ -22,6 +23,27 @@ evaluate_ground_collision :: proc(triangle_positions: []f32, triangle: ^Ground_G
 	normal, ok_normal := find_collision_normal(&simplex, &ground_hull, entity_hull).?;
 	if !ok_normal {
 		return nil;
+	}
+
+	if entity_hull.kind == .Sphere {
+		manifold: Contact_Manifold;
+		manifold.normal = normal;
+
+		sphere_point := furthest_point_hull(entity_hull, -normal);
+		sphere_center := math2.box_center(entity_hull.global_bounds);
+
+		triangle_plane_offset := linalg.dot(normal, triangle.a);
+		triangle_point_dist := linalg.dot(normal, sphere_point) - triangle_plane_offset;
+		triangle_point := sphere_point + normal * -triangle_point_dist;
+		
+		contact := Contact {
+			position_a = triangle_point,
+			position_b = sphere_point,
+		};
+
+		small_array.append(&manifold.contacts, contact);
+
+		return manifold;
 	}
 
 	triangle_normal := triangle.normal;

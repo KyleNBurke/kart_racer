@@ -3,7 +3,6 @@ package main;
 import "core:math/linalg";
 
 Runtime_Assets :: struct {
-	cloud_hull_transform: linalg.Matrix4f32,
 	shock_barrel_shrapnel: [dynamic]Shock_Barrel_Shrapnel_Asset,
 	oil_slicks: [dynamic]Oil_Slick_Asset,
 }
@@ -14,12 +13,16 @@ Shock_Barrel_Shrapnel_Asset :: struct {
 	orientation: linalg.Quaternionf32,
 	size: linalg.Vector3f32,
 	dimensions: linalg.Vector3f32,
-	hull_local_transform: linalg.Matrix4f32,
+	hull_local_position:    linalg.Vector3f32,
+	hull_local_orientation: linalg.Quaternionf32,
+	hull_local_size:        linalg.Vector3f32,
 }
 
 Oil_Slick_Asset :: struct {
 	geometry_lookup: Geometry_Lookup,
-	hull_local_transform: linalg.Matrix4f32,
+	hull_local_position:    linalg.Vector3f32,
+	hull_local_orientation: linalg.Quaternionf32,
+	hull_local_size:        linalg.Vector3f32,
 	hull_indices: [dynamic]u16,
 	hull_positions:  [dynamic]f32,
 }

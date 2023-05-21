@@ -309,7 +309,7 @@ def export_bumpers(depsgraph: Depsgraph, graph, file, mesh_name_to_index_map):
 	def compare(w_object: WObject):
 		return w_object.object.kg_type == 'bumper'
 	
-	w_objects = util.search_graph(graph, compare)
+	w_objects = util.search_graph_many(graph, compare)
 
 	util.write_u32(file, len(w_objects))
 
@@ -344,7 +344,7 @@ def export_boost_jets(depsgraph: Depsgraph, graph, file, mesh_name_to_index_map)
 	def compare(w_object: WObject):
 		return w_object.object.kg_type == 'boost_jet'
 	
-	w_objects = util.search_graph(graph, compare)
+	w_objects = util.search_graph_many(graph, compare)
 
 	util.write_u32(file, len(w_objects))
 

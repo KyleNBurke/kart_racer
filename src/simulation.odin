@@ -15,14 +15,14 @@ simulate :: proc(game: ^Game, dt: f32) {
 	
 	{
 		car.velocity.y += GRAVITY * dt;
-		car.new_position = car.position + car.velocity * dt;
+		car.tentative_position = car.position + car.velocity * dt;
 
-		new_orientation := math2.integrate_angular_velocity(car.angular_velocity, car.orientation, dt);
-		car.inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(new_orientation, CAR_INV_LOCAL_INERTIA_TENSOR);
+		tentative_orientation := math2.integrate_angular_velocity(car.angular_velocity, car.orientation, dt);
+		car.tentative_inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(tentative_orientation, CAR_INV_LOCAL_INERTIA_TENSOR);
 
-		car.new_transform = linalg.matrix4_from_trs(car.new_position, new_orientation, linalg.Vector3f32 {1, 1, 1});
+		car.tentative_transform = linalg.matrix4_from_trs(car.tentative_position, tentative_orientation, linalg.Vector3f32 {1, 1, 1});
 
-		update_entity_hull_transforms_and_bounds(car, car.new_transform);
+		update_entity_hull_transforms_and_bounds(car, tentative_orientation, car.tentative_transform);
 	}
 
 	clear_islands(&game.islands);
@@ -31,13 +31,12 @@ simulate :: proc(game: ^Game, dt: f32) {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		rigid_body.velocity.y += GRAVITY * dt;
-		rigid_body.new_position = rigid_body.position + rigid_body.velocity * dt;
+		rigid_body.tentative_position = rigid_body.position + rigid_body.velocity * dt;
 
-		new_orientation := math2.integrate_angular_velocity(rigid_body.angular_velocity, rigid_body.orientation, dt);
-		rigid_body.inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(new_orientation, rigid_body.inv_local_inertia_tensor);
+		rigid_body.tentative_orientation = math2.integrate_angular_velocity(rigid_body.angular_velocity, rigid_body.orientation, dt);
+		rigid_body.tentative_inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(rigid_body.tentative_orientation, rigid_body.inv_local_inertia_tensor);
 
-		tentative_transform := linalg.matrix4_from_trs(rigid_body.new_position, new_orientation, rigid_body.size);
-		rigid_body.tentative_transform = tentative_transform;
+		rigid_body.tentative_transform = linalg.matrix4_from_trs(rigid_body.tentative_position, rigid_body.tentative_orientation, rigid_body.size);
 		move_rigid_body_tentatively_in_grid(&game.entity_grid, rigid_body);
 
 		rigid_body.checked_collision = false;
@@ -53,74 +52,73 @@ simulate :: proc(game: ^Game, dt: f32) {
 	
 	additional_awake_entities := make([dynamic]Entity_Lookup, context.temp_allocator);
 
-	// Car collisions
-	{
+	{ // Car collisions
+		provoking_hull := &car.collision_hulls[0];
+
 		// Ground collisions
 		nearby_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, car.bounds);
 
-		for provoking_hull in &car.collision_hulls {
-			for nearby_triangle_index in nearby_triangle_indices {
-				nearby_triangle := ground_grid_form_triangle(&game.ground_grid, nearby_triangle_index);
+		for ph in &car.collision_hulls { // #todo
+		for nearby_triangle_index in nearby_triangle_indices {
+			nearby_triangle := ground_grid_form_triangle(&game.ground_grid, nearby_triangle_index);
 
-				if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], &nearby_triangle, &provoking_hull).?; ok {
-					add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
-				}
+			if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], &nearby_triangle, &ph).?; ok {
+				add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
 			}
+		}
 		}
 
 		// Collisions with other hulls
 		nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, car.bounds);
 
-		for provoking_hull in &car.collision_hulls {
-			for nearby_lookup in nearby_lookups {
-				nearby_entity := get_entity(nearby_lookup);
+		for nearby_lookup in nearby_lookups {
+			nearby_entity := get_entity(nearby_lookup);
 
-				for nearby_hull in &nearby_entity.collision_hulls {
-					simplex, colliding := hulls_colliding(&provoking_hull, &nearby_hull).?;
-					if !colliding do continue;
+			for nearby_hull in &nearby_entity.collision_hulls {
+				simplex, colliding := hulls_colliding(provoking_hull, &nearby_hull).?;
+				if !colliding do continue;
 
-					switch e in nearby_entity.variant {
-					case ^Cloud_Entity:
-						shock_car(car);
-						continue;
+				switch e in nearby_entity.variant {
+				case ^Cloud_Entity:
+					shock_car(car);
+					continue;
 
-					case ^Bumper_Entity:
-						// #todo Should there be an explosion constraint? I.e. a constraint that tries to get the car to a target velocity? (Is this what a motor constraint is?)
-						dir := linalg.normalize(car.position - e.position);
-						car.velocity = dir * 30;
+				case ^Bumper_Entity:
+					// #todo Should there be an explosion constraint? I.e. a constraint that tries to get the car to a target velocity? (Is this what a motor constraint is?)
+					dir := linalg.normalize(car.position - e.position);
+					car.velocity = dir * 30;
 
-						e.animating = true;
-						e.animation_duration = 0;
-						continue;
-					
-					case ^Boost_Jet_Entity:
-						dir := linalg.normalize(math2.matrix4_forward(e.transform));
-						car.velocity += dir * 150 * dt;
-						continue;
+					e.animating = true;
+					e.animation_duration = 0;
+					continue;
+				
+				case ^Boost_Jet_Entity:
+					dir := linalg.normalize(math2.matrix4_forward(e.transform));
+					car.velocity += dir * 150 * dt;
+					continue;
 
-					case ^Car_Entity, ^Oil_Slick_Entity:
-						unreachable();
+				case ^Car_Entity, ^Oil_Slick_Entity:
+					unreachable();
 
-					case ^Inanimate_Entity, ^Rigid_Body_Entity:
-					}
+				case ^Inanimate_Entity, ^Rigid_Body_Entity:
+				}
 
-					manifold, has_manifold := hulls_find_collision_manifold(&provoking_hull, &nearby_hull, simplex).?;
-					if !has_manifold do continue;
+				manifold, has_manifold := hulls_find_collision_manifold(provoking_hull, &nearby_hull, simplex).?;
+				if !has_manifold do continue;
 
-					switch e in nearby_entity.variant {
-					case ^Rigid_Body_Entity:
-						add_car_movable_constraint_set(&game.constraints, car, e, &manifold, dt);
-						car_collision_maybe_wake_island(&game.islands, &additional_awake_entities, e);
-						handle_status_effects(car, e);
+				switch e in nearby_entity.variant {
+				case ^Rigid_Body_Entity:
+					add_car_movable_constraint_set(&game.constraints, car, e, &manifold, dt);
+					car_collision_maybe_wake_island(&game.islands, &additional_awake_entities, e);
+					handle_status_effects(car, e);
 
-					case ^Inanimate_Entity:
-						// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
-						// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
-						add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
+				case ^Inanimate_Entity:
+					// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
+					// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
+					add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
 
-					case ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
-						unreachable();
-					}
+				case ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
+					unreachable();
 				}
 			}
 		}
@@ -293,9 +291,9 @@ simulate :: proc(game: ^Game, dt: f32) {
 				shrapnel_rigid_body := new_rigid_body_entity("shrapnel", position, orientation, size, 1, shrapnel.dimensions);
 				shrapnel_rigid_body.collision_exclude = true;
 				shrapnel_lookup := add_entity(shrapnel.geometry_lookup, shrapnel_rigid_body);
-				hull := init_collision_hull(shrapnel.hull_local_transform, shrapnel_rigid_body.transform, .Box);
+				hull := init_collision_hull(shrapnel.hull_local_position, shrapnel.hull_local_orientation, shrapnel.hull_local_size, .Box);
 				append(&shrapnel_rigid_body.collision_hulls, hull);
-				update_entity_hull_transforms_and_bounds(shrapnel_rigid_body, shrapnel_rigid_body.transform);
+				update_entity_hull_transforms_and_bounds(shrapnel_rigid_body, shrapnel_rigid_body.orientation, shrapnel_rigid_body.transform);
 				insert_entity_into_grid(&game.entity_grid, shrapnel_rigid_body);
 
 				append(&additional_awake_entities, shrapnel_lookup);
@@ -310,9 +308,12 @@ simulate :: proc(game: ^Game, dt: f32) {
 				cloud := new_cloud_entity(rigid_body.position, .Shock);
 				cloud_lookup := add_entity(nil, cloud);
 
-				hull := init_collision_hull(game.runtime_assets.cloud_hull_transform, cloud.transform, .Sphere);
+				HULL_POSITION :: linalg.Vector3f32 {0, 0.5, 0};
+				HULL_SIZE :: linalg.Vector3f32 {4, 2, 4};
+
+				hull := init_collision_hull(HULL_POSITION, linalg.QUATERNIONF32_IDENTITY, HULL_SIZE, .Sphere);
 				append(&cloud.collision_hulls, hull);
-				update_entity_hull_transforms_and_bounds(cloud, cloud.transform);
+				update_entity_hull_transforms_and_bounds(cloud, cloud.orientation, cloud.transform);
 				insert_entity_into_grid(&game.entity_grid, cloud);
 
 				append(&game.status_effect_cloud_lookups, cloud_lookup);
@@ -378,8 +379,8 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 							ground_triangle := ground_grid_form_triangle(&game.ground_grid, ground_triangle_index);
 
-							intersection_length := math2.ray_intersects_triangle(origin, ray_direction, ray_length, ground_triangle.a, ground_triangle.b, ground_triangle.c);
-							if intersection_length == 0 {
+							intersection_length := math2.ray_intersects_triangle(origin, ray_direction, ground_triangle.a, ground_triangle.b, ground_triangle.c);
+							if intersection_length <= 0 || intersection_length > ray_length {
 								continue;
 							}
 							
@@ -399,10 +400,10 @@ simulate :: proc(game: ^Game, dt: f32) {
 							
 							hull_indices_copy := slice.clone_to_dynamic(oil_slick_asset.hull_indices[:]);
 							hull_positions_copy := slice.clone_to_dynamic(oil_slick_asset.hull_positions[:]);
-							hull := init_collision_hull(oil_slick_asset.hull_local_transform, oil_slick_entity.transform, .Mesh, hull_indices_copy, hull_positions_copy);
+							hull := init_collision_hull(oil_slick_asset.hull_local_position, oil_slick_asset.hull_local_orientation, oil_slick_asset.hull_local_size, .Mesh, hull_indices_copy, hull_positions_copy);
 							append(&oil_slick_entity.collision_hulls, hull);
 
-							update_entity_hull_transforms_and_bounds(oil_slick_entity, oil_slick_entity.transform);
+							update_entity_hull_transforms_and_bounds(oil_slick_entity, oil_slick_entity.orientation, oil_slick_entity.transform);
 							append(&game.oil_slick_lookups, oil_slick_entity_lookup);
 							append(&game.on_fire_oil_slick_lookups, oil_slick_entity_lookup);
 
@@ -477,7 +478,7 @@ SPRING_BODY_POINT_Z: f32 : 1.1;
 SPRING_MAX_LENGTH: f32 : 0.8;
 
 find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, entity_grid: ^Entity_Grid, constraints: ^Constraints, car: ^Car_Entity, dt: f32, oil_slicks: []Entity_Lookup) {
-	extension_dir := -math2.matrix4_up(car.new_transform);
+	extension_dir := -math2.matrix4_up(car.tentative_transform);
 
 	SPRING_BODY_POINT_X: f32 : 0.8;
 	SPRING_BODY_POINT_Y: f32 : 0.35
@@ -487,10 +488,10 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 	SPRING_BODY_POINT_LOCAL_BL :: linalg.Vector3f32 { SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
 	SPRING_BODY_POINT_LOCAL_BR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
 
-	spring_body_point_fl := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_FL);
-	spring_body_point_fr := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_FR);
-	spring_body_point_bl := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_BL);
-	spring_body_point_br := math2.matrix4_transform_point(car.new_transform, SPRING_BODY_POINT_LOCAL_BR);
+	spring_body_point_fl := math2.matrix4_transform_point(car.tentative_transform, SPRING_BODY_POINT_LOCAL_FL);
+	spring_body_point_fr := math2.matrix4_transform_point(car.tentative_transform, SPRING_BODY_POINT_LOCAL_FR);
+	spring_body_point_bl := math2.matrix4_transform_point(car.tentative_transform, SPRING_BODY_POINT_LOCAL_BL);
+	spring_body_point_br := math2.matrix4_transform_point(car.tentative_transform, SPRING_BODY_POINT_LOCAL_BR);
 
 	spring_wheel_point_fl := spring_body_point_fl + extension_dir * SPRING_MAX_LENGTH;
 	spring_wheel_point_fr := spring_body_point_fr + extension_dir * SPRING_MAX_LENGTH;
@@ -524,8 +525,8 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 		for nearby_triangle_index in nearby_triangle_indices {
 			nearby_triangle := ground_grid_form_triangle(ground_grid, nearby_triangle_index);
 
-			intersection_length := math2.ray_intersects_triangle(spring_body_point, extension_dir, SPRING_MAX_LENGTH, nearby_triangle.a, nearby_triangle.b, nearby_triangle.c);
-			if intersection_length == 0 {
+			intersection_length := math2.ray_intersects_triangle(spring_body_point, extension_dir, nearby_triangle.a, nearby_triangle.b, nearby_triangle.c);
+			if intersection_length <= 0 || intersection_length > SPRING_MAX_LENGTH {
 				continue;
 			}
 
@@ -626,8 +627,10 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 					global_b := math2.matrix4_transform_point(oil_slick_hull.global_transform, b);
 					global_c := math2.matrix4_transform_point(oil_slick_hull.global_transform, c);
 
-					intersection_length := math2.ray_intersects_triangle(probe_start, extension_dir, SPRING_MAX_LENGTH, global_a, global_b, global_c);
-					if intersection_length == 0 do continue;
+					intersection_length := math2.ray_intersects_triangle(probe_start, extension_dir, global_a, global_b, global_c);
+					if intersection_length <= 0 || intersection_length > SPRING_MAX_LENGTH {
+						continue;
+					}
 
 					car.surface_type = .Oil;
 

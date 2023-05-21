@@ -114,16 +114,21 @@ def debug_export_graph(graph, filepath):
 
 	file.close()
 
-def iterate_graph(graph, func):
+def search_graph_one(graph, func):
+	w_object = None
 	to_visit = graph.copy()
 
 	while to_visit:
-		w_object: WObject = to_visit.pop(0)
-		to_visit.extend(w_object.children_w_objects)
-		
-		func(w_object)
+		current_w_object: WObject = to_visit.pop(0)
+		to_visit.extend(current_w_object.children_w_objects)
 
-def search_graph(graph, func):
+		if func(current_w_object):
+			w_object = current_w_object
+			break
+	
+	return w_object
+
+def search_graph_many(graph, func):
 	w_objects = []
 	to_visit = graph.copy()
 

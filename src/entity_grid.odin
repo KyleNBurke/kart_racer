@@ -67,7 +67,7 @@ move_rigid_body_tentatively_in_grid :: proc(grid: ^Entity_Grid, rigid_body: ^Rig
 	}
 
 	// Update the global transform matrix and the global bounds
-	update_entity_hull_transforms_and_bounds(rigid_body, rigid_body.tentative_transform);
+	update_entity_hull_transforms_and_bounds(rigid_body, rigid_body.tentative_orientation, rigid_body.tentative_transform);
 
 	// Add the lookup to the new cells which this hull spans
 	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok = bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, rigid_body.bounds);
