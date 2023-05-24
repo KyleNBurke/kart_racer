@@ -12,11 +12,6 @@ local position:    vec3
 local rotation:    quat
 local scale:       vec3
 
-[Upper dome]
-local position:    vec3
-local rotation:    quat
-local scale:       vec3
-
 [Wheel]
 indices count:     u32
 indices:          [u16]

@@ -312,7 +312,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 }
 
 load_car :: proc(game: ^Game, spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
-	REQUIRED_VERSION :: 1
+	REQUIRED_VERSION :: 2;
 	
 	bytes, success := os.read_entire_file_from_filename("res/car.kgc");
 	defer delete(bytes);
@@ -341,16 +341,6 @@ load_car :: proc(game: ^Game, spawn_position: linalg.Vector3f32, spawn_orientati
 
 		local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_size);
 		hull := init_collision_hull(local_position, local_orientation, local_size, .Box);
-		append(&game.car.collision_hulls, hull);
-	}
-
-	{ // Upper dome
-		local_position := read_vec3(&bytes, &pos);
-		local_orientation := read_quat(&bytes, &pos);
-		local_size := read_vec3(&bytes, &pos);
-
-		local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_size);
-		hull := init_collision_hull(local_position, local_orientation, local_size, .Sphere);
 		append(&game.car.collision_hulls, hull);
 	}
 
