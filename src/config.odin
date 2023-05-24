@@ -91,7 +91,7 @@ load_config :: proc() {
 		#partial switch field_variant in field.type.variant {
 		case reflect.Type_Info_Boolean:
 			b, ok := strconv.parse_bool(s);
-			assert(ok);
+			assert(ok, fmt.tprintf("[config] Could not parse '%s' as a bool for field %s", s, field.name));
 			set(field, bool, b);
 			
 		case reflect.Type_Info_String:
