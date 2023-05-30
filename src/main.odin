@@ -2,6 +2,7 @@ package main;
 
 import "core:time";
 import "core:fmt";
+import "core:math/linalg";
 import "vendor:glfw";
 
 when ODIN_DEBUG {
@@ -13,6 +14,7 @@ MAX_UPDATES := 5;
 
 Game :: struct {
 	window: glfw.WindowHandle,
+	gamepad: Gamepad,
 	vulkan: Vulkan,
 	camera: Camera,
 	font: Font,
@@ -30,6 +32,8 @@ Game :: struct {
 	frame_metrics: Frame_Metrics,
 	shock_entities: [dynamic]Entity_Lookup,
 	fire_entities: [dynamic]Entity_Lookup,
+	car_spawn_position: linalg.Vector3f32,
+	car_spawn_orientation: linalg.Quaternionf32,
 
 	// Let's keep in mind, we could have the entity manager keep track of entities by variant which would eliminate the need for this.
 	// We'll stick with this for now and change it if more situations like this arise.
@@ -83,8 +87,8 @@ init :: proc(game: ^Game) {
 
 	game.frame_metrics = init_frame_metrics(&game.font, &game.texts);
 
-	spawn_position, spawn_orientation := load_level(game);
-	load_car(game, spawn_position, spawn_orientation);
+	load_level(game);
+	load_car(game);
 	load_runtime_assets(&game.runtime_assets);
 
 	init_hull_helpers(&game.hull_helpers);
@@ -162,8 +166,10 @@ run :: proc(game: ^Game) {
 }
 
 update :: proc(game: ^Game, dt: f32) {
+	update_gamepad_state(&game.gamepad);
+
 	if game.camera.state != .First_Person {
-		move_car(game.window, game.car, dt, &game.car_helpers);
+		move_car(game, dt);
 	}
 	
 	simulate(game, dt);

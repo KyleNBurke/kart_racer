@@ -196,7 +196,14 @@ calculate_car_inertia_tensor :: proc(orientation: linalg.Quaternionf32) -> linal
 	return math2.calculate_inv_global_inertia_tensor(orientation, INV_LOCAL_INERTIA_TENSOR);
 }
 
-move_car :: proc(window: glfw.WindowHandle, car: ^Car_Entity, dt: f32, car_helpers: ^Car_Helpers) {
+move_car :: proc(game: ^Game, dt: f32) {
+	window := game.window;
+	car := game.car;
+
+	if gamepad_button_pressed(&game.gamepad, glfw.GAMEPAD_BUTTON_X) {
+		respawn_car(car, game.car_spawn_position, game.car_spawn_orientation);
+	}
+	
 	axes := glfw.GetJoystickAxes(glfw.JOYSTICK_1);
 	accel_multiplier: f32 = 0;
 	steer_multiplier: f32 = 0;
@@ -439,4 +446,12 @@ position_and_orient_wheels :: proc(car: ^Car_Entity, dt: f32) {
 
 		update_entity_transform(wheel_entity); 
 	}
+}
+
+respawn_car :: proc(car: ^Car_Entity, position: linalg.Vector3f32, orientation: linalg.Quaternionf32) {
+	car.position = position;
+	car.orientation = orientation;
+
+	car.velocity = VEC3_ZERO;
+	car.angular_velocity = VEC3_ZERO;
 }

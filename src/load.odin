@@ -75,7 +75,7 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 	return indices, attributes;
 }
 
-load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
+load_level :: proc(using game: ^Game) {
 	REQUIRED_VERSION :: 3;
 	
 	file_path := fmt.tprintf("res/maps/%s.kgl", config.level);
@@ -88,8 +88,8 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 	version := read_u32(&bytes, &pos);
 	assert(REQUIRED_VERSION == version, fmt.tprintf("[level loading] Required version %v but found %v.", REQUIRED_VERSION, version));
 
-	spawn_position = read_vec3(&bytes, &pos);
-	spawn_orientation = read_quat(&bytes, &pos);
+	game.car_spawn_position = read_vec3(&bytes, &pos);
+	game.car_spawn_orientation = read_quat(&bytes, &pos);
 
 	// Init grids
 	grid_half_size := read_f32(&bytes, &pos);
@@ -311,7 +311,7 @@ load_level :: proc(using game: ^Game) -> (spawn_position: linalg.Vector3f32, spa
 	return;
 }
 
-load_car :: proc(game: ^Game, spawn_position: linalg.Vector3f32, spawn_orientation: linalg.Quaternionf32) {
+load_car :: proc(game: ^Game) {
 	REQUIRED_VERSION :: 2;
 	
 	bytes, success := os.read_entire_file_from_filename("res/car.kgc");
@@ -329,7 +329,7 @@ load_car :: proc(game: ^Game, spawn_position: linalg.Vector3f32, spawn_orientati
 	{ // Geometry
 		geometry := init_triangle_geometry("car", indices, attributes, .Lambert);
 		geometry_lookup := add_geometry(geometry);
-		entity := new_car_entity(spawn_position, spawn_orientation);
+		entity := new_car_entity(game.car_spawn_position, game.car_spawn_orientation);
 		add_entity(geometry_lookup, entity);
 		game.car = entity;
 	}

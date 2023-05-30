@@ -77,11 +77,15 @@ content_scale_callback : glfw.WindowContentScaleProc : proc "c" (window: glfw.Wi
 key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: c.int) {
 	context = runtime.default_context()
 	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
+	game := callback_state.game;
 
 	if action == glfw.PRESS {
 		switch key {
 		case glfw.KEY_ESCAPE:
 			glfw.SetWindowShouldClose(window, true);
+		
+		case glfw.KEY_R:
+			respawn_car(game.car, game.car_spawn_position, game.car_spawn_orientation);
 		}
 
 		camera_handle_key_press(&callback_state.game.camera, key, window);
