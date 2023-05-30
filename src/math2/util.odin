@@ -109,7 +109,7 @@ v: [0, 1]
 r, g, b: [0, 1]
 */
 hsv_to_rgb :: proc(h, s, v: f32) -> (r, g, b: f32) {
-	if ODIN_DEBUG {
+	when ODIN_DEBUG {
 		assert(h >= 0 && b < 360);
 		assert(s >= 0 && s <= 1);
 		assert(v >= 0 && v <= 1);
