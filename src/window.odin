@@ -84,6 +84,12 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 		case glfw.KEY_ESCAPE:
 			glfw.SetWindowShouldClose(window, true);
 		
+		case glfw.KEY_F5:
+			game.single_stepping = !game.single_stepping;
+		
+		case glfw.KEY_F6:
+			game.step = true;
+		
 		case glfw.KEY_R:
 			respawn_car(game.car, game.car_spawn_position, game.car_spawn_orientation);
 		}

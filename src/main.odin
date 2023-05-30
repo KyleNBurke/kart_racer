@@ -43,6 +43,8 @@ Game :: struct {
 	on_fire_oil_slick_lookups: [dynamic]Entity_Lookup,
 	bumper_lookups: [dynamic]Entity_Lookup,
 	boost_jet_lookups: [dynamic]Entity_Lookup,
+	single_stepping: bool,
+	step: bool,
 }
 
 main :: proc() {
@@ -168,11 +170,17 @@ run :: proc(game: ^Game) {
 update :: proc(game: ^Game, dt: f32) {
 	update_gamepad_state(&game.gamepad);
 
-	if game.camera.state != .First_Person {
+	if game.single_stepping {
+		if game.step {
+			move_car(game, dt);
+			simulate(game, dt);
+			game.step = false;
+		}
+	} else {
 		move_car(game, dt);
+		simulate(game, dt);
 	}
-	
-	simulate(game, dt);
+
 	position_and_orient_wheels(game.car, dt);
 	move_camera(&game.camera, game.window, game.car, dt);
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
