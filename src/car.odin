@@ -180,6 +180,8 @@ draw_car_status_effects :: proc(vulkan: ^Vulkan, car: ^Car_Entity) {
 	}
 }
 
+// There is another place we calculate the inertia tensor of the car. Here, we're calculating an inertia tensor
+// with a car mass of 1. This is useful when I have calculations that should not depend on the mass of the car.
 @(private="file")
 calculate_car_inertia_tensor :: proc(orientation: linalg.Quaternionf32) -> linalg.Matrix3f32 {
 	M :: 1.0 / 12.0;
@@ -208,7 +210,11 @@ move_car :: proc(game: ^Game, dt: f32) {
 	accel_multiplier: f32 = 0;
 	steer_multiplier: f32 = 0;
 	
-	{ // Calculate a value between -1 and 1 to determine how much linear force to apply
+	linear: { // Calculate a value between -1 and 1 to determine how much linear force to apply
+		if game.camera.state == .First_Person {
+			break linear;
+		}
+		
 		if glfw.GetKey(window, glfw.KEY_W) == glfw.PRESS do accel_multiplier += 1;
 		if glfw.GetKey(window, glfw.KEY_S) == glfw.PRESS do accel_multiplier -= 1;
 
@@ -218,9 +224,9 @@ move_car :: proc(game: ^Game, dt: f32) {
 		}
 	}
 
-	cornering_angle: { // Calculate a value between -1 and 1 to determine the desired cornering angle
-		if car.shocked {
-			break cornering_angle;
+	cornering: { // Calculate a value between -1 and 1 to determine the desired cornering angle
+		if game.camera.state == .First_Person || car.shocked {
+			break cornering;
 		}
 
 		if glfw.GetKey(window, glfw.KEY_A) == glfw.PRESS do steer_multiplier += 1;

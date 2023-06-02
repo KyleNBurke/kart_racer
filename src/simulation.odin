@@ -205,8 +205,11 @@ simulate :: proc(game: ^Game, dt: f32) {
 	solve_constraints(&game.constraints, car, dt);
 
 	{
-		car.position += car.velocity * dt;
-		car.orientation = math2.integrate_angular_velocity(car.angular_velocity, car.orientation, dt);
+		car.position += (car.velocity + car.bias_velocity) * dt;
+		car.orientation = math2.integrate_angular_velocity(car.angular_velocity + car.bias_angular_velocity, car.orientation, dt);
+
+		car.bias_velocity = VEC3_ZERO;
+		car.bias_angular_velocity = VEC3_ZERO;
 
 		update_entity_transform(car);
 	}
@@ -223,9 +226,12 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 		if rigid_body.exploding_health > 0 {
 			old_position := rigid_body.position;
-			rigid_body.position += rigid_body.velocity * dt;
+			rigid_body.position += (rigid_body.velocity + rigid_body.bias_velocity) * dt;
 
-			rigid_body.orientation = math2.integrate_angular_velocity(rigid_body.angular_velocity, rigid_body.orientation, dt);
+			rigid_body.orientation = math2.integrate_angular_velocity(rigid_body.angular_velocity + rigid_body.bias_angular_velocity, rigid_body.orientation, dt);
+
+			rigid_body.bias_velocity = VEC3_ZERO;
+			rigid_body.bias_angular_velocity = VEC3_ZERO;
 		
 			update_entity_transform(rigid_body);
 

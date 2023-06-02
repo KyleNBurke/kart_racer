@@ -48,6 +48,7 @@ Fixed_Constraint :: struct {
 	effective_mass_inv_t2,
 	bias,
 	total_impulse_n,
+	total_bias_impulse_n,
 	total_impulse_t1,
 	total_impulse_t2: f32,
 }
@@ -64,7 +65,8 @@ Car_Movable_Constraint :: struct {
 	rbxn: linalg.Vector3f32,
 	effective_mass_inv_n,
 	bias,
-	total_impulse_n: f32,
+	total_impulse_n,
+	total_bias_impulse_n: f32,
 }
 
 Movable_Constraint_Set :: struct {
@@ -88,6 +90,7 @@ Movable_Constraint :: struct {
 	effective_mass_inv_t2,
 	bias,
 	total_impulse_n,
+	total_bias_impulse_n,
 	total_impulse_t1,
 	total_impulse_t2: f32,
 }
@@ -346,7 +349,61 @@ solve_constraints :: proc(using constraints: ^Constraints, car: ^Car_Entity, dt:
 		}
 
 		for constraint_set in &car_fixed_constraint_sets {
-			solve_fixed_constraints(&constraint_set.constraints, constraint_set.n, constraint_set.t1, constraint_set.t2, CAR_MASS, car.tentative_inv_global_inertia_tensor, &car.velocity, &car.angular_velocity);
+			for _, constraint_index in small_array.slice(&constraint_set.constraints) {
+				constraint := small_array.get_ptr(&constraint_set.constraints, constraint_index);
+				contact_velocity := car.velocity + linalg.cross(car.angular_velocity, constraint.r);
+
+				{ // Normal velocity correction
+					velocity_error_n := linalg.dot(contact_velocity, constraint_set.n);
+					lambda_n := -velocity_error_n / constraint.effective_mass_inv_n;
+					
+					prev_total_impulse_n := constraint.total_impulse_n;
+					constraint.total_impulse_n = max(constraint.total_impulse_n + lambda_n, 0.0);
+					total_impulse_delta_n := constraint.total_impulse_n - prev_total_impulse_n;
+
+					car.velocity += constraint_set.n * total_impulse_delta_n / CAR_MASS;
+					car.angular_velocity += car.tentative_inv_global_inertia_tensor * constraint.rxn * total_impulse_delta_n;
+				}
+
+				{ // Normal position correction
+					bias_contact_velocity := car.bias_velocity + linalg.cross(car.bias_angular_velocity, constraint.r);
+					bias_velocity := linalg.dot(bias_contact_velocity, constraint_set.n);
+					bias_lambda_n := -(bias_velocity + constraint.bias) / constraint.effective_mass_inv_n;
+
+					prev_total_bias_impulse_n := constraint.total_bias_impulse_n;
+					constraint.total_bias_impulse_n = max(constraint.total_bias_impulse_n + bias_lambda_n, 0.0);
+					total_bias_impulse_delta_n := constraint.total_bias_impulse_n - prev_total_bias_impulse_n;
+
+					car.bias_velocity += constraint_set.n * total_bias_impulse_delta_n / CAR_MASS;
+					car.bias_angular_velocity += car.tentative_inv_global_inertia_tensor * constraint.rxn * total_bias_impulse_delta_n;
+				}
+
+				max_friction_impulse := constraint.total_impulse_n * 0.8;
+
+				{ // Tangent 1 friction
+					velocity_error_t1 := linalg.dot(contact_velocity, constraint_set.t1);
+					lambda_t1 := -velocity_error_t1 / constraint.effective_mass_inv_t1;
+
+					prev_total_impulse_t1 := constraint.total_impulse_t1;
+					constraint.total_impulse_t1 = clamp(constraint.total_impulse_t1 + lambda_t1, -max_friction_impulse, max_friction_impulse);
+					total_impulse_delta_t1 := constraint.total_impulse_t1 - prev_total_impulse_t1;
+
+					car.velocity += constraint_set.t1 * total_impulse_delta_t1 / CAR_MASS;
+					car.angular_velocity += car.tentative_inv_global_inertia_tensor * constraint.rxt1 * total_impulse_delta_t1;
+				}
+
+				{ // Tangent 2 friction
+					velocity_error_t2 := linalg.dot(contact_velocity, constraint_set.t2);
+					lambda_t2 := -velocity_error_t2 / constraint.effective_mass_inv_t2;
+					
+					prev_total_impulse_t2 := constraint.total_impulse_t2;
+					constraint.total_impulse_t2 = clamp(constraint.total_impulse_t2 + lambda_t2, -max_friction_impulse, max_friction_impulse);
+					total_impulse_delta_t2 := constraint.total_impulse_t2 - prev_total_impulse_t2;
+
+					car.velocity += constraint_set.t2 * total_impulse_delta_t2 / CAR_MASS;
+					car.angular_velocity += car.tentative_inv_global_inertia_tensor * constraint.rxt2 * total_impulse_delta_t2;
+				}
+			}
 		}
 
 		for constraint_set in &car_movable_constraint_sets {
@@ -358,17 +415,36 @@ solve_constraints :: proc(using constraints: ^Constraints, car: ^Car_Entity, dt:
 				contact_velocity_a := car.velocity + linalg.cross(car.angular_velocity, constraint.ra);
 				contact_velocity_b := rigid_body_b.velocity + linalg.cross(rigid_body_b.angular_velocity, constraint.rb);
 
-				velocity_error_n := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.n);
-				lambda_n := -(velocity_error_n + constraint.bias) / constraint.effective_mass_inv_n;
+				{ // Normal velocity correction
+					velocity_error_n := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.n);
+					lambda_n := -velocity_error_n / constraint.effective_mass_inv_n;
 
-				prev_total_impulse_n := constraint.total_impulse_n;
-				constraint.total_impulse_n = max(constraint.total_impulse_n + lambda_n, 0.0);
-				total_impulse_delta_n := constraint.total_impulse_n - prev_total_impulse_n;
+					prev_total_impulse_n := constraint.total_impulse_n;
+					constraint.total_impulse_n = max(constraint.total_impulse_n + lambda_n, 0.0);
+					total_impulse_delta_n := constraint.total_impulse_n - prev_total_impulse_n;
 
-				car.velocity += constraint_set.n * total_impulse_delta_n / CAR_MASS;
+					car.velocity += constraint_set.n * total_impulse_delta_n / CAR_MASS;
 
-				rigid_body_b.velocity -= constraint_set.n * total_impulse_delta_n / rigid_body_b.mass;
-				rigid_body_b.angular_velocity -= rigid_body_b.tentative_inv_global_inertia_tensor * constraint.rbxn * total_impulse_delta_n;
+					rigid_body_b.velocity -= constraint_set.n * total_impulse_delta_n / rigid_body_b.mass;
+					rigid_body_b.angular_velocity -= rigid_body_b.tentative_inv_global_inertia_tensor * constraint.rbxn * total_impulse_delta_n;
+				}
+
+				{ // Normal position correction
+					bias_contact_velocity_a := car.bias_velocity + linalg.cross(car.bias_angular_velocity, constraint.ra);
+					bias_contact_velocity_b := rigid_body_b.bias_velocity + linalg.cross(rigid_body_b.bias_angular_velocity, constraint.rb);
+
+					bias_velocity := linalg.dot(bias_contact_velocity_a - bias_contact_velocity_b, constraint_set.n);
+					bias_lambda_n := -(bias_velocity + constraint.bias) / constraint.effective_mass_inv_n;
+
+					prev_total_bias_impulse_n := constraint.total_bias_impulse_n;
+					constraint.total_bias_impulse_n = max(constraint.total_bias_impulse_n + bias_lambda_n, 0.0);
+					total_bias_impulse_delta_n := constraint.total_bias_impulse_n - prev_total_bias_impulse_n;
+
+					car.bias_velocity += constraint_set.n * total_bias_impulse_delta_n / CAR_MASS;
+		
+					rigid_body_b.bias_velocity -= constraint_set.n * total_bias_impulse_delta_n / rigid_body_b.mass;
+					rigid_body_b.bias_angular_velocity -= rigid_body_b.tentative_inv_global_inertia_tensor * constraint.rbxn * total_bias_impulse_delta_n;
+				}
 			}
 		}
 
@@ -379,40 +455,56 @@ solve_constraints :: proc(using constraints: ^Constraints, car: ^Car_Entity, dt:
 				constraint := small_array.get_ptr(&constraint_set.constraints, constraint_index);
 				contact_velocity := rigid_body.velocity + linalg.cross(rigid_body.angular_velocity, constraint.r);
 
-				// Normal
-				velocity_error_n := linalg.dot(contact_velocity, constraint_set.n);
-				lambda_n := -(velocity_error_n + constraint.bias) / constraint.effective_mass_inv_n;
-				
-				prev_total_impulse_n := constraint.total_impulse_n;
-				constraint.total_impulse_n = max(constraint.total_impulse_n + lambda_n, 0.0);
-				total_impulse_delta_n := constraint.total_impulse_n - prev_total_impulse_n;
+				{ // Normal velocity correction
+					velocity_error_n := linalg.dot(contact_velocity, constraint_set.n);
+					lambda_n := -velocity_error_n / constraint.effective_mass_inv_n;
+					
+					prev_total_impulse_n := constraint.total_impulse_n;
+					constraint.total_impulse_n = max(constraint.total_impulse_n + lambda_n, 0.0);
+					total_impulse_delta_n := constraint.total_impulse_n - prev_total_impulse_n;
 
-				rigid_body.velocity += constraint_set.n * total_impulse_delta_n / rigid_body.mass;
-				rigid_body.angular_velocity += rigid_body.tentative_inv_global_inertia_tensor * constraint.rxn * total_impulse_delta_n;
+					rigid_body.velocity += constraint_set.n * total_impulse_delta_n / rigid_body.mass;
+					rigid_body.angular_velocity += rigid_body.tentative_inv_global_inertia_tensor * constraint.rxn * total_impulse_delta_n;
+				}
+
+				{ // Normal position correction
+					bias_contact_velocity := rigid_body.bias_velocity + linalg.cross(rigid_body.bias_angular_velocity, constraint.r);
+					bias_velocity := linalg.dot(bias_contact_velocity, constraint_set.n);
+					bias_lambda_n := -(bias_velocity + constraint.bias) / constraint.effective_mass_inv_n;
+
+					prev_total_bias_impulse_n := constraint.total_bias_impulse_n;
+					constraint.total_bias_impulse_n = max(constraint.total_bias_impulse_n + bias_lambda_n, 0.0);
+					total_bias_impulse_delta_n := constraint.total_bias_impulse_n - prev_total_bias_impulse_n;
+
+					rigid_body.bias_velocity += constraint_set.n * total_bias_impulse_delta_n / rigid_body.mass;
+					rigid_body.bias_angular_velocity += rigid_body.tentative_inv_global_inertia_tensor * constraint.rxn * total_bias_impulse_delta_n;
+				}
 
 				max_friction_impulse := constraint.total_impulse_n * 0.8;
 
-				// Tangent 1
-				velocity_error_t1 := linalg.dot(contact_velocity, constraint_set.t1);
-				lambda_t1 := -velocity_error_t1 / constraint.effective_mass_inv_t1;
+				{ // Tangent 1 friction
+					velocity_error_t1 := linalg.dot(contact_velocity, constraint_set.t1);
+					lambda_t1 := -velocity_error_t1 / constraint.effective_mass_inv_t1;
 
-				prev_total_impulse_t1 := constraint.total_impulse_t1;
-				constraint.total_impulse_t1 = clamp(constraint.total_impulse_t1 + lambda_t1, -max_friction_impulse, max_friction_impulse);
-				total_impulse_delta_t1 := constraint.total_impulse_t1 - prev_total_impulse_t1;
+					prev_total_impulse_t1 := constraint.total_impulse_t1;
+					constraint.total_impulse_t1 = clamp(constraint.total_impulse_t1 + lambda_t1, -max_friction_impulse, max_friction_impulse);
+					total_impulse_delta_t1 := constraint.total_impulse_t1 - prev_total_impulse_t1;
 
-				rigid_body.velocity += constraint_set.t1 * total_impulse_delta_t1 / rigid_body.mass;
-				rigid_body.angular_velocity += rigid_body.tentative_inv_global_inertia_tensor * constraint.rxt1 * total_impulse_delta_t1;
+					rigid_body.velocity += constraint_set.t1 * total_impulse_delta_t1 / rigid_body.mass;
+					rigid_body.angular_velocity += rigid_body.tentative_inv_global_inertia_tensor * constraint.rxt1 * total_impulse_delta_t1;
+				}
 
-				// Tangent 2
-				velocity_error_t2 := linalg.dot(contact_velocity, constraint_set.t2);
-				lambda_t2 := -velocity_error_t2 / constraint.effective_mass_inv_t2;
-				
-				prev_total_impulse_t2 := constraint.total_impulse_t2;
-				constraint.total_impulse_t2 = clamp(constraint.total_impulse_t2 + lambda_t2, -max_friction_impulse, max_friction_impulse);
-				total_impulse_delta_t2 := constraint.total_impulse_t2 - prev_total_impulse_t2;
+				{ // Tangent 2 friction
+					velocity_error_t2 := linalg.dot(contact_velocity, constraint_set.t2);
+					lambda_t2 := -velocity_error_t2 / constraint.effective_mass_inv_t2;
+					
+					prev_total_impulse_t2 := constraint.total_impulse_t2;
+					constraint.total_impulse_t2 = clamp(constraint.total_impulse_t2 + lambda_t2, -max_friction_impulse, max_friction_impulse);
+					total_impulse_delta_t2 := constraint.total_impulse_t2 - prev_total_impulse_t2;
 
-				rigid_body.velocity += constraint_set.t2 * total_impulse_delta_t2 / rigid_body.mass;
-				rigid_body.angular_velocity += rigid_body.tentative_inv_global_inertia_tensor * constraint.rxt2 * total_impulse_delta_t2;
+					rigid_body.velocity += constraint_set.t2 * total_impulse_delta_t2 / rigid_body.mass;
+					rigid_body.angular_velocity += rigid_body.tentative_inv_global_inertia_tensor * constraint.rxt2 * total_impulse_delta_t2;
+				}
 			}
 		}
 
@@ -426,49 +518,70 @@ solve_constraints :: proc(using constraints: ^Constraints, car: ^Car_Entity, dt:
 				contact_velocity_a := rigid_body_a.velocity + linalg.cross(rigid_body_a.angular_velocity, constraint.ra);
 				contact_velocity_b := rigid_body_b.velocity + linalg.cross(rigid_body_b.angular_velocity, constraint.rb);
 
-				// Normal
-				velocity_error_n := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.n);
-				lambda_n := -(velocity_error_n + constraint.bias) / constraint.effective_mass_inv_n;
-	
-				prev_total_impulse_n := constraint.total_impulse_n;
-				constraint.total_impulse_n = max(constraint.total_impulse_n + lambda_n, 0.0);
-				total_impulse_delta_n := constraint.total_impulse_n - prev_total_impulse_n;
-	
-				rigid_body_a.velocity += constraint_set.n * total_impulse_delta_n / rigid_body_a.mass;
-				rigid_body_a.angular_velocity += rigid_body_a.tentative_inv_global_inertia_tensor * constraint.raxn * total_impulse_delta_n;
-	
-				rigid_body_b.velocity -= constraint_set.n * total_impulse_delta_n / rigid_body_b.mass;
-				rigid_body_b.angular_velocity -= rigid_body_b.tentative_inv_global_inertia_tensor * constraint.rbxn * total_impulse_delta_n;
+				{ // Normal velocity correction
+					velocity_error_n := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.n);
+					lambda_n := -velocity_error_n / constraint.effective_mass_inv_n;
+		
+					prev_total_impulse_n := constraint.total_impulse_n;
+					constraint.total_impulse_n = max(constraint.total_impulse_n + lambda_n, 0.0);
+					total_impulse_delta_n := constraint.total_impulse_n - prev_total_impulse_n;
+		
+					rigid_body_a.velocity += constraint_set.n * total_impulse_delta_n / rigid_body_a.mass;
+					rigid_body_a.angular_velocity += rigid_body_a.tentative_inv_global_inertia_tensor * constraint.raxn * total_impulse_delta_n;
+		
+					rigid_body_b.velocity -= constraint_set.n * total_impulse_delta_n / rigid_body_b.mass;
+					rigid_body_b.angular_velocity -= rigid_body_b.tentative_inv_global_inertia_tensor * constraint.rbxn * total_impulse_delta_n;
+				}
+
+				{ // Normal position correction
+					bias_contact_velocity_a := rigid_body_a.bias_velocity + linalg.cross(rigid_body_a.bias_angular_velocity, constraint.ra);
+					bias_contact_velocity_b := rigid_body_b.bias_velocity + linalg.cross(rigid_body_b.bias_angular_velocity, constraint.rb);
+
+					bias_velocity := linalg.dot(bias_contact_velocity_a - bias_contact_velocity_b, constraint_set.n);
+					bias_lambda_n := -(bias_velocity + constraint.bias) / constraint.effective_mass_inv_n;
+
+					prev_total_bias_impulse_n := constraint.total_bias_impulse_n;
+					constraint.total_bias_impulse_n = max(constraint.total_bias_impulse_n + bias_lambda_n, 0.0);
+					total_bias_impulse_delta_n := constraint.total_bias_impulse_n - prev_total_bias_impulse_n;
+
+					rigid_body_a.bias_velocity += constraint_set.n * total_bias_impulse_delta_n / rigid_body_a.mass;
+					rigid_body_a.bias_angular_velocity += rigid_body_a.tentative_inv_global_inertia_tensor * constraint.raxn * total_bias_impulse_delta_n;
+		
+					rigid_body_b.bias_velocity -= constraint_set.n * total_bias_impulse_delta_n / rigid_body_b.mass;
+					rigid_body_b.bias_angular_velocity -= rigid_body_b.tentative_inv_global_inertia_tensor * constraint.rbxn * total_bias_impulse_delta_n;
+				}
 	
 				max_friction_impulse := constraint.total_impulse_n * 0.8;
 	
-				// Tangent 1
-				velocity_error_t1 := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.t1);
-				lambda_t1 := -velocity_error_t1 / constraint.effective_mass_inv_t1;
+				{ // Tangent 1 friction
+					velocity_error_t1 := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.t1);
+					lambda_t1 := -velocity_error_t1 / constraint.effective_mass_inv_t1;
+		
+					prev_total_impulse_t1 := constraint.total_impulse_t1;
+					constraint.total_impulse_t1 = clamp(constraint.total_impulse_t1 + lambda_t1, -max_friction_impulse, max_friction_impulse);
+					total_impulse_delta_t1 := constraint.total_impulse_t1 - prev_total_impulse_t1;
+		
+					rigid_body_a.velocity += constraint_set.t1 * total_impulse_delta_t1 / rigid_body_a.mass;
+					rigid_body_a.angular_velocity += rigid_body_a.tentative_inv_global_inertia_tensor * constraint.raxt1 * total_impulse_delta_t1;
+		
+					rigid_body_b.velocity -= constraint_set.t1 * total_impulse_delta_t1 / rigid_body_b.mass;
+					rigid_body_b.angular_velocity -= rigid_body_b.tentative_inv_global_inertia_tensor * constraint.rbxt1 * total_impulse_delta_t1;
+				}
 	
-				prev_total_impulse_t1 := constraint.total_impulse_t1;
-				constraint.total_impulse_t1 = clamp(constraint.total_impulse_t1 + lambda_t1, -max_friction_impulse, max_friction_impulse);
-				total_impulse_delta_t1 := constraint.total_impulse_t1 - prev_total_impulse_t1;
-	
-				rigid_body_a.velocity += constraint_set.t1 * total_impulse_delta_t1 / rigid_body_a.mass;
-				rigid_body_a.angular_velocity += rigid_body_a.tentative_inv_global_inertia_tensor * constraint.raxt1 * total_impulse_delta_t1;
-	
-				rigid_body_b.velocity -= constraint_set.t1 * total_impulse_delta_t1 / rigid_body_b.mass;
-				rigid_body_b.angular_velocity -= rigid_body_b.tentative_inv_global_inertia_tensor * constraint.rbxt1 * total_impulse_delta_t1;
-	
-				// Tangent 2
-				velocity_error_t2 := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.t2);
-				lambda_t2 := -velocity_error_t2 / constraint.effective_mass_inv_t2;
-	
-				prev_total_impulse_t2 := constraint.total_impulse_t2;
-				constraint.total_impulse_t2 = clamp(constraint.total_impulse_t2 + lambda_t2, -max_friction_impulse, max_friction_impulse);
-				total_impulse_delta_t2 := constraint.total_impulse_t2 - prev_total_impulse_t2;
-	
-				rigid_body_a.velocity += constraint_set.t2 * total_impulse_delta_t2 / rigid_body_a.mass;
-				rigid_body_a.angular_velocity += rigid_body_a.tentative_inv_global_inertia_tensor * constraint.raxt2 * total_impulse_delta_t2;
-	
-				rigid_body_b.velocity -= constraint_set.t2 * total_impulse_delta_t2 / rigid_body_b.mass;
-				rigid_body_b.angular_velocity -= rigid_body_b.tentative_inv_global_inertia_tensor * constraint.rbxt2 * total_impulse_delta_t2;
+				{ // Tangent 2 friction
+					velocity_error_t2 := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.t2);
+					lambda_t2 := -velocity_error_t2 / constraint.effective_mass_inv_t2;
+		
+					prev_total_impulse_t2 := constraint.total_impulse_t2;
+					constraint.total_impulse_t2 = clamp(constraint.total_impulse_t2 + lambda_t2, -max_friction_impulse, max_friction_impulse);
+					total_impulse_delta_t2 := constraint.total_impulse_t2 - prev_total_impulse_t2;
+		
+					rigid_body_a.velocity += constraint_set.t2 * total_impulse_delta_t2 / rigid_body_a.mass;
+					rigid_body_a.angular_velocity += rigid_body_a.tentative_inv_global_inertia_tensor * constraint.raxt2 * total_impulse_delta_t2;
+		
+					rigid_body_b.velocity -= constraint_set.t2 * total_impulse_delta_t2 / rigid_body_b.mass;
+					rigid_body_b.angular_velocity -= rigid_body_b.tentative_inv_global_inertia_tensor * constraint.rbxt2 * total_impulse_delta_t2;
+				}
 			}
 		}
 	}
@@ -482,49 +595,6 @@ solve_constraints :: proc(using constraints: ^Constraints, car: ^Car_Entity, dt:
 
 		rigid_body.angular_velocity += cylinder.rolling_axis * -ang_vel_error;
 		rigid_body.velocity += cylinder.rolling_dir * -ang_vel_error * 1; // #todo The 1 here is the radius of the cylinder so scaled cylinder's are not implemented
-	}
-}
-
-@(private="file")
-solve_fixed_constraints :: proc(constraints: ^small_array.Small_Array(4, Fixed_Constraint), n, t1, t2: linalg.Vector3f32, mass: f32, inv_global_inertia_tensor: linalg.Matrix3f32, velocity, angular_velocity: ^linalg.Vector3f32) {
-	for _, constraint_index in small_array.slice(constraints) {
-		constraint := small_array.get_ptr(constraints, constraint_index);
-		contact_velocity := velocity^ + linalg.cross(angular_velocity^, constraint.r);
-
-		// Normal
-		velocity_error_n := linalg.dot(contact_velocity, n);
-		lambda_n := -(velocity_error_n + constraint.bias) / constraint.effective_mass_inv_n;
-		
-		prev_total_impulse_n := constraint.total_impulse_n;
-		constraint.total_impulse_n = max(constraint.total_impulse_n + lambda_n, 0.0);
-		total_impulse_delta_n := constraint.total_impulse_n - prev_total_impulse_n;
-
-		velocity^ += n * total_impulse_delta_n / mass;
-		angular_velocity^ += inv_global_inertia_tensor * constraint.rxn * total_impulse_delta_n;
-
-		max_friction_impulse := constraint.total_impulse_n * 0.8;
-
-		// Tangent 1
-		velocity_error_t1 := linalg.dot(contact_velocity, t1);
-		lambda_t1 := -velocity_error_t1 / constraint.effective_mass_inv_t1;
-
-		prev_total_impulse_t1 := constraint.total_impulse_t1;
-		constraint.total_impulse_t1 = clamp(constraint.total_impulse_t1 + lambda_t1, -max_friction_impulse, max_friction_impulse);
-		total_impulse_delta_t1 := constraint.total_impulse_t1 - prev_total_impulse_t1;
-
-		velocity^ += t1 * total_impulse_delta_t1 / mass;
-		angular_velocity^ += inv_global_inertia_tensor * constraint.rxt1 * total_impulse_delta_t1;
-
-		// Tangent 2
-		velocity_error_t2 := linalg.dot(contact_velocity, t2);
-		lambda_t2 := -velocity_error_t2 / constraint.effective_mass_inv_t2;
-		
-		prev_total_impulse_t2 := constraint.total_impulse_t2;
-		constraint.total_impulse_t2 = clamp(constraint.total_impulse_t2 + lambda_t2, -max_friction_impulse, max_friction_impulse);
-		total_impulse_delta_t2 := constraint.total_impulse_t2 - prev_total_impulse_t2;
-
-		velocity^ += t2 * total_impulse_delta_t2 / mass;
-		angular_velocity^ += inv_global_inertia_tensor * constraint.rxt2 * total_impulse_delta_t2;
 	}
 }
 

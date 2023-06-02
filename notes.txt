@@ -78,18 +78,20 @@ Todo
 - Mistakes we can catch / improvements that would help dev time
 	- If the exporter finds a rigid body not part of a rigid body island, produce a warning. The rigid body will not be exported.
 	- If the spawn point is not a bit above the ground mesh, produce a warning. The car will just fall through.
+	- [BUG] You can export a rigid body without a collision hull.
 - Road to being able to actually make a track
 	- [done] Respawning
-	- Single frame stepping.
+	- [done] Single frame stepping.
 	- Need smooth landing.
+		- [done] Eliminate the solver bounce.
+		- Idea: When you land, until all 4 tires are on the ground, we allow the spring to pull the car down. 
+		- Idea: Alway allow the springs to pull the car down but turn down gravity so once you go off the jump, you're in the air for longer?
 	- Full object hot reloading (the object and it's geometry). Can I do full level hot reloading?
 	- Boost meter. This will be fun, if you boost into someone, you'll really hit them. I want some places to be only reachable by boosting.
-
-Sequential impulse solver
-	- I'm questioning if the impulse clamping is correct. When the object has a large overshoot (due to a small delta time) we're seeing iterations which could be spent correcting
-	the impulse but they don't do anything. Maybe this is correct behavior and I need to put a lower bound on delta time, maybe the clamping logic is incorrect, need to investigate.
-		- Need to check this again given the fix we made for the other issue
-	- Since we're getting objects flying up into the air if they have big penetrations, can I just set the velocity to 0 in the direction of the collision normal once the solver has finished its work? We tried this, it didn't really work out. Objects fell weird and friction had to be done a different way where they're not constraints. Angular and linear velocity damping was used. Maybe there is still some usefulness of this approach only when impulses are very large to prevent them from flying all crazy.
+- Sequential impulse solver positional corrections
+	https://www.gamedev.net/forums/topic/714397-sequential-impulse-solver-bounce-without-restitution/5457082/
+	We should be doing the positional correction by changing the positions and orientations of the bodies instead of the bias velocities. Apparently this is a better way to do it. It will probably make our simulation more stable
+	and more correct. This is the way Box2D does it. At some point, I think we should try this new way out.
 
 For a cool particle explosion effect do this:
 	RANGE :: 5;
