@@ -7,11 +7,14 @@ import "math2";
 
 SLOP: f32 : 0.01;
 
-SPRING_ZETA: f32 : 1.0;
-SPRING_FREQUENCY: f32 : 5.0;
-SPRING_OMEGA: f32 : 2.0 * math.PI * SPRING_FREQUENCY;
+SPRING_ZETA: f32 : 0.5;
+SPRING_FREQUENCY: f32 : 3.0;
+SPRING_OMEGA: f32 : math.TAU * SPRING_FREQUENCY;
 
 SPRING_EQUILIBRIUM_LENGTH: f32 : 0.4;
+
+// #cleanup It might be a better design if we just had one constraint type that contained all the variables. Then when solving,
+// only the relevent variables are used.
 
 Spring_Constraint_Set :: struct {
 	n: linalg.Vector3f32,
@@ -28,8 +31,17 @@ Spring_Constraint :: struct {
 }
 
 Car_Fixed_Constraint_Set :: struct {
-	n, t1, t2: linalg.Vector3f32,
-	constraints: small_array.Small_Array(4, Fixed_Constraint),
+	n: linalg.Vector3f32,
+	constraints: small_array.Small_Array(4, Car_Fixed_Constraint),
+}
+
+Car_Fixed_Constraint :: struct {
+	r,
+	rxn: linalg.Vector3f32,
+	effective_mass_inv_n,
+	bias,
+	total_impulse_n,
+	total_bias_impulse_n: f32,
 }
 
 Fixed_Constraint_Set :: struct {
@@ -159,14 +171,31 @@ set_spring_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, m
 
 add_car_fixed_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, manifold: ^Contact_Manifold, dt: f32) {
 	n := manifold.normal;
-	t1, t2 := math2.vector3_tangents(n);
 
 	constraint_set := Car_Fixed_Constraint_Set {
 		n = n,
-		t1 = t1,
-		t2 = t2,
-		constraints = calculate_fixed_constraints(n, t1, t2, CAR_MASS, car.tentative_position, car.tentative_inv_global_inertia_tensor, &manifold.contacts, dt),
 	};
+
+	inverse_mass := 1.0 / CAR_MASS;
+
+	for contact in small_array.slice(&manifold.contacts) {
+		r := contact.position_a - car.tentative_position;
+		rxn  := linalg.cross(r, n);
+		
+		effective_mass_inv_n  := inverse_mass + linalg.dot(rxn * car.tentative_inv_global_inertia_tensor, rxn);
+
+		position_error := linalg.dot(contact.position_b - contact.position_a, n);
+		bias := -0.2 / dt * max(position_error - SLOP, 0);
+
+		constraint := Car_Fixed_Constraint {
+			r = r,
+			rxn = rxn,
+			effective_mass_inv_n = effective_mass_inv_n,
+			bias = bias,
+		};
+
+		small_array.append(&constraint_set.constraints, constraint);
+	}
 
 	append(&constraints.car_fixed_constraint_sets, constraint_set);
 }
@@ -376,32 +405,6 @@ solve_constraints :: proc(using constraints: ^Constraints, car: ^Car_Entity, dt:
 
 					car.bias_velocity += constraint_set.n * total_bias_impulse_delta_n / CAR_MASS;
 					car.bias_angular_velocity += car.tentative_inv_global_inertia_tensor * constraint.rxn * total_bias_impulse_delta_n;
-				}
-
-				max_friction_impulse := constraint.total_impulse_n * 0.8;
-
-				{ // Tangent 1 friction
-					velocity_error_t1 := linalg.dot(contact_velocity, constraint_set.t1);
-					lambda_t1 := -velocity_error_t1 / constraint.effective_mass_inv_t1;
-
-					prev_total_impulse_t1 := constraint.total_impulse_t1;
-					constraint.total_impulse_t1 = clamp(constraint.total_impulse_t1 + lambda_t1, -max_friction_impulse, max_friction_impulse);
-					total_impulse_delta_t1 := constraint.total_impulse_t1 - prev_total_impulse_t1;
-
-					car.velocity += constraint_set.t1 * total_impulse_delta_t1 / CAR_MASS;
-					car.angular_velocity += car.tentative_inv_global_inertia_tensor * constraint.rxt1 * total_impulse_delta_t1;
-				}
-
-				{ // Tangent 2 friction
-					velocity_error_t2 := linalg.dot(contact_velocity, constraint_set.t2);
-					lambda_t2 := -velocity_error_t2 / constraint.effective_mass_inv_t2;
-					
-					prev_total_impulse_t2 := constraint.total_impulse_t2;
-					constraint.total_impulse_t2 = clamp(constraint.total_impulse_t2 + lambda_t2, -max_friction_impulse, max_friction_impulse);
-					total_impulse_delta_t2 := constraint.total_impulse_t2 - prev_total_impulse_t2;
-
-					car.velocity += constraint_set.t2 * total_impulse_delta_t2 / CAR_MASS;
-					car.angular_velocity += car.tentative_inv_global_inertia_tensor * constraint.rxt2 * total_impulse_delta_t2;
 				}
 			}
 		}

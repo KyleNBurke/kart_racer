@@ -57,7 +57,7 @@ Todo
 	- Should we use a collision resolution constraint with restitution? Should we use a constraint that just tries to give it a target velocity? Should we just assign to the velocity?
 - Slow the car down when you hit a rigid body
 - Boost jets
-	- Need to decide whether we should be using a constraint instead of applying impulses/accelerations.
+	- Need to decide whether we should be using a constraint instead of applying impulses/accelerations. Like should it be a motor constraint?
 - Improve car wheel helpers
 	- Render them up to date
 	- Make config setting
@@ -67,7 +67,7 @@ Todo
 - Shader hot reloading?
 - Versioning for font file
 - If you push a box using your car. It scoots away orthogonally. Maybe the friction direction could be in the direction the thing is moving in?
-- [plugin] Utilize the new function that gives you back a list of w_objects
+- Boost meter. This will be fun, if you boost into someone, you'll really hit them. I want some places to be only reachable by boosting.
 - The feel
 	- Jumps
 		- [done] Left stick should control the pitch rotation.
@@ -79,15 +79,11 @@ Todo
 	- If the exporter finds a rigid body not part of a rigid body island, produce a warning. The rigid body will not be exported.
 	- If the spawn point is not a bit above the ground mesh, produce a warning. The car will just fall through.
 	- [BUG] You can export a rigid body without a collision hull.
-- Road to being able to actually make a track
+- Track 1 creation
 	- [done] Respawning
 	- [done] Single frame stepping.
-	- Need smooth landing.
-		- [done] Eliminate the solver bounce.
-		- Idea: When you land, until all 4 tires are on the ground, we allow the spring to pull the car down. 
-		- Idea: Alway allow the springs to pull the car down but turn down gravity so once you go off the jump, you're in the air for longer?
-	- Full object hot reloading (the object and it's geometry). Can I do full level hot reloading?
-	- Boost meter. This will be fun, if you boost into someone, you'll really hit them. I want some places to be only reachable by boosting.
+	- [done] Need smooth landing.
+	
 - Sequential impulse solver positional corrections
 	https://www.gamedev.net/forums/topic/714397-sequential-impulse-solver-bounce-without-restitution/5457082/
 	We should be doing the positional correction by changing the positions and orientations of the bodies instead of the bias velocities. Apparently this is a better way to do it. It will probably make our simulation more stable
