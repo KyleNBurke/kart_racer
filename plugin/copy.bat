@@ -1,1 +1,0 @@
-xcopy .\plugin\src "C:\Program Files\Blender Foundation\Blender 3.5\3.5\scripts\addons\kart_guys\" /y
