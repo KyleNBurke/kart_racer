@@ -217,3 +217,15 @@ init_sphere_helper :: proc(name: string, center: linalg.Vector3f32 = VEC3_ZERO, 
 
 	return geo;
 }
+
+geometry_set_color :: proc(geo: ^Geometry, color: [3]f32) {
+	if geo.pipeline == .Line {
+		unimplemented();
+	}
+
+	for vert_index in 0..<(len(geo.attributes) / 9) {
+		geo.attributes[vert_index * 9 + 6] = color[0];
+		geo.attributes[vert_index * 9 + 7] = color[1];
+		geo.attributes[vert_index * 9 + 8] = color[2];
+	}
+}

@@ -87,6 +87,7 @@ init :: proc(game: ^Game) {
 	game.font = init_font("roboto", 20, content_scale_x);
 	submit_font(&game.vulkan, &game.font);
 
+	game.gamepad.deadzone_radius = 0.25;
 	game.frame_metrics = init_frame_metrics(&game.font, &game.texts);
 
 	load_level(game);
@@ -170,19 +171,26 @@ run :: proc(game: ^Game) {
 update :: proc(game: ^Game, dt: f32) {
 	update_gamepad_state(&game.gamepad);
 
+	when ODIN_DEBUG {
+		if gamepad_button_pressed(&game.gamepad, glfw.GAMEPAD_BUTTON_X) {
+			respawn_car(game.car, game.car_spawn_position, game.car_spawn_orientation);
+		}
+	}
+
 	if game.single_stepping {
 		if game.step {
-			move_car(game, dt);
+			move_car(&game.gamepad, game.window, game.car, dt);
 			simulate(game, dt);
+			position_and_orient_wheels(game.car, dt);
 			game.step = false;
 		}
 	} else {
-		move_car(game, dt);
+		move_car(&game.gamepad, game.window, game.car, dt);
 		simulate(game, dt);
+		position_and_orient_wheels(game.car, dt);
 	}
 
-	position_and_orient_wheels(game.car, dt);
-	move_camera(&game.camera, game.window, game.car, dt);
+	move_camera(&game.camera, &game.gamepad, game.window, game.car, dt);
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
 
 	update_shock_entity_particles(game.shock_entities[:], dt);

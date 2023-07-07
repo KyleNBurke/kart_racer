@@ -39,6 +39,9 @@ Ideas
 - Short cut which opens up once the player has collected a key.
 - Moving conveyor belts that can carry things
 
+Track ideas
+- A track where you're driving back and forth on the same road and having to avoid head on collisions.
+
 A note about the car wheel positioning. When the car is in the air such that the suspension is not colliding with the ground, we max out the spring length to the same value as the maximum spring ray length. For the position of the wheel,
 we could pick a different maximum length. It's intentionally designed such that the ray length is pretty long to provide better stability so we'll probably want to use a different max length for the visual position of the wheel.
 
@@ -75,6 +78,17 @@ Todo
 			- If you're upside down, you should maybe even be able to rotate the car left and right.
 		- Camera flips around all crazy
 	- Upper collision hull on the car
+	- The boost jet off the ledge
+		- Car does not return to top speed fast enough
+		- Not enough lateral friction
+		- Hitting the wall feels bad
+		- Maybe more let's get this feeling good
+	- Car
+		- We're going to commit this because it's like 95% the way there.
+		- Laterial snap when transitioning: Try the idea of letting the lateral friction fully resolve before determining the car is no longer slipping. We may even increase the laterl force if the speed is high?
+		- Nose dive and pitch up work when against a wall?
+		- Adjust going off a jump and landing slide threshold?
+		- Pressing handbreak button in the air should start the timer once it hits the ground. If you don't hit the ground within a certain amount of time, ignore the button press?
 - Mistakes we can catch / improvements that would help dev time
 	- If the exporter finds a rigid body not part of a rigid body island, produce a warning. The rigid body will not be exported.
 	- If the spawn point is not a bit above the ground mesh, produce a warning. The car will just fall through.
@@ -83,6 +97,8 @@ Todo
 	- [done] Respawning
 	- [done] Single frame stepping.
 	- [done] Need smooth landing.
+- Blender new script directory (can I remove the stupid copy script now?).
+- The config file gets saved when we go out of minimized? That doesn't seem right.
 	
 - Sequential impulse solver positional corrections
 	https://www.gamedev.net/forums/topic/714397-sequential-impulse-solver-bounce-without-restitution/5457082/

@@ -82,6 +82,7 @@ Car_Entity :: struct {
 	bias_angular_velocity: linalg.Vector3f32,
 	tentative_position: linalg.Vector3f32,
 	tentative_transform: linalg.Matrix4f32,
+	weight_distribution_multiplier: f32,
 	shocked: bool,
 	shock_remaining_time: f32,
 	on_fire: bool,
@@ -90,6 +91,8 @@ Car_Entity :: struct {
 	on_fire_elapsed_ramp_up_time: f32,
 	wheel_radius: f32,
 	wheels: [4]Wheel,
+	sliding: bool,
+	handbrake_duration: f32,
 	current_steer_angle: f32,
 	front_wheel_angular_velocity,
 	back_wheel_angular_velocity,
@@ -226,6 +229,8 @@ new_car_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaterni
 	
 	e.tentative_inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
 	e.tentative_transform = linalg.MATRIX4F32_IDENTITY;
+
+	e.handbrake_duration = 10; // If this were to be initialized at 0, the car would be sliding.
 
 	return e;
 }

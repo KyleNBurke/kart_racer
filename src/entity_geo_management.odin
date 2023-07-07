@@ -122,6 +122,14 @@ get_geometry :: proc(lookup: Geometry_Lookup) -> ^Geometry {
 	return &record.geometry;
 }
 
+get_geometry_from_entity_lookup :: proc(lookup: Entity_Lookup) -> ^Geometry {
+	entity_record := &entities_geos.entity_records[lookup.index];
+	assert(lookup.generation == entity_record.generation);
+
+	geomtry_record := &entities_geos.geometry_records[entity_record.geometry_record_index];
+	return &geomtry_record.geometry;
+}
+
 get_entity :: proc(lookup: Entity_Lookup) -> ^Entity {
 	record := &entities_geos.entity_records[lookup.index];
 	assert(lookup.generation == record.generation);

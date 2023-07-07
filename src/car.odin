@@ -198,52 +198,32 @@ calculate_car_inertia_tensor :: proc(orientation: linalg.Quaternionf32) -> linal
 	return math2.calculate_inv_global_inertia_tensor(orientation, INV_LOCAL_INERTIA_TENSOR);
 }
 
-move_car :: proc(game: ^Game, dt: f32) {
-	window := game.window;
-	car := game.car;
-
-	if gamepad_button_pressed(&game.gamepad, glfw.GAMEPAD_BUTTON_X) {
-		respawn_car(car, game.car_spawn_position, game.car_spawn_orientation);
-	}
-	
-	axes := glfw.GetJoystickAxes(glfw.JOYSTICK_1);
+move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity, dt: f32) {
 	accel_multiplier: f32 = 0;
 	steer_multiplier: f32 = 0;
 	
-	linear: { // Calculate a value between -1 and 1 to determine how much linear force to apply
-		if game.camera.state == .First_Person {
-			break linear;
-		}
-		
+	{ // Calculate a value between -1 and 1 to determine how much linear force to apply
 		if glfw.GetKey(window, glfw.KEY_W) == glfw.PRESS do accel_multiplier += 1;
 		if glfw.GetKey(window, glfw.KEY_S) == glfw.PRESS do accel_multiplier -= 1;
 
-		if len(axes) > 0 {
-			accel_multiplier += (axes[5] + 1.0) / 2.0;
-			accel_multiplier -= (axes[4] + 1.0) / 2.0;
-		}
+		accel_multiplier += gamepad_trigger_pos(gamepad, 5);
+		accel_multiplier -= gamepad_trigger_pos(gamepad, 4);
 	}
 
-	cornering: { // Calculate a value between -1 and 1 to determine the desired cornering angle
-		if game.camera.state == .First_Person || car.shocked {
-			break cornering;
-		}
-
+	{ // Calculate a value between -1 and 1 to determine the desired cornering angle
 		if glfw.GetKey(window, glfw.KEY_A) == glfw.PRESS do steer_multiplier += 1;
 		if glfw.GetKey(window, glfw.KEY_D) == glfw.PRESS do steer_multiplier -= 1;
 
-		if len(axes) > 0 {
-			steer_multiplier = adjust_stick_pos_for_deadzone(axes[0]);
-		}
+		steer_multiplier += gamepad_stick_adjusted_pos(gamepad, 0);
 	}
 
-	body_forward := math2.matrix4_forward(car.transform);
-	body_up := math2.matrix4_up(car.transform);
-	body_left := math2.matrix4_left(car.transform);
+	car_forward := math2.matrix4_forward(car.transform);
+	car_up := math2.matrix4_up(car.transform);
+	car_left := math2.matrix4_left(car.transform);
 
-	body_velocity := car.velocity;
-	body_angular_velocity := car.angular_velocity;
-	body_tensor := calculate_car_inertia_tensor(car.orientation);
+	car_vel := car.velocity;
+	car_ang_vel := car.angular_velocity;
+	car_tensor := calculate_car_inertia_tensor(car.orientation);
 
 	front_left_contact_normal, front_left_contact_normal_ok := car.wheels[0].contact_normal.?;
 	front_right_contact_normal, front_right_contact_normal_ok := car.wheels[1].contact_normal.?;
@@ -252,159 +232,151 @@ move_car :: proc(game: ^Game, dt: f32) {
 
 	if front_left_contact_normal_ok || front_right_contact_normal_ok || back_left_contact_normal_ok || back_right_contact_normal_ok {
 		surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal + back_left_contact_normal + back_right_contact_normal);
-		
-		ang_vel := linalg.dot(body_angular_velocity, surface_normal);
-		
-		body_surface_lat_dir := linalg.normalize(linalg.cross(surface_normal, body_forward));
-		lat_vel := linalg.dot(body_velocity, body_surface_lat_dir);
+		surface_forward := linalg.normalize(linalg.cross(car_left, surface_normal));
 
-		lat_slip_threshold,
-		ang_slip_threshold,
-		slipping_max_lat_fric,
-		slipping_max_ang_fric: f32;
-		
-		switch car.surface_type {
-		case .Normal:
-			lat_slip_threshold = 3;
-			ang_slip_threshold = 5;
-			slipping_max_lat_fric = 20;
-			slipping_max_ang_fric = 2;
-		case .Oil:
-			lat_slip_threshold = 3;
-			ang_slip_threshold = 5;
-			slipping_max_lat_fric = 0;
-			slipping_max_ang_fric = 0;
+		TOP_SPEED: f32 : 35;
+		vel := linalg.dot(surface_forward, car_vel);
+
+		surface_velocity := car_vel - linalg.projection(car_vel, surface_normal); // project velocity onto surface plane
+		surface_velocity_dir := linalg.normalize(surface_velocity);
+		slip_angle := math.acos(linalg.dot(surface_velocity_dir, car_forward));
+
+		if gamepad_button_held(gamepad, glfw.GAMEPAD_BUTTON_A) {
+			car.handbrake_duration = 0;
 		}
 
-		slipping := false;
-
-		buttons := glfw.GetJoystickButtons(glfw.JOYSTICK_1);
-		if len(buttons) > 0 {
-			if buttons[0] == glfw.PRESS {
-				slipping = true;
-			}
+		handbraking := false;
+		
+		if car.handbrake_duration <= 0.5 {
+			car.handbrake_duration += dt;
+			handbraking = true;
 		}
 
-		if abs(lat_vel) > lat_slip_threshold || abs(ang_vel) > ang_slip_threshold {
-			slipping = true;
-		}
-
-		full_grip_top_speed: f32 = 20 if car.on_fire else 35;
-
-		top_speed: f32;
-
-		if slipping {
-			car.current_steer_angle = 0;
-
-			ang_fric := -clamp(ang_vel, -slipping_max_ang_fric * dt, slipping_max_ang_fric * dt);
-			ang_fric += 3.0 * steer_multiplier * dt;
-			car.angular_velocity += surface_normal * ang_fric;
-
-			fric := clamp(lat_vel, -slipping_max_lat_fric * dt, slipping_max_lat_fric * dt);
-			car.velocity -= body_surface_lat_dir * fric;
-
-			top_speed_multiplier := max((20 - abs(lat_vel)) / 20, 0);
-			top_speed = (full_grip_top_speed - 10) * top_speed_multiplier + 10;
-
-			// front_tire_left_geo := get_geometry(car_helpers.front_tire_left_geo_lookup);
-			// set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
-
-			// back_tire_left_geo := get_geometry(car_helpers.back_tire_left_geo_lookup);
-			// set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, YELLOW);
+		if handbraking {
+			car.sliding = true;
 		} else {
-			if front_left_contact_normal_ok || front_right_contact_normal_ok {
-				surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
-				body_surface_long_dir := linalg.normalize(linalg.cross(body_left, surface_normal));
-				body_surface_long_vel := linalg.dot(body_velocity, body_surface_long_dir);
-				body_surface_long_forward_vel := max(body_surface_long_vel, 0);
-				max_steer_angle := 0.05 + 0.195 * max(full_grip_top_speed - body_surface_long_forward_vel, 0) / full_grip_top_speed;
-	
-				target_steer_angle := max_steer_angle * steer_multiplier;
-				car.current_steer_angle += clamp(target_steer_angle - car.current_steer_angle, -0.8 * dt, 0.8 * dt);
-				tire_long_dir := math2.vector3_rotate(body_forward, body_up, car.current_steer_angle);
-				tire_lat_dir := linalg.normalize(linalg.cross(surface_normal, tire_long_dir));
-				tire_vel := body_velocity + linalg.cross(body_angular_velocity, body_forward * SPRING_BODY_POINT_Z);
-				tire_lat_vel := linalg.dot(tire_vel, tire_lat_dir);
-				tire_fric := tire_lat_vel / 2;
-	
-				car.velocity -= tire_lat_dir * tire_fric;
-				car.angular_velocity -= body_tensor * body_up * tire_fric;
-	
-				// front_tire_left_geo := get_geometry(car_helpers.front_tire_left_geo_lookup);
-				// set_line_helper(front_tire_left_geo, car.position + body_forward * SPRING_BODY_POINT_Z, tire_lat_dir * 2, GREEN);
-			}
-
-			if back_left_contact_normal_ok || back_right_contact_normal_ok {
-				surface_normal := linalg.normalize(back_left_contact_normal + back_right_contact_normal);
-				body_surface_lat_dir := linalg.normalize(linalg.cross(surface_normal, body_forward));
-				tire_vel := body_velocity + linalg.cross(body_angular_velocity, -body_forward * SPRING_BODY_POINT_Z);
-				tire_lat_vel := linalg.dot(tire_vel, body_surface_lat_dir);
-				tire_fric := tire_lat_vel / 2;
-	
-				car.velocity -= body_surface_lat_dir * tire_fric;
-				car.angular_velocity -= body_tensor * -body_up * tire_fric;
-
-				// back_tire_left_geo := get_geometry(car_helpers.back_tire_left_geo_lookup);
-				// set_line_helper(back_tire_left_geo, car.position + body_forward * -SPRING_BODY_POINT_Z, body_left * 2, GREEN);
-			}
-
-			top_speed = full_grip_top_speed;
-		}
-
-		body_surface_long_dir := linalg.normalize(linalg.cross(body_left, surface_normal));
-		body_surface_long_vel := linalg.dot(body_velocity, body_surface_long_dir);
-
-		DRAG: f32 : 5;
-		REVERSE_TOP_SPEED: f32 : 15;
-
-		drag_accel := clamp(body_surface_long_vel, -DRAG * dt, DRAG * dt);
-		long_vel := body_surface_long_vel - drag_accel;
-		accel := -drag_accel;
-
-		if accel_multiplier > 0 {
-			if long_vel < top_speed {
-				accel += min(top_speed - long_vel, 50 * dt);
-			}
-		} else if accel_multiplier < 0 {
-			if long_vel > 1e-4 {
-				accel -= min(long_vel, -accel_multiplier * 20 * dt);
+			if car.sliding {
+				if linalg.length(surface_velocity) < 1 || slip_angle < 0.2 {
+					car.sliding = false;
+				}
 			} else {
-				if abs(long_vel) < REVERSE_TOP_SPEED {
-					accel -= min(REVERSE_TOP_SPEED - abs(long_vel), 40 * dt);
+				if linalg.length(surface_velocity) > 2 && slip_angle > 0.6 {
+					car.sliding = true;
 				}
 			}
 		}
 
-		car.velocity += body_surface_long_dir * accel;
-	} else {
-		pitch_multiplier: f32 = 0;
+		// This will decrease the forwards acceleration when the car is doing a sharp drift.
+		accel_slide_multiplier: f32 = 1;
 
-		if len(axes) > 0 {
-			pitch_multiplier = adjust_stick_pos_for_deadzone(axes[1]);
-		}
-
-		if pitch_multiplier == 0 {
-			AIR_PITCH_DRAG :: 2;
-
-			ang_vel_pitch := linalg.dot(body_left, car.angular_velocity);
-			fric := clamp(ang_vel_pitch, -AIR_PITCH_DRAG * dt, AIR_PITCH_DRAG * dt);
-			car.angular_velocity += body_left * -fric;
-		} else {
-			AIR_PITCH_ACCEL :: 3;
+		if car.sliding {
+			car.current_steer_angle = 0;
+			ang_vel := linalg.dot(car_ang_vel, surface_normal);
+			ang_accel: f32;
 			
-			car.angular_velocity += body_left * pitch_multiplier * AIR_PITCH_ACCEL * dt;
+			if steer_multiplier == 0 {
+				ang_accel = -clamp(ang_vel, -6 * dt, 6 * dt);
+			} else {
+				MAX_ROTATION_SPEED :: 2;
+
+				if abs(ang_vel) < MAX_ROTATION_SPEED {
+					ang_accel = math.sign(steer_multiplier) * min(MAX_ROTATION_SPEED - abs(ang_vel), 5 * abs(steer_multiplier) * dt);
+				} // handle else case? When we're rotating fater than the max rotation speed? #nocheckin
+			}
+
+			car.angular_velocity += surface_normal * ang_accel;
+
+			surface_lat := linalg.normalize(linalg.cross(car_forward, surface_normal));
+			lat_vel := linalg.dot(car_vel, surface_lat);
+			lat_accel := clamp(lat_vel, -20 * dt, 20 * dt);
+			car.velocity -= surface_lat * lat_accel;
+
+			accel_slide_multiplier = 0.5 + 0.5 * (1 - min(abs(lat_vel) / 20, 1));
+		} else {
+			if front_left_contact_normal_ok || front_right_contact_normal_ok {
+				LOW_SPEED :: 0.2;
+				HIGH_SPEED :: 0.08;
+				max_steer_angle := HIGH_SPEED + (LOW_SPEED - HIGH_SPEED) * clamp((TOP_SPEED - vel) / TOP_SPEED, 0, 1);
+
+				target_steer_angle: f32 = max_steer_angle * steer_multiplier;
+				car.current_steer_angle += clamp(target_steer_angle - car.current_steer_angle, -0.8 * dt, 0.8 * dt);
+
+				tire_forward := math2.vector3_rotate(car_forward, car_up, car.current_steer_angle);
+				front_surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
+				tire_surface_left := linalg.normalize(linalg.cross(front_surface_normal, tire_forward));
+				
+				tire_vel := car_vel + linalg.cross(car_ang_vel, car_forward * SPRING_BODY_POINT_Z);
+				tire_surface_left_vel := linalg.dot(tire_surface_left, tire_vel);
+				tire_fric := tire_surface_left_vel / 2;
+
+				car.velocity -= tire_surface_left * tire_fric;
+				car.angular_velocity -= car_tensor * front_surface_normal * tire_fric;
+			}
+
+			if back_left_contact_normal_ok || back_right_contact_normal_ok {
+				back_surface_normal := linalg.normalize(back_left_contact_normal + back_right_contact_normal);
+				tire_surface_left := linalg.normalize(linalg.cross(back_surface_normal, car_forward));
+				
+				tire_vel := car_vel + linalg.cross(car_ang_vel, -car_forward * SPRING_BODY_POINT_Z);
+				tire_surface_left_vel := linalg.dot(tire_surface_left, tire_vel);
+				tire_fric := tire_surface_left_vel / 2;
+
+				car.velocity -= tire_surface_left * tire_fric;
+				car.angular_velocity -= car_tensor * -back_surface_normal * tire_fric;
+			}
+		}
+
+		BRAKE_FORCE: f32 : 30;
+		accel: f32;
+
+		if vel > TOP_SPEED {
+			if accel_multiplier < 0 {
+				// Apply brake force
+				accel = -min(vel, -accel_multiplier * BRAKE_FORCE * dt);
+			} else {
+				// Apply drag to get car to top speed
+				accel = -min(vel - TOP_SPEED, 20 * dt);
+			}
+		} else {
+			if accel_multiplier > 0 {
+				// Apply acceleration to get car to top speed
+				accel = min(TOP_SPEED - vel, accel_multiplier * accel_slide_multiplier * 50 * dt);
+			} else if accel_multiplier < 0 {
+				// Apply brake force
+				accel = -min(vel, -accel_multiplier * BRAKE_FORCE * dt);
+			} else {
+				// Apply drag
+				accel = -min(vel, 10 * dt);
+			}
+		}
+
+		car.velocity += surface_forward * accel;
+
+		{ // Set weight distribution multiplier
+			v: f32 = clamp(vel / TOP_SPEED, 0, 1);
+
+			if accel_multiplier > 0 {
+				a := accel / (50 * dt);
+				car.weight_distribution_multiplier = a * (1 - v);
+			} else if accel_multiplier < 0 {
+				a := accel / (BRAKE_FORCE * dt);
+				car.weight_distribution_multiplier = a * v;
+			}
+		}
+
+		if false {
+			car_geo := get_geometry_from_entity_lookup(car.lookup);
+
+			color: [3]f32;
+			if car.sliding {
+				color = {0.5, 0.5, 0};
+			} else {
+				color = {0.2, 0.2, 0.2};
+			}
+
+			geometry_set_color(car_geo, color);
 		}
 	}
-}
-
-adjust_stick_pos_for_deadzone :: proc(pos: f32) -> f32 {
-	adjusted_pos: f32 = 0;
-
-	if abs(pos) > 0.25 {
-		adjusted_pos = -(pos - 0.25 * math.sign(pos)) / 0.75;
-	}
-
-	return adjusted_pos;
 }
 
 position_and_orient_wheels :: proc(car: ^Car_Entity, dt: f32) {

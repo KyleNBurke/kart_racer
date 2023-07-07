@@ -9,9 +9,9 @@ TRANSLATION_SPEED :: 10.0;
 ROTATION_SPEED :: 0.003;
 MAX_VERTICAL_ROTATION_ANGLE :: 1.57;
 
-HALO_RADIUS: f32 : 8.0;
-HALO_HEIGHT: f32 : 15.0;
-DOWNWARD_ANGLE: f32 : 0.7;
+HALO_RADIUS: f32 : 7.5;
+HALO_HEIGHT: f32 : 10.0;
+DOWNWARD_ANGLE: f32 : 0.6;
 
 CLOSE_HALO_RADIUS: f32 : 6.0;
 CLOSE_HALO_HEIGHT: f32 : 2.0;
@@ -27,6 +27,7 @@ Camera :: struct {
 	prev_mouse_pos_y: f32,
 	orientation_x: f32,
 	orientation_y: f32,
+	current_angle: f32,
 }
 
 Camera_State :: enum {
@@ -88,69 +89,77 @@ camera_handle_key_press :: proc(using camera: ^Camera, key: i32, window: glfw.Wi
 	}
 }
 
-move_camera :: proc(using camera: ^Camera, window: glfw.WindowHandle, car: ^Car_Entity, dt: f32) {
-	show_close_view :: proc() -> Maybe(f32) {
-		axes := glfw.GetJoystickAxes(glfw.JOYSTICK_1);
-	
-		if len(axes) == 0 {
-			return nil;
-		}
-	
-		x := axes[2];
-		y := axes[3];
-	
-		if x * x + y * y < 0.25 {
-			return nil;
-		}
-	
-		return math.atan2(-x, y) - math.PI;
-	}
-
-	#partial switch state {
+move_camera :: proc(camera: ^Camera, gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity, dt: f32) {
+	#partial switch camera.state {
 	case .Follow_Car:
-		halo_radius, halo_height, downward_angle: f32;
+		close_angle: f32;
+		{
+			x := gamepad_axis_raw_pos(gamepad, 2);
+			y := gamepad_axis_raw_pos(gamepad, 3);
 
-		forward := math2.matrix4_forward(car.transform);
-		projection := linalg.normalize(linalg.Vector2f32 {forward.x, forward.z});
-
-		if angle, ok := show_close_view().?; ok {
-			halo_radius = CLOSE_HALO_RADIUS;
-			halo_height = CLOSE_HALO_HEIGHT;
-			downward_angle = CLOSE_DOWNWARD_ANGLE;
-
-			projection = math2.vector2_rotate(projection, angle);
-		} else {
-			halo_radius = HALO_RADIUS;
-			halo_height = HALO_HEIGHT;
-			downward_angle = DOWNWARD_ANGLE;
+			if x * x + y * y > 0.7 * 0.7 {
+				close_angle = math.atan2(-x, y) - math.PI;
+			}
 		}
 
-		halo_position := linalg.Vector3f32{-projection.x * halo_radius, halo_height, -projection.y * halo_radius};
-		position = car.position + halo_position;
+		position: linalg.Vector3f32;
+		orientation: linalg.Quaternionf32;
 
-		angle := math.atan2(projection.x, projection.y);
-		orientation_x = downward_angle;
-		orientation_y = angle;
-		orientation := linalg.quaternion_from_euler_angles(orientation_y, orientation_x, 0, .YXZ);
+		if close_angle == 0 {
+			camera_forward := math2.matrix4_forward(camera.transform);
+			camera_forward_proj := linalg.normalize(linalg.Vector2f32 {camera_forward.x, camera_forward.z});
+			halo_position := linalg.Vector3f32{-camera_forward_proj.x * HALO_RADIUS, HALO_HEIGHT, -camera_forward_proj.y * HALO_RADIUS};
+			position = car.position + halo_position;
 
-		transform = linalg.matrix4_from_trs_f32(position, orientation, linalg.Vector3f32 {1, 1, 1});
+			car_forward := math2.matrix4_forward(car.transform);
+			car_forward_proj := linalg.normalize(linalg.Vector2f32 {car_forward.x, car_forward.z});
+			target_angle := math.atan2(car_forward_proj.x, car_forward_proj.y);
+
+			if abs(camera.current_angle) > math.PI / 2 {
+				if target_angle > 0 && camera.current_angle < 0 {
+					camera.current_angle += math.TAU;
+				} else if target_angle < 0 && camera.current_angle > 0 {
+					camera.current_angle -= math.TAU;
+				}
+			}
+			
+			camera.current_angle += (target_angle - camera.current_angle) * 7 * dt;
+			orientation = linalg.quaternion_from_euler_angles(camera.current_angle, DOWNWARD_ANGLE, 0, .YXZ);
+
+			// For transitioning to first person controls
+			camera.position = position;
+			camera.orientation_x = DOWNWARD_ANGLE;
+			camera.orientation_y = camera.current_angle;
+			
+		} else {
+			camera_forward := math2.matrix4_forward(car.transform);
+			camera_forward_proj := linalg.normalize(linalg.Vector2f32 {camera_forward.x, camera_forward.z});
+			camera_forward_proj = math2.vector2_rotate(camera_forward_proj, close_angle);
+			halo_position := linalg.Vector3f32{-camera_forward_proj.x * CLOSE_HALO_RADIUS, CLOSE_HALO_HEIGHT, -camera_forward_proj.y * CLOSE_HALO_RADIUS};
+			position = car.position + halo_position;
+
+			angle := math.atan2(camera_forward_proj.x, camera_forward_proj.y);
+			orientation = linalg.quaternion_from_euler_angles(angle, CLOSE_DOWNWARD_ANGLE, 0, .YXZ);
+		}
+
+		camera.transform = linalg.matrix4_from_trs_f32(position, orientation, linalg.Vector3f32 {1, 1, 1});
 	
 	case .First_Person:
 		// Rotate
 		mouse_pos_x_f64, mouse_pos_y_f64 := glfw.GetCursorPos(window);
 		mouse_pos_x := f32(mouse_pos_x_f64);
 		mouse_pos_y := f32(mouse_pos_y_f64);
-		mouse_pos_diff_x := mouse_pos_x - prev_mouse_pos_x;
-		mouse_pos_diff_y := mouse_pos_y - prev_mouse_pos_y;
+		mouse_pos_diff_x := mouse_pos_x - camera.prev_mouse_pos_x;
+		mouse_pos_diff_y := mouse_pos_y - camera.prev_mouse_pos_y;
 
-		orientation_y -= mouse_pos_diff_x * ROTATION_SPEED;
-		orientation_x += mouse_pos_diff_y * ROTATION_SPEED;
-		orientation_x = clamp(orientation_x, -MAX_VERTICAL_ROTATION_ANGLE, MAX_VERTICAL_ROTATION_ANGLE);
+		camera.orientation_y -= mouse_pos_diff_x * ROTATION_SPEED;
+		camera.orientation_x += mouse_pos_diff_y * ROTATION_SPEED;
+		camera.orientation_x = clamp(camera.orientation_x, -MAX_VERTICAL_ROTATION_ANGLE, MAX_VERTICAL_ROTATION_ANGLE);
 
-		orientation := linalg.quaternion_from_euler_angles(orientation_y, orientation_x, 0, .YXZ);
+		orientation := linalg.quaternion_from_euler_angles(camera.orientation_y, camera.orientation_x, 0, .YXZ);
 
-		prev_mouse_pos_x = mouse_pos_x;
-		prev_mouse_pos_y = mouse_pos_y;
+		camera.prev_mouse_pos_x = mouse_pos_x;
+		camera.prev_mouse_pos_y = mouse_pos_y;
 
 		// Translate
 		dir := linalg.Vector3f32 {};
@@ -181,9 +190,9 @@ move_camera :: proc(using camera: ^Camera, window: glfw.WindowHandle, car: ^Car_
 
 		if linalg.length2(dir) != 0.0 {
 			dir_norm := linalg.normalize(dir);
-			position += math2.quaternion_transform_direction(orientation, dir_norm) * TRANSLATION_SPEED * dt;
+			camera.position += math2.quaternion_transform_direction(orientation, dir_norm) * TRANSLATION_SPEED * dt;
 		}
 
-		transform = linalg.matrix4_from_trs_f32(position, orientation, linalg.Vector3f32 {1, 1, 1});
+		camera.transform = linalg.matrix4_from_trs_f32(camera.position, orientation, linalg.Vector3f32 {1, 1, 1});
 	}
 }

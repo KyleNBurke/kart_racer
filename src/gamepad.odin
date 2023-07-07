@@ -28,7 +28,11 @@ gamepad_button_held :: proc(using gamepad: ^Gamepad, button: int) -> bool {
 	return curr_state.buttons[button] == 1;
 }
 
-gamepad_axis_pos :: proc(using gamepad: ^Gamepad, axis: int) -> f32 {
+gamepad_axis_raw_pos :: proc(using gamepad: ^Gamepad, axis: int) -> f32 {
+	return curr_state.axes[axis];
+}
+
+gamepad_stick_adjusted_pos :: proc(using gamepad: ^Gamepad, axis: int) -> f32 {
 	when ODIN_DEBUG {
 		assert(axis != glfw.GAMEPAD_AXIS_LEFT_TRIGGER && axis != glfw.GAMEPAD_AXIS_RIGHT_TRIGGER);
 	}

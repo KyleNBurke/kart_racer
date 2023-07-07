@@ -140,7 +140,7 @@ set_spring_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, m
 
 	inverse_mass := 1.0 / CAR_MASS;
 
-	for contact in small_array.slice(&manifold.contacts) {
+	for contact, i in small_array.slice(&manifold.contacts) {
 		r := contact.body_point - car.tentative_position;
 		rxn := linalg.cross(r, n);
 
@@ -153,8 +153,15 @@ set_spring_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, m
 		gamma := 1.0 / (spring_c + dt * spring_k);
 		softness := gamma / dt;
 
+		equilibrium_length: f32;
+		if i == 0 || i == 1 {
+			equilibrium_length = SPRING_EQUILIBRIUM_LENGTH + 0.1 * car.weight_distribution_multiplier;
+		} else {
+			equilibrium_length = SPRING_EQUILIBRIUM_LENGTH - 0.1 * car.weight_distribution_multiplier;
+		}
+
 		beta := (dt * spring_k) / (spring_c + dt * spring_k);
-		position_error := SPRING_EQUILIBRIUM_LENGTH - contact.length;
+		position_error := equilibrium_length - contact.length;
 		bias := beta / dt * -position_error;
 
 		small_array.append(&spring_constraint_set.constraints, Spring_Constraint {
