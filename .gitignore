@@ -3,3 +3,4 @@ build/
 *.kgl.txt
 res/config.txt
 *.rdbg
+**/__pycache__/
