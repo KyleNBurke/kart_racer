@@ -93,6 +93,7 @@ Car_Entity :: struct {
 	wheels: [4]Wheel,
 	sliding: bool,
 	handbrake_duration: f32,
+	finished_slide: bool,
 	current_steer_angle: f32,
 	front_wheel_angular_velocity,
 	back_wheel_angular_velocity,

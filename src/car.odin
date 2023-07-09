@@ -6,6 +6,8 @@ import "core:math/linalg";
 import "core:math/rand";
 import "math2";
 
+import "core:fmt";
+
 @(private="file") FIRE_PARTICLE_LIFE_TIME: f32 : 0.2;
 @(private="file") MAX_FIRE_PARTICLES :: 100;
 @(private="file") TIME_BETWEEN_FIRE_PARTILCE_EMISSION :: FIRE_PARTICLE_LIFE_TIME / MAX_FIRE_PARTICLES;
@@ -199,6 +201,13 @@ calculate_car_inertia_tensor :: proc(orientation: linalg.Quaternionf32) -> linal
 }
 
 move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity, dt: f32) {
+	{ // temp #nocheckin
+		if gamepad_button_pressed(gamepad, glfw.GAMEPAD_BUTTON_Y) {\
+			// car.orientation = car.orientation * linalg.quaternion_from_euler_angles_f32(-0.3, 0, 0, .YXZ);
+			car.orientation = linalg.quaternion_from_euler_angles_f32(-0.7, 0, 0, .YXZ);
+		}
+	}
+
 	accel_multiplier: f32 = 0;
 	steer_multiplier: f32 = 0;
 	
@@ -247,17 +256,21 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 
 		handbraking := false;
 		
-		if car.handbrake_duration <= 0.5 {
+		if car.handbrake_duration <= 0.3 {
 			car.handbrake_duration += dt;
 			handbraking = true;
 		}
 
 		if handbraking {
-			car.sliding = true;
+			if linalg.length(surface_velocity) > 2 {
+				car.sliding = true;
+				car.finished_slide = false; // We want the finished slide logic to start once the handbreaking period has ended.
+			}
 		} else {
 			if car.sliding {
-				if linalg.length(surface_velocity) < 1 || slip_angle < 0.2 {
+				if car.finished_slide {
 					car.sliding = false;
+					car.finished_slide = false;
 				}
 			} else {
 				if linalg.length(surface_velocity) > 2 && slip_angle > 0.6 {
@@ -270,12 +283,14 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 		accel_slide_multiplier: f32 = 1;
 
 		if car.sliding {
+			ANG_FRIC :: 6; // Rotational deceleration
+
 			car.current_steer_angle = 0;
 			ang_vel := linalg.dot(car_ang_vel, surface_normal);
 			ang_accel: f32;
 			
 			if steer_multiplier == 0 {
-				ang_accel = -clamp(ang_vel, -6 * dt, 6 * dt);
+				ang_accel = -clamp(ang_vel, -ANG_FRIC * dt, ANG_FRIC * dt);
 			} else {
 				MAX_ROTATION_SPEED :: 2;
 
@@ -286,12 +301,26 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 
 			car.angular_velocity += surface_normal * ang_accel;
 
+			lat_fric: f32 = 20; // Lateral deceleration
+
+			// Increase the lateral deceleration when the speed is high.
+			// This is for leaving the drift. Without it, the car takes a tad too long to leave the sliding state.
+			if vel > 25 {
+				lat_fric_multiplier := clamp(vel / TOP_SPEED, 0, 1);
+				lat_fric += 10 * lat_fric_multiplier
+			}
+
 			surface_lat := linalg.normalize(linalg.cross(car_forward, surface_normal));
 			lat_vel := linalg.dot(car_vel, surface_lat);
-			lat_accel := clamp(lat_vel, -20 * dt, 20 * dt);
+			lat_accel := clamp(lat_vel, -lat_fric * dt, lat_fric * dt);
 			car.velocity -= surface_lat * lat_accel;
 
 			accel_slide_multiplier = 0.5 + 0.5 * (1 - min(abs(lat_vel) / 20, 1));
+
+			// If the lateral and angular velocities have been fully resolved, we're officially done sliding.
+			if abs(lat_vel) <= lat_fric * dt && abs(ang_vel) <= ANG_FRIC * dt {
+				car.finished_slide = true;
+			}
 		} else {
 			if front_left_contact_normal_ok || front_right_contact_normal_ok {
 				LOW_SPEED :: 0.2;
@@ -364,7 +393,7 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 			}
 		}
 
-		if false {
+		if true {
 			car_geo := get_geometry_from_entity_lookup(car.lookup);
 
 			color: [3]f32;
