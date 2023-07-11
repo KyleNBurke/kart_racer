@@ -201,13 +201,6 @@ calculate_car_inertia_tensor :: proc(orientation: linalg.Quaternionf32) -> linal
 }
 
 move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity, dt: f32) {
-	{ // temp #nocheckin
-		if gamepad_button_pressed(gamepad, glfw.GAMEPAD_BUTTON_Y) {\
-			// car.orientation = car.orientation * linalg.quaternion_from_euler_angles_f32(-0.3, 0, 0, .YXZ);
-			car.orientation = linalg.quaternion_from_euler_angles_f32(-0.7, 0, 0, .YXZ);
-		}
-	}
-
 	accel_multiplier: f32 = 0;
 	steer_multiplier: f32 = 0;
 	
@@ -268,7 +261,7 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 			}
 		} else {
 			if car.sliding {
-				if car.finished_slide {
+				if linalg.length(surface_velocity) < 2 || car.finished_slide {
 					car.sliding = false;
 					car.finished_slide = false;
 				}
@@ -294,9 +287,13 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 			} else {
 				MAX_ROTATION_SPEED :: 2;
 
-				if abs(ang_vel) < MAX_ROTATION_SPEED {
+				if abs(ang_vel) <= MAX_ROTATION_SPEED {
 					ang_accel = math.sign(steer_multiplier) * min(MAX_ROTATION_SPEED - abs(ang_vel), 5 * abs(steer_multiplier) * dt);
-				} // handle else case? When we're rotating fater than the max rotation speed? #nocheckin
+				} else {
+					// If you're spinning more than the max rotation speed and the steer angle is in the opposite direction, we could
+					// apply a rotational acceleration in that direction to slow it down. Right now, we're just applying the friction.
+					ang_accel = -clamp(ang_vel, -ANG_FRIC * dt, ANG_FRIC * dt);
+				}
 			}
 
 			car.angular_velocity += surface_normal * ang_accel;

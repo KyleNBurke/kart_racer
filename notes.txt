@@ -76,7 +76,6 @@ Todo
 		- [done] Left stick should control the pitch rotation.
 		- Landing upside down should always roll you over automatically or you should have strong control over it.
 			- If you're upside down, you should maybe even be able to rotate the car left and right.
-		- Camera flips around all crazy
 	- Upper collision hull on the car
 	- The boost jet off the ledge
 		- Car does not return to top speed fast enough
@@ -84,10 +83,7 @@ Todo
 		- Hitting the wall feels bad
 		- Maybe more let's get this feeling good
 	- Car
-		- We're going to commit this because it's like 95% the way there.
-		- [DO NOW] Laterial snap when transitioning: Try the idea of letting the lateral friction fully resolve before determining the car is no longer slipping. We may even increase the laterl force if the speed is high?
-		- [DO NOW] When slipping, do something to the case when the car is rotating faster than the max rotation.
-		- [DO NOW] Weight distribution multiplier for lateral movement.
+		- Weight distribution multiplier for lateral movement.
 		- Nose dive and pitch up work when against a wall?
 		- Adjust going off a jump and landing slide threshold?
 		- Pressing handbreak button in the air should start the timer once it hits the ground. If you don't hit the ground within a certain amount of time, ignore the button press?
