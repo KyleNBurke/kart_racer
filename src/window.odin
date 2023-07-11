@@ -25,9 +25,12 @@ init_window :: proc(window: ^glfw.WindowHandle) {
 	window^ = glfw.CreateWindow(window_width, window_height, "Kart Guys", nil, nil);
 	assert(window != nil);
 
-	window_pos_x := cast(c.int) config.window_pos_x;
-	window_pos_y := cast(c.int) config.window_pos_y;
-	glfw.SetWindowPos(window^, window_pos_x, window_pos_y);
+	if config.window_state == .Normal {
+		// In GLFW 3.4, there is a hint for the position we can use
+		window_pos_x := cast(c.int) config.window_pos_x;
+		window_pos_y := cast(c.int) config.window_pos_y;
+		glfw.SetWindowPos(window^, window_pos_x, window_pos_y);
+	}
 
 	glfw.SetFramebufferSizeCallback(window^, framebuffer_size_callback);
 	glfw.SetWindowPosCallback(window^, pos_callback);
@@ -39,20 +42,11 @@ init_window :: proc(window: ^glfw.WindowHandle) {
 
 framebuffer_size_callback : glfw.FramebufferSizeProc : proc "c" (window: glfw.WindowHandle, width, height: c.int) {
 	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
-	callback_state.framebuffer_size_change = true;
-	
-	context = runtime.default_context();
-	config.window_width = int(width);
-	config.window_height = int(height);
-
+	callback_state.framebuffer_size_change = true
 	callback_state.config_changed = true;
 }
 
 pos_callback : glfw.WindowPosProc : proc "c" (window: glfw.WindowHandle, xpos, ypos: c.int) {
-	context = runtime.default_context();
-	config.window_pos_x = int(xpos);
-	config.window_pos_y = int(ypos);
-
 	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
 	callback_state.config_changed = true;
 }
@@ -63,9 +57,6 @@ iconify_callback : glfw.WindowIconifyProc : proc "c" (window: glfw.WindowHandle,
 }
 
 maximized_callback : glfw.WindowMaximizeProc : proc "c" (window: glfw.WindowHandle, maximized: c.int) {
-	context = runtime.default_context();
-	config.window_state = maximized == 1 ? .Maximized : .Normal;
-	
 	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
 	callback_state.config_changed = true;
 }

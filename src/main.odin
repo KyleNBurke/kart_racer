@@ -123,7 +123,7 @@ run :: proc(game: ^Game) {
 		}
 
 		if callback_state.config_changed {
-			save_config();
+			update_config_from_window_change(game.window);
 			callback_state.config_changed = false;
 		}
 

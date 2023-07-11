@@ -7,6 +7,7 @@ import "core:strings";
 import "core:strconv";
 import "core:reflect";
 import "core:slice";
+import "vendor:glfw";
 
 CONFIG_FILE :: "res/config.txt";
 
@@ -115,6 +116,26 @@ load_config :: proc() {
 	}
 
 	fmt.printf("Loaded config file %s\n", CONFIG_FILE);
+}
+
+update_config_from_window_change :: proc(window: glfw.WindowHandle) {
+	maximized := glfw.GetWindowAttrib(window, glfw.MAXIMIZED);
+
+	if maximized == 1 {
+		config.window_state = .Maximized;
+	} else {
+		config.window_state = .Normal;
+
+		framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(window);
+		config.window_width = int(framebuffer_width);
+		config.window_height = int(framebuffer_height);
+
+		pos_x, pos_y := glfw.GetWindowPos(window);
+		config.window_pos_x = int(pos_x);
+		config.window_pos_y = int(pos_y);
+	}
+
+	save_config();
 }
 
 save_config :: proc() {
