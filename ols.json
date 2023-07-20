@@ -2,7 +2,7 @@
 	"$schema": "https://raw.githubusercontent.com/DanielGavin/ols/master/misc/ols.schema.json",
 	"collections": [
 		{ "name": "core", "path": "C:/Users/kylen/Development/Odin/core" },
-		{ "name": "shared", "path": "C:/Users/kylen/Development/Odin/vendor" }
+		{ "name": "vendor", "path": "C:/Users/kylen/Development/Odin/vendor" }
 	],
 	"enable_semantic_tokens": true,
 	"enable_document_symbols": true,
