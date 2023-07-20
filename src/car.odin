@@ -243,7 +243,7 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 		surface_velocity_dir := linalg.normalize(surface_velocity);
 		slip_angle := math.acos(linalg.dot(surface_velocity_dir, car_forward));
 
-		if gamepad_button_held(gamepad, glfw.GAMEPAD_BUTTON_A) {
+		if glfw.GetKey(window, glfw.KEY_SPACE) == glfw.PRESS || gamepad_button_held(gamepad, glfw.GAMEPAD_BUTTON_A) {
 			car.handbrake_duration = 0;
 		}
 

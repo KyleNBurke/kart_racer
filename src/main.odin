@@ -122,9 +122,9 @@ run :: proc(game: ^Game) {
 			continue;
 		}
 
-		if callback_state.config_changed {
+		if callback_state.window_config_changed {
 			update_config_from_window_change(game.window);
-			callback_state.config_changed = false;
+			callback_state.window_config_changed = false;
 		}
 
 		if callback_state.framebuffer_size_change || suboptimal_swapchain {

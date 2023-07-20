@@ -7,7 +7,7 @@ import "vendor:glfw";
 Callback_State :: struct {
 	framebuffer_size_change: bool,
 	minimized: bool,
-	config_changed: bool,
+	window_config_changed: bool,
 	game: ^Game,
 }
 
@@ -43,12 +43,12 @@ init_window :: proc(window: ^glfw.WindowHandle) {
 framebuffer_size_callback : glfw.FramebufferSizeProc : proc "c" (window: glfw.WindowHandle, width, height: c.int) {
 	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
 	callback_state.framebuffer_size_change = true
-	callback_state.config_changed = true;
+	callback_state.window_config_changed = true;
 }
 
 pos_callback : glfw.WindowPosProc : proc "c" (window: glfw.WindowHandle, xpos, ypos: c.int) {
 	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
-	callback_state.config_changed = true;
+	callback_state.window_config_changed = true;
 }
 
 iconify_callback : glfw.WindowIconifyProc : proc "c" (window: glfw.WindowHandle, iconified: c.int) {
@@ -58,7 +58,7 @@ iconify_callback : glfw.WindowIconifyProc : proc "c" (window: glfw.WindowHandle,
 
 maximized_callback : glfw.WindowMaximizeProc : proc "c" (window: glfw.WindowHandle, maximized: c.int) {
 	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
-	callback_state.config_changed = true;
+	callback_state.window_config_changed = true;
 }
 
 content_scale_callback : glfw.WindowContentScaleProc : proc "c" (window: glfw.WindowHandle, xscale, yscale: f32) {
