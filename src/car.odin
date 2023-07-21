@@ -402,6 +402,22 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 
 			geometry_set_color(car_geo, color);
 		}
+	} else {
+		PITCH_DRAG :: 1.5;
+
+		// Air controls
+		pitch_multiplier := gamepad_stick_adjusted_pos(gamepad, 1);
+		pitch_ang_vel := linalg.dot(car_left, car.angular_velocity);
+
+		pitch_accel: f32;
+
+		if pitch_multiplier == 0 {
+			pitch_accel = -clamp(pitch_ang_vel, -PITCH_DRAG * dt, PITCH_DRAG * dt);
+		} else {
+			pitch_accel = math.sign(pitch_multiplier) * min(2 - abs(pitch_ang_vel), 3 * abs(pitch_multiplier) * dt);
+		}
+
+		car.angular_velocity += car_left * pitch_accel;
 	}
 }
 
