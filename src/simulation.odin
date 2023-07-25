@@ -37,7 +37,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 		rigid_body.tentative_inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(rigid_body.tentative_orientation, rigid_body.inv_local_inertia_tensor);
 
 		rigid_body.tentative_transform = linalg.matrix4_from_trs(rigid_body.tentative_position, rigid_body.tentative_orientation, rigid_body.size);
-		move_rigid_body_tentatively_in_grid(&game.entity_grid, rigid_body);
+		move_rigid_body_tentatively_in_grid(&game.entity_grid, lookup, rigid_body);
 
 		rigid_body.checked_collision = false;
 		init_island(&game.islands, lookup, rigid_body);
@@ -244,7 +244,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 			rigid_body.checked_collision = false;
 		} else {
 			// Remove from entity grid
-			remove_entity_from_grid(&game.entity_grid, rigid_body);
+			remove_entity_from_grid(&game.entity_grid, lookup, rigid_body);
 
 			// Remove from islands
 			remove_rigid_body_from_island(&game.islands, lookup, rigid_body);
@@ -291,16 +291,20 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 			// Spawn shrapnel pieces
 			for shrapnel in &game.runtime_assets.shock_barrel_shrapnel {
-				position := math2.matrix4_transform_point(rigid_body.transform, shrapnel.position);
-				orientation := rigid_body.orientation * shrapnel.orientation;
-				size := rigid_body.size * shrapnel.size;
-				shrapnel_rigid_body := new_rigid_body_entity("shrapnel", position, orientation, size, 1, shrapnel.dimensions);
+				shrapnel_rigid_body, shrapnel_lookup := create_entity("shrapnel", shrapnel.geometry_lookup, Rigid_Body_Entity);
+
+				shrapnel_rigid_body.position = math2.matrix4_transform_point(rigid_body.transform, shrapnel.position);
+				shrapnel_rigid_body.orientation = rigid_body.orientation * shrapnel.orientation;
+				shrapnel_rigid_body.size = rigid_body.size * shrapnel.size;
 				shrapnel_rigid_body.collision_exclude = true;
-				shrapnel_lookup := add_entity(shrapnel.geometry_lookup, shrapnel_rigid_body);
+
+				init_rigid_body_entity(shrapnel_rigid_body, 1, shrapnel.dimensions);
+				update_entity_transform(shrapnel_rigid_body);
+
 				hull := init_collision_hull(shrapnel.hull_local_position, shrapnel.hull_local_orientation, shrapnel.hull_local_size, .Box);
 				append(&shrapnel_rigid_body.collision_hulls, hull);
 				update_entity_hull_transforms_and_bounds(shrapnel_rigid_body, shrapnel_rigid_body.orientation, shrapnel_rigid_body.transform);
-				insert_entity_into_grid(&game.entity_grid, shrapnel_rigid_body);
+				insert_entity_into_grid(&game.entity_grid, shrapnel_lookup, shrapnel_rigid_body);
 
 				append(&additional_awake_entities, shrapnel_lookup);
 				
@@ -310,9 +314,11 @@ simulate :: proc(game: ^Game, dt: f32) {
 			
 			switch rigid_body.status_effect {
 			case .ExplodingShock:
-				// Spawn shock cloud
-				cloud := new_cloud_entity(rigid_body.position, .Shock);
-				cloud_lookup := add_entity(nil, cloud);
+				cloud, cloud_lookup := create_entity("shock cloud", nil, Cloud_Entity);
+				cloud.position = rigid_body.position;
+				cloud.status_effect =.Shock;
+				update_entity_transform(cloud);
+
 
 				HULL_POSITION :: linalg.Vector3f32 {0, 0.5, 0};
 				HULL_SIZE :: linalg.Vector3f32 {4, 2, 4};
@@ -320,7 +326,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 				hull := init_collision_hull(HULL_POSITION, linalg.QUATERNIONF32_IDENTITY, HULL_SIZE, .Sphere);
 				append(&cloud.collision_hulls, hull);
 				update_entity_hull_transforms_and_bounds(cloud, cloud.orientation, cloud.transform);
-				insert_entity_into_grid(&game.entity_grid, cloud);
+				insert_entity_into_grid(&game.entity_grid, cloud_lookup, cloud);
 
 				append(&game.status_effect_cloud_lookups, cloud_lookup);
 			
@@ -355,8 +361,8 @@ simulate :: proc(game: ^Game, dt: f32) {
 				};
 
 				if config.explosion_helpers {
-					bounds_helper_geo := init_box_helper("", bounds.min, bounds.max);
-					add_geometry(bounds_helper_geo, .KeepRender);
+					geometry, _ := create_geometry("explosion helper", .KeepRender);
+					geometry_make_box_helper(geometry, bounds.min, bounds.max);
 				}
 
 				ground_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, bounds);
@@ -391,18 +397,23 @@ simulate :: proc(game: ^Game, dt: f32) {
 							}
 							
 							if config.explosion_helpers {
-								g2 := init_line_helper("", origin, segment);
-								add_geometry(g2, .KeepRender);
+								geometry, _ := create_geometry("explosion helper", .KeepRender);
+								geometry_make_line_helper(geometry, origin, segment);
 							}
 
 							intersection_point := origin + ray_direction * intersection_length;
 							i := rand.int_max(len(game.runtime_assets.oil_slicks));
 							oil_slick_asset := &game.runtime_assets.oil_slicks[i];
 
+							oil_slick_entity, oil_slick_entity_lookup := create_entity("oil slick", oil_slick_asset.geometry_lookup, Oil_Slick_Entity);
+							
 							orientation := linalg.quaternion_between_two_vector3(linalg.VECTOR3F32_Y_AXIS, ground_triangle.normal);
-							oil_slick_entity := new_oil_slick_entity("", intersection_point, orientation, linalg.Vector3f32 {1, 1, 1}, 13);
+
+							oil_slick_entity.position = intersection_point;
+							oil_slick_entity.orientation = orientation;
 							oil_slick_entity.on_fire = true;
-							oil_slick_entity_lookup := add_entity(oil_slick_asset.geometry_lookup, oil_slick_entity);
+							oil_slick_entity.desired_fire_particles = 13;
+							update_entity_transform(oil_slick_entity);
 							
 							hull_indices_copy := slice.clone_to_dynamic(oil_slick_asset.hull_indices[:]);
 							hull_positions_copy := slice.clone_to_dynamic(oil_slick_asset.hull_positions[:]);
@@ -423,7 +434,8 @@ simulate :: proc(game: ^Game, dt: f32) {
 			}
 
 			// Rmove from entity geos
-			remove_entity(lookup);
+			// #todo: Let's have this take in ALL the shit and handle it
+			remove_rigid_body_entity(lookup);
 		}
 	}
 
@@ -813,8 +825,8 @@ clear_contact_helpers :: proc(contact_helpers: ^[dynamic]Geometry_Lookup) {
 
 add_contact_helper :: proc(contact_helpers: ^[dynamic]Geometry_Lookup, manifold: ^Contact_Manifold) {
 	for contact in small_array.slice(&manifold.contacts) {
-		geo := init_line_helper("contact_helper", contact.position_b, manifold.normal * 3);
-		geo_lookup := add_geometry(geo, .KeepRender);
-		append(contact_helpers, geo_lookup);
+		geometry, geometry_lookup := create_geometry("contact helper", .KeepRender);
+		geometry_make_line_helper(geometry, contact.position_b, manifold.normal * 3);
+		append(contact_helpers, geometry_lookup);
 	}
 }

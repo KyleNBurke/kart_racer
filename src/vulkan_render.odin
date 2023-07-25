@@ -140,55 +140,51 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, texts: ^[dyna
 	{
 		first_instance: u32 = 0;
 
-		for record in &entities_geos.geometry_records {
-			if record.freed || (len(record.entity_lookups) == 0 && record.on_no_entities == .Keep) {
+		for &geometry in entities_geos.geometries {
+			if geometry.free || (len(geometry.entity_lookups) == 0 && geometry.on_no_entities == .Keep) {
 				continue;
 			}
 
-			index_array_size := size_of(u16) * len(record.geometry.indices);
-			attribute_array_size := size_of(f32) * len(record.geometry.attributes);
+			index_array_size := size_of(u16) * len(geometry.indices);
+			attribute_array_size := size_of(f32) * len(geometry.attributes);
 
 			index_array_offset := geometry_offset;
 			attribute_array_offset := math2.align_forward(index_array_offset + index_array_size, 4);
 			geometry_offset = attribute_array_offset + attribute_array_size;
 
 			when ODIN_DEBUG {
-				if len(record.entity_lookups) == 0 {
-					error_message := fmt.tprintf("Geometry '%s' was created and marked to be freed on no entity lookups but it was never assigned an entity lookup", record.geometry.name);
-					assert(record.on_no_entities == .KeepRender, error_message);
-				}
-
 				assert(geometry_offset <= instance_offset);
 				assert(first_instance <= MAX_ENTITIES);
 			}
 
 			// Copy geometry data
-			mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, index_array_offset), raw_data(record.geometry.indices), index_array_size);
-			mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, attribute_array_offset), raw_data(record.geometry.attributes), attribute_array_size);
+			mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, index_array_offset), raw_data(geometry.indices), index_array_size);
+			mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, attribute_array_offset), raw_data(geometry.attributes), attribute_array_size);
 
 			instance_count: u32;
 
 			// Copy matrix data
-			if len(record.entity_lookups) == 0 {
+			if len(geometry.entity_lookups) == 0 {
+				// It must be the .KeepRender case so render this geometry with an identity matrix
 				transform := linalg.MATRIX4F32_IDENTITY;
 				mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, instance_offset), &transform, size_of(linalg.Matrix4f32));
 				instance_offset += MESH_INSTANCE_ELEMENT_SIZE;
 				instance_count = 1;
 			} else {
-				for entity_lookup in &record.entity_lookups {
-					entity := entities_geos.entity_records[entity_lookup.index].entity;
+				for entity_lookup in geometry.entity_lookups {
+					entity := get_entity(entity_lookup);
 					mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, instance_offset), &entity.transform, size_of(linalg.Matrix4f32));
 					instance_offset += MESH_INSTANCE_ELEMENT_SIZE;
 				}
 
-				instance_count = cast(u32) len(record.entity_lookups);
+				instance_count = cast(u32) len(geometry.entity_lookups);
 			}
 
 			// Record draw commandcd
 			offset := cast(vk.DeviceSize) attribute_array_offset;
 
 			secondary_command_buffer: vk.CommandBuffer;
-			switch record.geometry.pipeline {
+			switch geometry.pipeline {
 			case .Line:
 				secondary_command_buffer = line_secondary_command_buffer;
 			case .Basic:
@@ -201,7 +197,7 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, texts: ^[dyna
 
 			vk.CmdBindIndexBuffer(secondary_command_buffer, per_instance_buffer, cast(vk.DeviceSize) index_array_offset, .UINT16);
 			vk.CmdBindVertexBuffers(secondary_command_buffer, 0, 1, &per_instance_buffer, &offset);
-			vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(record.geometry.indices), instance_count, 0, 0, first_instance);
+			vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(geometry.indices), instance_count, 0, 0, first_instance);
 
 			first_instance += instance_count;
 		}

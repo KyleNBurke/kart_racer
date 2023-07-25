@@ -185,7 +185,7 @@ update_island_helpers :: proc(islands: ^Islands) {
 
 	clear(&islands.island_helpers);
 
-	for island in &islands.islands {
+	for &island in islands.islands {
 		if island.state == .Free do continue;
 
 		bounds_min := linalg.Vector3f32 { max(f32), max(f32), max(f32) };
@@ -200,10 +200,11 @@ update_island_helpers :: proc(islands: ^Islands) {
 			}
 		}
 
-		color := [?]f32 {1, 1, 1} if island.state == .Asleep else [?]f32 {0, 1, 0};
-		geo := init_box_helper("Island visualizer", bounds_min, bounds_max, color);
-		geo_lookup := add_geometry(geo, .KeepRender);
-		append(&islands.island_helpers, geo_lookup);
+		geometry, geometry_lookup := create_geometry("island visualizer", .KeepRender);
+
+		color := island.state == .Asleep ? [?]f32 {1, 1, 1} : [?]f32 {0, 1, 0};
+		geometry_make_box_helper(geometry, bounds_min, bounds_max, color);
+		append(&islands.island_helpers, geometry_lookup);
 	}
 }
 

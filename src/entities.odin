@@ -5,8 +5,10 @@ import "core:strings";
 import "math2";
 
 Entity :: struct {
-	lookup: Entity_Lookup,
 	name: string,
+	free: bool,
+	generation: u32,
+	geometry_lookup: Maybe(Geometry_Lookup),
 	position: linalg.Vector3f32,
 	orientation: linalg.Quaternionf32,
 	size: linalg.Vector3f32,
@@ -133,50 +135,11 @@ Boost_Jet_Entity :: struct {
 	particles: [dynamic]Game_Particle,
 }
 
-init_entity :: proc(e: ^Entity, name: string, position: linalg.Vector3f32, orientation: linalg.Quaternionf32, size: linalg.Vector3f32) {
-	e.name = strings.clone(name);
-	e.position = position;
-	e.orientation = orientation;
-	e.size = size;
-	e.transform = linalg.matrix4_from_trs(position, orientation, size);
-}
-
 update_entity_transform :: proc(using entity: ^Entity) {
 	transform = linalg.matrix4_from_trs(position, orientation, size);
 }
 
-new_inanimate_entity :: proc(
-	name: string,
-	position := linalg.Vector3f32 {0.0, 0.0, 0.0},
-	orientation := linalg.QUATERNIONF32_IDENTITY,
-	size := linalg.Vector3f32 {1.0, 1.0, 1.0},
-) -> ^Inanimate_Entity {
-	e := new(Inanimate_Entity);
-	e.variant = e;
-	init_entity(e, name, position, orientation, size);
-
-	return e;
-}
-
-new_cloud_entity :: proc(position: linalg.Vector3f32, status_effect: Cloud_Status_Effect) -> ^Cloud_Entity {
-	e := new(Cloud_Entity);
-	e.variant = e;
-	init_entity(e, "cloud", position, linalg.QUATERNIONF32_IDENTITY, linalg.Vector3f32 {1, 1, 1});
-
-	e.status_effect = status_effect;
-
-	return e;
-}
-
-new_rigid_body_entity :: proc(
-	name: string,
-	position := linalg.Vector3f32 {0.0, 0.0, 0.0},
-	orientation := linalg.QUATERNIONF32_IDENTITY,
-	size := linalg.Vector3f32 {1.0, 1.0, 1.0},
-	mass: f32,
-	dimensions: linalg.Vector3f32,
-	status_effect: Status_Effect = .None,
-) -> ^Rigid_Body_Entity {
+init_rigid_body_entity :: proc(entity: ^Rigid_Body_Entity, mass: f32, dimensions: linalg.Vector3f32) {
 	k := mass / 12.0;
 	
 	width  := dimensions.x;
@@ -192,19 +155,12 @@ new_rigid_body_entity :: proc(
 		0.0, 1.0 / h, 0.0,
 		0.0, 0.0, 1.0 / d,
 	};
-
-	e := new(Rigid_Body_Entity);
-	e.variant = e;
-	init_entity(e, name, position, orientation, size);
 	
-	e.mass = mass;
-	e.inv_local_inertia_tensor = inv_local_inertia_tensor;
-	e.tentative_inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
-	e.island_index = -1;
-	e.status_effect = status_effect;
-	e.exploding_health = 100;
-
-	return e;
+	entity.mass = mass;
+	entity.inv_local_inertia_tensor = inv_local_inertia_tensor;
+	entity.tentative_inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
+	entity.island_index = -1;
+	entity.exploding_health = 100;
 }
 
 CAR_MASS: f32 : 300;
@@ -223,57 +179,8 @@ CAR_INV_LOCAL_INERTIA_TENSOR :: linalg.Matrix3f32 {
 	0.0, 0.0, 1.0 / CAR_D,
 };
 
-new_car_entity :: proc(position: linalg.Vector3f32, orientation: linalg.Quaternionf32) -> ^Car_Entity {
-	e := new(Car_Entity);
-	e.variant = e;
-	init_entity(e, "car", position, orientation, linalg.Vector3f32 {1, 1, 1});
-	
-	e.tentative_inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
-	e.tentative_transform = linalg.MATRIX4F32_IDENTITY;
-
-	e.handbrake_duration = 10; // If this were to be initialized at 0, the car would be sliding.
-
-	return e;
-}
-
-new_oil_slick_entity :: proc(
-	name: string,
-	position: linalg.Vector3f32,
-	orientation: linalg.Quaternionf32,
-	size: linalg.Vector3f32,
-	desired_fire_paricles: int,
-) -> ^Oil_Slick_Entity {
-	e := new(Oil_Slick_Entity);
-	e.variant = e;
-	init_entity(e, name, position, orientation, size);
-
-	e.desired_fire_particles = desired_fire_paricles;
-
-	return e;
-}
-
-new_bumper_entity :: proc(
-	name: string,
-	position: linalg.Vector3f32,
-	orientation: linalg.Quaternionf32,
-	size: linalg.Vector3f32,
-) -> ^Bumper_Entity {
-	e := new(Bumper_Entity);
-	e.variant = e;
-	init_entity(e, name, position, orientation, size);
-
-	return e;
-}
-
-new_boost_jet_entity :: proc(
-	name: string,
-	position: linalg.Vector3f32,
-	orientation: linalg.Quaternionf32,
-	size: linalg.Vector3f32,
-) -> ^Boost_Jet_Entity {
-	e := new(Boost_Jet_Entity);
-	e.variant = e;
-	init_entity(e, name, position, orientation, size);
-
-	return e;
+init_car_entity :: proc(entity: ^Car_Entity) {
+	entity.tentative_inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
+	entity.tentative_transform = linalg.MATRIX4F32_IDENTITY;
+	entity.handbrake_duration = 10; // If this were to be initialized at 0, the car would be sliding.
 }

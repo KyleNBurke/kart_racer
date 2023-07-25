@@ -12,31 +12,42 @@ YELLOW :: [3]f32 {1, 1, 0};
 
 Geometry :: struct {
 	name: string,
+	free: bool,
+	generation: u32,
+	entity_lookups: [dynamic]Entity_Lookup,
+	on_no_entities: On_No_Entities,
 	indices: [dynamic]u16,
 	attributes: [dynamic]f32,
 	pipeline: Pipeline,
 }
 
+On_No_Entities :: enum {
+	Keep,       // Will not free the geometry
+	KeepRender, // Will not free the geometry and will render it with an identity matrix
+	Free,       // Free the geometry
+}
+
 Pipeline :: enum { Line, Basic, Lambert, LambertTwoSided }
 
-init_empty_geometry :: proc(name: string) -> Geometry {
-	name_copy := strings.clone(name);
-	return Geometry { name = name_copy };
+geometry_make_triangle_mesh :: proc(geo: ^Geometry, indices: [dynamic]u16, attributes: [dynamic]f32, pipeline: Pipeline) {
+	assert(len(indices) % 3 == 0);
+	assert(len(attributes) % 9 == 0);
+	assert(pipeline != .Line);
+
+	// #nocheckin this could be a memory leak
+	geo.indices = indices;
+	geo.attributes = attributes;
+	geo.pipeline = pipeline;
 }
 
-init_triangle_geometry :: proc(name: string, indices: [dynamic]u16, attributes: [dynamic]f32, pipeline: Pipeline) -> Geometry {
-	when ODIN_DEBUG {
-		assert(len(indices) % 3 == 0);
-		assert(len(attributes) % 9 == 0);
-		assert(pipeline != .Line);
-	}
+geometry_make_box :: proc(geo: ^Geometry, color: [3]f32 = GREY, pipeline: Pipeline) {
+	assert(pipeline != .Line);
 
-	name_copy := strings.clone(name);
-	return Geometry { name_copy, indices, attributes, pipeline };
-}
+	clear(&geo.indices);
+	clear(&geo.attributes);
+	geo.pipeline = pipeline;
 
-init_box :: proc(name: string, color: [3]f32 = GREY) -> Geometry {
-	indices := [dynamic]u16 {
+	append(&geo.indices,
 		0,  3,  2,  // top
 		0,  2,  1,
 		4,  6,  7,  // bottom
@@ -49,11 +60,11 @@ init_box :: proc(name: string, color: [3]f32 = GREY) -> Geometry {
 		16, 18, 19,
 		20, 23, 22, // back
 		20, 22, 21,
-	};
+	);
 
 	r, g, b := color[0], color[1], color[2];
 
-	attributes := [dynamic]f32 {
+	append(&geo.attributes,
 		1.0,  1.0,  1.0,  0.0,  1.0,  0.0, r, g, b, // top
 	   -1.0,  1.0,  1.0,  0.0,  1.0,  0.0, r, g, b,
 	   -1.0,  1.0, -1.0,  0.0,  1.0,  0.0, r, g, b,
@@ -78,24 +89,15 @@ init_box :: proc(name: string, color: [3]f32 = GREY) -> Geometry {
 	   -1.0,  1.0, -1.0,  0.0,  0.0, -1.0, r, g, b,
 	   -1.0, -1.0, -1.0,  0.0,  0.0, -1.0, r, g, b,
 		1.0, -1.0, -1.0,  0.0,  0.0, -1.0, r, g, b,
-   };
-
-	name_copy := strings.clone(name);
-	return Geometry { name_copy, indices, attributes, .Lambert };
+	);
 }
 
-init_line_helper :: proc(name: string, origin, vector: linalg.Vector3f32, color: [3]f32 = YELLOW) -> Geometry {
-	name_copy := strings.clone(name);
-	geo := Geometry { name = name_copy };
-	set_line_helper(&geo, origin, vector, color);
-	return geo;
-}
+geometry_make_line_helper :: proc(geo: ^Geometry, origin, vector: linalg.Vector3f32, color: [3]f32 = YELLOW) {
+	clear(&geo.indices);
+	clear(&geo.attributes);
+	geo.pipeline = .Line;
 
-set_line_helper :: proc(using geometry: ^Geometry, origin, vector: linalg.Vector3f32, color: [3]f32 = YELLOW) {
-	clear(&indices);
-	clear(&attributes);
-
-	append(&indices, 0, 1);
+	append(&geo.indices, 0, 1);
 
 	s := origin;
 	e := origin + vector;
@@ -104,26 +106,28 @@ set_line_helper :: proc(using geometry: ^Geometry, origin, vector: linalg.Vector
 	e_x, e_y, e_z := e[0], e[1], e[2];
 	r, g, b := color[0], color[1], color[2];
 
-	append(&attributes,
+	append(&geo.attributes,
 		s_x, s_y, s_z, r, g, b,
 		e_x, e_y, e_z, r, g, b,
 	);
-
-	pipeline = .Line;
 }
 
-init_box_helper :: proc(name: string, min: linalg.Vector3f32 = VEC3_NEG_ONE, max: linalg.Vector3f32 = VEC3_ONE, color: [3]f32 = YELLOW) -> Geometry {
-	indices := [dynamic]u16 {
+geometry_make_box_helper :: proc(geo: ^Geometry, min, max: linalg.Vector3f32, color: [3]f32 = YELLOW) {
+	clear(&geo.indices);
+	clear(&geo.attributes);
+	geo.pipeline = .Line;
+
+	append(&geo.indices,
 		0, 1, 0, 2, 3, 1, 3, 2,
 		5, 4, 5, 7, 6, 4, 6, 7,
 		0, 4, 5, 1, 3, 7, 6, 2,
-	};
+	);
 
 	min_x, min_y, min_z := min[0], min[1], min[2];
 	max_x, max_y, max_z := max[0], max[1], max[2];
 	r, g, b := color[0], color[1], color[2];
 
-	attributes := [dynamic]f32 {
+	append(&geo.attributes,
 		max_x, max_y, max_z, r, g, b,
 		max_x, min_y, max_z, r, g, b,
 		min_x, max_y, max_z, r, g, b,
@@ -132,15 +136,14 @@ init_box_helper :: proc(name: string, min: linalg.Vector3f32 = VEC3_NEG_ONE, max
 		max_x, min_y, min_z, r, g, b,
 		min_x, max_y, min_z, r, g, b,
 		min_x, min_y, min_z, r, g, b,
-	};
-
-	name_copy := strings.clone(name);
-	return Geometry { name_copy, indices, attributes, .Line };
+	);
 }
 
-init_cylinder_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
-	name_copy := strings.clone(name);
-	geo := Geometry { name = name_copy, pipeline = .Line };
+geometry_make_cylinder_helper :: proc(geo: ^Geometry, color: [3]f32 = YELLOW) {
+	clear(&geo.indices);
+	clear(&geo.attributes);
+	geo.pipeline = .Line;
+
 	r, g, b := color[0], color[1], color[2];
 
 	POINT_COUNT :: 8
@@ -162,13 +165,13 @@ init_cylinder_helper :: proc(name: string, color: [3]f32 = YELLOW) -> Geometry {
 			k + 1, (k + 3) % (POINT_COUNT * 2),
 		);
 	}
-
-	return geo;
 }
 
-init_sphere_helper :: proc(name: string, center: linalg.Vector3f32 = VEC3_ZERO, radius: f32 = 1, color: [3]f32 = YELLOW) -> Geometry {
-	name_copy := strings.clone(name);
-	geo := Geometry { name = name_copy, pipeline = .Line };
+geometry_make_sphere_helper :: proc(geo: ^Geometry, center: linalg.Vector3f32, radius: f32, color: [3]f32 = YELLOW) {
+	clear(&geo.indices);
+	clear(&geo.attributes);
+	geo.pipeline = .Line;
+
 	r, g, b := color[0], color[1], color[2];
 
 	POINT_COUNT :: 8;
@@ -214,8 +217,6 @@ init_sphere_helper :: proc(name: string, center: linalg.Vector3f32 = VEC3_ZERO, 
 	top_y := center.y + radius;
 	top_z := center.z;
 	append(&geo.attributes, top_x, top_y, top_z, r, g, b); // Top point
-
-	return geo;
 }
 
 geometry_set_color :: proc(geo: ^Geometry, color: [3]f32) {

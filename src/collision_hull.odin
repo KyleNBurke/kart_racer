@@ -105,14 +105,13 @@ Hull_Helpers :: struct {
 }
 
 init_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
-	box_helper_geo := init_box_helper("box hull visualizer");
-	hull_helpers.box_helper_geo_lookup = add_geometry(box_helper_geo, .Keep);
+	box_helper_geo, box_helper_geo_lookup := create_geometry("box hull visualizer", .Keep);
+	cylinder_helper_geo, cylinder_helper_geo_lookup := create_geometry("cylinder hull visualizer", .Keep);
+	sphere_helper_geo, sphere_helper_geo_lookup := create_geometry("sphere hull visualizer", .Keep);
 
-	cylinder_helper_geo := init_cylinder_helper("cylinder hull visualizer");
-	hull_helpers.cylinder_helper_geo_lookup = add_geometry(cylinder_helper_geo, .Keep);
-
-	sphere_helper_geo := init_sphere_helper("sphere hull visualizer");
-	hull_helpers.sphere_helper_geo_lookup = add_geometry(sphere_helper_geo, .Keep);
+	hull_helpers.box_helper_geo_lookup = box_helper_geo_lookup;
+	hull_helpers.cylinder_helper_geo_lookup = cylinder_helper_geo_lookup;
+	hull_helpers.sphere_helper_geo_lookup = sphere_helper_geo_lookup;
 }
 
 cleanup_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
@@ -121,41 +120,33 @@ cleanup_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 
 update_entity_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 	for lookup in &hull_helpers.hull_helpers {
-		remove_entity(lookup);
+		remove_inanimate_entity(lookup);
 	}
 
 	clear(&hull_helpers.hull_helpers);
 
-	for index in 1..<len(entities_geos.entity_records) {
-		entity_record := &entities_geos.entity_records[index];
+	for &entity, entity_index in entities_geos.entities {
+		if entity.free do continue;
 
-		// Hate it, but whatever, it's just a debug thing. If we ever end up with the ability to iterate over the lookups or entities maybe
-		// by a specific type, we could do it that way and remove the search.
-		if _, ok := slice.linear_search(entities_geos.free_entity_records[:], index); ok {
-			continue;
-		}
-
-		for hull in &entity_record.entity.collision_hulls {
-			geo: Geometry_Lookup;
+		for &hull in entity.collision_hulls {
+			geometry_lookup: Geometry_Lookup;
 			
 			switch hull.kind {
 			case .Box:
-				geo = hull_helpers.box_helper_geo_lookup;
+				geometry_lookup = hull_helpers.box_helper_geo_lookup;
 			case .Cylinder:
-				geo = hull_helpers.cylinder_helper_geo_lookup;
+				geometry_lookup = hull_helpers.cylinder_helper_geo_lookup;
 			case .Sphere:
-				geo = hull_helpers.sphere_helper_geo_lookup;
+				geometry_lookup = hull_helpers.sphere_helper_geo_lookup;
 			case .Mesh:
 				// We would want to create a wireframe triangle geometry here using the indices and positions. This would be a good thing to do on laptop.
 				// We actually wouldn't want to use a [dynamic]linalg.Vector3f32 for the positions in this case.
 				continue;
 			}
-			
-			helper := new_inanimate_entity("hull helper");
-			helper.transform = hull.global_transform;
 
-			helper_lookup := add_entity(geo, helper);
-			append(&hull_helpers.hull_helpers, helper_lookup);
+			entity, lookup := create_entity("hull helper", geometry_lookup, Inanimate_Entity);
+			entity.transform = hull.global_transform;
+			append(&hull_helpers.hull_helpers, lookup);
 		}
 	}
 }

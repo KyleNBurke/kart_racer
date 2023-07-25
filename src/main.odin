@@ -78,7 +78,6 @@ init :: proc(game: ^Game) {
 
 	init_window(&game.window);
 	init_vulkan(&game.vulkan, game.window);
-	init_entities_geos();
 	
 	camera_aspect := f32(game.vulkan.extent.width) / f32(game.vulkan.extent.height);
 	game.camera = init_camera(camera_aspect, 75.0, game.window);

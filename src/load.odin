@@ -112,14 +112,15 @@ load_level :: proc(using game: ^Game) {
 
 	// Geometries
 	geometries_count := read_u32(&bytes, &pos);
-	geometry_lookups := make([dynamic]Geometry_Lookup, geometries_count);
-	defer delete(geometry_lookups);
+	geometry_lookups := make([dynamic]Geometry_Lookup, 0, geometries_count, context.temp_allocator);
 
 	for i in 0..<geometries_count {
 		name := read_string(&bytes, &pos);
 		indices, attributes := read_indices_attributes(&bytes, &pos);
-		geometry := init_triangle_geometry(name, indices, attributes, .Lambert);
-		geometry_lookups[i] = add_geometry(geometry);
+
+		geometry, geometry_lookup := create_geometry(name);
+		geometry_make_triangle_mesh(geometry, indices, attributes, .Lambert);
+		append(&geometry_lookups, geometry_lookup);
 
 		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 	}
@@ -135,8 +136,13 @@ load_level :: proc(using game: ^Game) {
 			geometry_index := read_u32(&bytes, &pos);
 			hull_count := read_u32(&bytes, &pos);
 
-			inanimate_entity := new_inanimate_entity(name, position, orientation, size);
-			entity_lookup := add_entity(geometry_lookups[geometry_index], inanimate_entity);
+			geometry_lookup := geometry_lookups[geometry_index];
+			inanimate_entity, entity_lookup := create_entity(name, geometry_lookup, Inanimate_Entity);
+
+			inanimate_entity.position = position;
+			inanimate_entity.orientation = orientation;
+			inanimate_entity.size = size;
+			update_entity_transform(inanimate_entity);
 
 			for hull_index in 0..<hull_count {
 				local_position := read_vec3(&bytes, &pos);
@@ -151,7 +157,7 @@ load_level :: proc(using game: ^Game) {
 
 			if hull_count > 0 {
 				update_entity_hull_transforms_and_bounds(inanimate_entity, inanimate_entity.orientation, inanimate_entity.transform);
-				insert_entity_into_grid(&entity_grid, inanimate_entity);
+				insert_entity_into_grid(&entity_grid, entity_lookup, inanimate_entity);
 			}
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -185,9 +191,15 @@ load_level :: proc(using game: ^Game) {
 					case 4: status_effect = .ExplodingFire;
 				}
 
-				rigid_body := new_rigid_body_entity(name, position, orientation, size, mass, dimensions, status_effect);
+				geometry_lookup := geometry_lookups[geometry_index];
+				rigid_body, entity_lookup := create_entity(name, geometry_lookup, Rigid_Body_Entity);
+
+				rigid_body.position = position;
+				rigid_body.orientation = orientation;
+				rigid_body.size = size;
 				rigid_body.collision_exclude = collision_exclude;
-				entity_lookup := add_entity(geometry_lookups[geometry_index], rigid_body);
+				init_rigid_body_entity(rigid_body, mass, dimensions);
+				update_entity_transform(rigid_body);
 
 				hull_count := read_u32(&bytes, &pos);
 				for hull_index in 0..<hull_count {
@@ -202,7 +214,7 @@ load_level :: proc(using game: ^Game) {
 				}
 
 				update_entity_hull_transforms_and_bounds(rigid_body, rigid_body.orientation, rigid_body.transform);
-				insert_entity_into_grid(&entity_grid, rigid_body);
+				insert_entity_into_grid(&entity_grid, entity_lookup, rigid_body);
 
 				if config.init_sleeping_islands {
 					add_rigid_body_to_island(&islands, int(island_index), entity_lookup, rigid_body);
@@ -234,8 +246,9 @@ load_level :: proc(using game: ^Game) {
 			geometry_index := read_u32(&bytes, &pos);
 			particles_count := cast(int) read_u32(&bytes, &pos);
 
-			entity := new_oil_slick_entity(name, position, orientation, size, particles_count);
-			entity_lookup := add_entity(geometry_lookups[geometry_index], entity);
+			geometry_lookup := geometry_lookups[geometry_index];
+			entity, entity_lookup := create_entity(name, geometry_lookup, Oil_Slick_Entity);
+			entity.desired_fire_particles = particles_count;
 			append(&game.oil_slick_lookups, entity_lookup);
 
 			local_position := read_vec3(&bytes, &pos);
@@ -261,8 +274,14 @@ load_level :: proc(using game: ^Game) {
 			size := read_vec3(&bytes, &pos);
 			geometry_index := read_u32(&bytes, &pos);
 
-			entity := new_bumper_entity(name, position, orientation, size);
-			entity_lookup := add_entity(geometry_lookups[geometry_index], entity);
+			geometry_lookup := geometry_lookups[geometry_index];
+			entity, entity_lookup := create_entity(name, geometry_lookup, Bumper_Entity);
+			
+			entity.position = position;
+			entity.orientation = orientation;
+			entity.size = size;
+			update_entity_transform(entity);
+
 			append(&game.bumper_lookups, entity_lookup);
 
 			hull_position := read_vec3(&bytes, &pos);
@@ -273,7 +292,7 @@ load_level :: proc(using game: ^Game) {
 			append(&entity.collision_hulls, hull);
 			update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
 
-			insert_entity_into_grid(&entity_grid, entity);
+			insert_entity_into_grid(&entity_grid, entity_lookup, entity);
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 		}
@@ -289,8 +308,14 @@ load_level :: proc(using game: ^Game) {
 			size := read_vec3(&bytes, &pos);
 			geometry_index := read_u32(&bytes, &pos);
 
-			entity := new_boost_jet_entity(name, position, orientation, size);
-			entity_lookup := add_entity(geometry_lookups[geometry_index], entity);
+			geometry_lookup := geometry_lookups[geometry_index];
+			entity, entity_lookup := create_entity(name, geometry_lookup, Boost_Jet_Entity);
+
+			entity.position = position
+			entity.orientation = orientation;
+			entity.size = size;
+			update_entity_transform(entity);
+
 			append(&game.boost_jet_lookups, entity_lookup);
 
 			hull_position := read_vec3(&bytes, &pos);
@@ -301,9 +326,20 @@ load_level :: proc(using game: ^Game) {
 			append(&entity.collision_hulls, hull);
 			update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
 
-			insert_entity_into_grid(&entity_grid, entity);
+			insert_entity_into_grid(&entity_grid, entity_lookup, entity);
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+		}
+	}
+
+	// Ensure we've added an entity to all the geometries
+	when ODIN_DEBUG {
+		for geometry_lookup in geometry_lookups {
+			geometry := get_geometry(geometry_lookup);
+			
+			if len(geometry.entity_lookups) == 0 {
+				fmt.printf("[level loading] No entities were added to geometry '%s'.\n", geometry.name);
+			}
 		}
 	}
 
@@ -327,10 +363,17 @@ load_car :: proc(game: ^Game) {
 	assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 
 	{ // Geometry
-		geometry := init_triangle_geometry("car", indices, attributes, .Lambert);
-		geometry_lookup := add_geometry(geometry);
-		entity := new_car_entity(game.car_spawn_position, game.car_spawn_orientation);
-		add_entity(geometry_lookup, entity);
+		geometry, geometry_lookup := create_geometry("car");
+		geometry_make_triangle_mesh(geometry, indices, attributes, .Lambert);
+
+		entity, entity_lookup := create_entity("car", geometry_lookup, Car_Entity);
+
+		entity.position = game.car_spawn_position;
+		entity.orientation = game.car_spawn_orientation;
+		update_entity_transform(entity);
+
+		init_car_entity(entity);
+
 		game.car = entity;
 	}
 
@@ -346,12 +389,12 @@ load_car :: proc(game: ^Game) {
 
 	{ // Wheels
 		indices, attributes := read_indices_attributes(&bytes, &pos);
-		geometry := init_triangle_geometry("wheel", indices, attributes, .Lambert);
-		geometry_lookup := add_geometry(geometry);
+
+		geometry, geometry_lookup := create_geometry("wheel");
+		geometry_make_triangle_mesh(geometry, indices, attributes, .Lambert);
 
 		for i in 0..<4 {
-			entity := new_inanimate_entity("wheel");
-			entity_lookup := add_entity(geometry_lookup, entity);
+			_, entity_lookup := create_entity("wheel", geometry_lookup, Inanimate_Entity);
 			game.car.wheels[i].entity_lookup = entity_lookup;
 		}
 
@@ -385,12 +428,13 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 			hull_orientation := read_quat(&bytes, &pos);
 			hull_size := read_vec3(&bytes, &pos);
 			
-			geo := init_triangle_geometry("shrapnel", indices, attributes, .LambertTwoSided);
-			geo_lookup := add_geometry(geo, .Keep);
+			geometry, geometry_lookup := create_geometry("shrapnel", .Keep);
+			geometry_make_triangle_mesh(geometry, indices, attributes, .LambertTwoSided);
+
 			hull_local_transform := linalg.matrix4_from_trs(hull_position, hull_orientation, hull_size);
 
 			shrapnel := Shock_Barrel_Shrapnel_Asset {
-				geo_lookup,
+				geometry_lookup,
 				position,
 				orientation,
 				size,
@@ -416,13 +460,14 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 			hull_size := read_vec3(&bytes, &pos);
 			hull_indices, hull_positions := read_indices_attributes(&bytes, &pos);
 
-			geo := init_triangle_geometry("oil_slick_asset", indices, attributes, .Lambert);
-			geo_lookup := add_geometry(geo, .Keep);
+			geometry, geometry_lookup := create_geometry("Oil slick asset", .Keep);
+			geometry_make_triangle_mesh(geometry, indices, attributes, .Lambert);
 			
+			// #todo Should this be used? Is all we need for the oil slick asset this transform?
 			hull_local_transform := linalg.matrix4_from_trs(hull_position, hull_orientation, hull_size);
 
 			oil_slick := Oil_Slick_Asset {
-				geo_lookup,
+				geometry_lookup,
 				hull_position,
 				hull_orientation,
 				hull_size,
