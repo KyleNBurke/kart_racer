@@ -71,17 +71,17 @@ Todo
 - Versioning for font file
 - If you push a box using your car. It scoots away orthogonally. Maybe the friction direction could be in the direction the thing is moving in?
 - Boost meter. This will be fun, if you boost into someone, you'll really hit them. I want some places to be only reachable by boosting.
-- The feel
-	- Jumps
-		- [done] Left stick should control the pitch rotation.
-		- Landing upside down should always roll you over automatically or you should have strong control over it.
-			- If you're upside down, you should maybe even be able to rotate the car left and right.
+- OPERATION CREATING A FUN FUCKING TRACK
+	- Model it simply
+		- Jump in middle
+		- Figure 8-ish
+		- Sharp hairpoint turn
+	- Landing upside down
 	- Upper collision hull on the car
-	- The boost jet off the ledge
+	- Boost jet
 		- Car does not return to top speed fast enough
 		- Not enough lateral friction
 		- Hitting the wall feels bad
-		- Maybe more let's get this feeling good
 	- Car
 		- Weight distribution multiplier for lateral movement.
 		- Nose dive and pitch up work when against a wall?
@@ -91,12 +91,6 @@ Todo
 	- If the exporter finds a rigid body not part of a rigid body island, produce a warning. The rigid body will not be exported.
 	- If the spawn point is not a bit above the ground mesh, produce a warning. The car will just fall through.
 	- [BUG] You can export a rigid body without a collision hull.
-- Track 1 creation
-	- [done] Respawning
-	- [done] Single frame stepping.
-	- [done] Need smooth landing.
-- Blender new script directory (can I remove the stupid copy script now?).
-- The config file gets saved when we go out of minimized? That doesn't seem right.
 	
 - Sequential impulse solver positional corrections
 	https://www.gamedev.net/forums/topic/714397-sequential-impulse-solver-bounce-without-restitution/5457082/
