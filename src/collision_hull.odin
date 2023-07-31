@@ -120,7 +120,7 @@ cleanup_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 
 update_entity_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 	for lookup in &hull_helpers.hull_helpers {
-		remove_inanimate_entity(lookup);
+		remove_entity(lookup);
 	}
 
 	clear(&hull_helpers.hull_helpers);

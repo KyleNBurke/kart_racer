@@ -3,6 +3,7 @@ package main;
 import "core:time";
 import "core:fmt";
 import "core:math/linalg";
+import "core:os";
 import "vendor:glfw";
 
 when ODIN_DEBUG {
@@ -19,32 +20,35 @@ Game :: struct {
 	camera: Camera,
 	font: Font,
 	texts: [dynamic]Text,
+	car: ^Car_Entity,
+	runtime_assets: Runtime_Assets,
+	frame_metrics: Frame_Metrics,
+	single_stepping: bool,
+	step: bool,
+	scene: Scene,
+}
+
+Scene :: struct {
+	file_path: string,
+	reload_file_path: string,
+	load_time: os.File_Time,
 	ground_grid: Ground_Grid,
 	entity_grid: Entity_Grid,
-	awake_rigid_body_lookups: [dynamic]Entity_Lookup,
+	awake_rigid_bodies: [dynamic]Entity_Lookup,
 	islands: Islands,
 	constraints: Constraints,
 	hull_helpers: Hull_Helpers,
 	contact_helpers: [dynamic]Geometry_Lookup,
-	car: ^Car_Entity,
 	car_helpers: Car_Helpers,
-	runtime_assets: Runtime_Assets,
-	frame_metrics: Frame_Metrics,
 	shock_entities: [dynamic]Entity_Lookup,
 	fire_entities: [dynamic]Entity_Lookup,
-	car_spawn_position: linalg.Vector3f32,
-	car_spawn_orientation: linalg.Quaternionf32,
-
-	// Let's keep in mind, we could have the entity manager keep track of entities by variant which would eliminate the need for this.
-	// We'll stick with this for now and change it if more situations like this arise.
-	status_effect_cloud_lookups: [dynamic]Entity_Lookup,
-
-	oil_slick_lookups: [dynamic]Entity_Lookup,
-	on_fire_oil_slick_lookups: [dynamic]Entity_Lookup,
-	bumper_lookups: [dynamic]Entity_Lookup,
-	boost_jet_lookups: [dynamic]Entity_Lookup,
-	single_stepping: bool,
-	step: bool,
+	spawn_position: linalg.Vector3f32,
+	spawn_orientation: linalg.Quaternionf32,
+	status_effect_clouds: [dynamic]Entity_Lookup,
+	oil_slicks: [dynamic]Entity_Lookup,
+	on_fire_oil_slicks: [dynamic]Entity_Lookup,
+	bumpers: [dynamic]Entity_Lookup,
+	boost_jets: [dynamic]Entity_Lookup,
 }
 
 main :: proc() {
@@ -89,16 +93,14 @@ init :: proc(game: ^Game) {
 	game.gamepad.deadzone_radius = 0.25;
 	game.frame_metrics = init_frame_metrics(&game.font, &game.texts);
 
-	load_level(game);
-	load_car(game);
+	ground_grid_init(&game.scene.ground_grid);
+
+	init_scene(&game.scene);
+	load_car(&game.car, &game.scene);
 	load_runtime_assets(&game.runtime_assets);
 
-	init_hull_helpers(&game.hull_helpers);
-	game.car_helpers = init_car_helpers();
-
-	init_shock_particles(game.shock_entities[:]);
-	init_fire_particles(game.fire_entities[:]);
-	init_boost_jet_particles(game.boost_jet_lookups[:]);
+	init_hull_helpers(&game.scene.hull_helpers);
+	init_car_helpers(&game.scene.car_helpers);
 
 	free_all(context.temp_allocator);
 }
@@ -171,49 +173,55 @@ update :: proc(game: ^Game, dt: f32) {
 	update_gamepad_state(&game.gamepad);
 
 	when ODIN_DEBUG {
+		hot_reload_scene_if_needed(game);
+
 		if gamepad_button_pressed(&game.gamepad, glfw.GAMEPAD_BUTTON_X) {
-			respawn_car(game.car, game.car_spawn_position, game.car_spawn_orientation);
+			respawn_car(game.car, game.scene.spawn_position, game.scene.spawn_orientation);
 		}
 	}
 
 	if game.single_stepping {
 		if game.step {
 			move_car(&game.gamepad, game.window, game.car, dt);
-			simulate(game, dt);
+			simulate(game.car, &game.scene, &game.runtime_assets, dt);
 			position_and_orient_wheels(game.car, dt);
 			game.step = false;
 		}
 	} else {
 		move_car(&game.gamepad, game.window, game.car, dt);
-		simulate(game, dt);
+		simulate(game.car, &game.scene, &game.runtime_assets, dt);
 		position_and_orient_wheels(game.car, dt);
 	}
 
 	move_camera(&game.camera, &game.gamepad, game.window, game.car, dt);
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
 
-	update_shock_entity_particles(game.shock_entities[:], dt);
-	update_fire_entity_particles(game.fire_entities[:], dt);
-	update_status_effect_cloud_particles(game.status_effect_cloud_lookups[:], dt);
+	scene := &game.scene;
+	update_shock_entity_particles(scene.shock_entities[:], dt);
+	update_fire_entity_particles(scene.fire_entities[:], dt);
+	update_status_effect_cloud_particles(scene.status_effect_clouds[:], dt);
 	update_car_status_effects_and_particles(game.car, game.camera.transform, dt);
-	update_on_fire_oil_slicks(game.on_fire_oil_slick_lookups[:], dt);
-	animate_bumpers(game.bumper_lookups[:], dt);
-	update_boost_jet_particles(game.boost_jet_lookups[:], dt);
+	update_on_fire_oil_slicks(scene.on_fire_oil_slicks[:], dt);
+	animate_bumpers(scene.bumpers[:], dt);
+	update_boost_jet_particles(scene.boost_jets[:], dt);
 
 	if config.hull_helpers {
-		update_entity_hull_helpers(&game.hull_helpers);
+		update_entity_hull_helpers(&scene.hull_helpers);
 	}
 
 	free_all(context.temp_allocator);
 }
 
-immediate_mode_render_game :: proc(using game: ^Game) {
-	draw_shock_entity_particles(&vulkan, shock_entities[:]);
-	draw_fire_entity_particles(&vulkan, fire_entities[:]);
-	draw_car_status_effects(&vulkan, car);
-	draw_status_effect_clouds(&vulkan, status_effect_cloud_lookups[:]);
-	draw_on_fire_oil_slicks(&vulkan, on_fire_oil_slick_lookups[:]);
-	draw_boost_jet_particles(&vulkan, boost_jet_lookups[:]);
+immediate_mode_render_game :: proc(game: ^Game) {
+	vulkan := &game.vulkan;
+	scene := &game.scene;
+
+	draw_shock_entity_particles(vulkan, scene.shock_entities[:]);
+	draw_fire_entity_particles(vulkan, scene.fire_entities[:]);
+	draw_car_status_effects(vulkan, game.car);
+	draw_status_effect_clouds(vulkan, scene.status_effect_clouds[:]);
+	draw_on_fire_oil_slicks(vulkan, scene.on_fire_oil_slicks[:]);
+	draw_boost_jet_particles(vulkan, scene.boost_jets[:]);
 }
 
 cleanup :: proc(game: ^Game) {
@@ -222,31 +230,36 @@ cleanup :: proc(game: ^Game) {
 	glfw.Terminate();
 }
 
-debug_cleanup :: proc(using game: ^Game) {
-	cleanup_font(&font);
-	ground_grid_cleanup(&game.ground_grid);
-	cleanup_entity_grid(&game.entity_grid);
-	cleanup_hull_helpers(&game.hull_helpers);
-	cleanup_constraints(&game.constraints);
-	cleanup_islands(&game.islands);
+debug_cleanup :: proc(game: ^Game) {
+	cleanup_font(&game.font);
+
+	scene := &game.scene;
+	ground_grid_cleanup(&scene.ground_grid);
+	entity_grid_cleanup(&scene.entity_grid);
+	cleanup_hull_helpers(&scene.hull_helpers);
+	cleanup_constraints(&scene.constraints);
+	cleanup_islands(&scene.islands);
 	cleanup_runtime_assets(&game.runtime_assets);
 
-	for text in &game.texts {
+	for &text in game.texts {
 		cleanup_text(&text);
 	}
 	
 	cleanup_entities_geos();
 
-	delete(game.on_fire_oil_slick_lookups);
-	delete(game.oil_slick_lookups);
-	delete(game.status_effect_cloud_lookups);
-	delete(game.shock_entities);
-	delete(game.fire_entities);
+	// Cleanup scene should do all this and hold all theses variables too.
+	delete(scene.on_fire_oil_slicks);
+	delete(scene.oil_slicks);
+	delete(scene.status_effect_clouds);
+	delete(scene.shock_entities);
+	delete(scene.fire_entities);
 	delete(game.texts);
-	delete(game.awake_rigid_body_lookups);
-	delete(game.contact_helpers);
-	delete(game.bumper_lookups);
-	delete(game.boost_jet_lookups);
+	delete(scene.awake_rigid_bodies);
+	delete(scene.contact_helpers);
+	delete(scene.bumpers);
+	delete(scene.boost_jets);
+
+	cleanup_scene(&game.scene);
 
 	cleanup_config();
 }

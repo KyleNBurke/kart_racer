@@ -23,6 +23,9 @@ def export(operator, context: Context):
 	export_boost_jets(depsgraph, graph, file, mesh_name_to_index_max)
 
 	file.close()
+
+	write_reload_trigger_file(operator.filepath)
+
 	print("Exported", operator.filepath)
 	return {'FINISHED'}
 
@@ -381,3 +384,10 @@ def export_boost_jets(depsgraph: Depsgraph, graph, file, mesh_name_to_index_map)
 		util.write_cursor_check(file)
 	
 	print()
+
+def write_reload_trigger_file(filepath):
+	trigger_filepath = filepath + ".reload"
+
+	file = open(trigger_filepath, 'w')
+	file.close()
+	print("Wrote reload trigger file ", trigger_filepath)

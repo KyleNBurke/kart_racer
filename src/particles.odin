@@ -14,27 +14,19 @@ Game_Particle :: struct {
 	time_alive: f32,
 }
 
-init_shock_particles :: proc(shock_entities: []Entity_Lookup) {
-	for lookup in shock_entities {
-		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
-
-		for _ in 0..<150 {
-			particle: Game_Particle;
-			particle.size = SHOCK_PARTICLE_SIZE;
-			
-			append(&rigid_body.shock_particles, particle);
-		}
+init_shock_particles :: proc(rigid_body: ^Rigid_Body_Entity) {
+	for _ in 0..<150 {
+		particle: Game_Particle;
+		particle.size = SHOCK_PARTICLE_SIZE;
+		
+		append(&rigid_body.shock_particles, particle);
 	}
 }
 
-init_fire_particles :: proc(fire_entities: []Entity_Lookup) {
-	for lookup in fire_entities {
-		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
-
-		for _ in 0..<200 {
-			particle: Game_Particle;
-			append(&rigid_body.fire_particles, particle);
-		}
+init_fire_particles :: proc(rigid_body: ^Rigid_Body_Entity) {
+	for _ in 0..<200 {
+		particle: Game_Particle;
+		append(&rigid_body.fire_particles, particle);
 	}
 }
 
@@ -316,19 +308,16 @@ reset_boost_jet_particle :: proc(particle: ^Game_Particle, hull_transform: linal
 	particle.time_alive = rand.float32() * particle.life_time;
 }
 
-init_boost_jet_particles :: proc(boost_jet_lookups: []Entity_Lookup) {
-	for lookup in boost_jet_lookups {
-		boost_jet := get_entity(lookup).variant.(^Boost_Jet_Entity);
-		hull_transform := boost_jet.collision_hulls[0].global_transform;
-		
-		for _ in 0..<150 {
-			particle: Game_Particle;
-			particle.size = 0.1;
-			particle.color = [3]f32 { 0.9, 0.9, 0.9 };
+init_boost_jet_particles :: proc(boost_jet: ^Boost_Jet_Entity) {
+	hull_transform := boost_jet.collision_hulls[0].global_transform;
+	
+	for _ in 0..<150 {
+		particle: Game_Particle;
+		particle.size = 0.1;
+		particle.color = { 0.9, 0.9, 0.9 };
 
-			reset_boost_jet_particle(&particle, hull_transform);
-			append(&boost_jet.particles, particle);
-		}
+		reset_boost_jet_particle(&particle, hull_transform);
+		append(&boost_jet.particles, particle);
 	}
 }
 

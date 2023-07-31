@@ -25,6 +25,7 @@ Config :: struct {
 	island_helpers: bool,
 	init_sleeping_islands: bool,
 	explosion_helpers: bool,
+	verbose_logging: bool,
 }
 
 Config_Map :: map[string]string;

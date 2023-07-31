@@ -18,9 +18,17 @@ Island :: struct {
 
 Island_State :: enum { Awake, Asleep, Free };
 
-init_islands :: proc(islands: ^Islands, count: u32) {
-	assert(len(islands.islands) == 0);
-	assert(len(islands.awake_island_indices) == 0);
+islands_reset :: proc(islands: ^Islands, count: u32) {
+	for &island in islands.islands {
+		if island.state == .Free do continue;
+
+		delete(island.lookups);
+	}
+
+	clear(&islands.islands);
+	clear(&islands.free_islands);
+	clear(&islands.awake_island_indices);
+	clear(&islands.island_helpers);
 
 	for _ in 0..<count {
 		append(&islands.islands, Island {
@@ -31,7 +39,7 @@ init_islands :: proc(islands: ^Islands, count: u32) {
 	}
 }
 
-add_rigid_body_to_island :: proc(islands: ^Islands, island_index: int, lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
+add_rigid_body_to_sleeping_island :: proc(islands: ^Islands, island_index: int, lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
 	append(&islands.islands[island_index].lookups, lookup);
 	rigid_body.island_index = island_index;
 }
@@ -43,7 +51,7 @@ clear_islands :: proc(islands: ^Islands) {
 init_island :: proc(islands: ^Islands, lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
 	island := Island {
 		state = .Awake,
-		lookups = [dynamic]Entity_Lookup {lookup},
+		lookups = { lookup },
 		awake_island_index_index = len(islands.awake_island_indices),
 	};
 

@@ -4,3 +4,4 @@ build/
 res/config.txt
 *.rdbg
 **/__pycache__/
+*.reload

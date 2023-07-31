@@ -29,14 +29,17 @@ On_No_Entities :: enum {
 
 Pipeline :: enum { Line, Basic, Lambert, LambertTwoSided }
 
-geometry_make_triangle_mesh :: proc(geo: ^Geometry, indices: [dynamic]u16, attributes: [dynamic]f32, pipeline: Pipeline) {
+geometry_make_triangle_mesh :: proc(geo: ^Geometry, indices: []u16, attributes: []f32, pipeline: Pipeline) {
 	assert(len(indices) % 3 == 0);
 	assert(len(attributes) % 9 == 0);
 	assert(pipeline != .Line);
 
-	// #nocheckin this could be a memory leak
-	geo.indices = indices;
-	geo.attributes = attributes;
+	clear(&geo.indices);
+	clear(&geo.attributes);
+
+	append(&geo.indices, ..indices);
+	append(&geo.attributes, ..attributes);
+	
 	geo.pipeline = pipeline;
 }
 

@@ -3,6 +3,9 @@ package main;
 import "core:math";
 import "vendor:glfw";
 
+// We have to do this dumb shit because GLFW doesn't have gamepad button press callbacks.
+// There is an open issue about it in the 3.4 milestone. https://github.com/glfw/glfw/issues/601
+
 Gamepad :: struct {
 	curr_state: glfw.GamepadState,
 	prev_state: glfw.GamepadState,

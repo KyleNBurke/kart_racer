@@ -10,10 +10,8 @@ import "math2";
 GRAVITY: f32 : -20.0;
 EXPLOSION_RADIUS :: 10;
 
-simulate :: proc(game: ^Game, dt: f32) {
-	car := game.car;
-	
-	{
+simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
+	{ // Tentatively step the car forward
 		car.velocity.y += GRAVITY * dt;
 		car.tentative_position = car.position + car.velocity * dt;
 
@@ -25,9 +23,9 @@ simulate :: proc(game: ^Game, dt: f32) {
 		update_entity_hull_transforms_and_bounds(car, tentative_orientation, car.tentative_transform);
 	}
 
-	clear_islands(&game.islands);
+	clear_islands(&scene.islands);
 
-	for lookup in game.awake_rigid_body_lookups {
+	for lookup in scene.awake_rigid_bodies {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		rigid_body.velocity.y += GRAVITY * dt;
@@ -37,18 +35,18 @@ simulate :: proc(game: ^Game, dt: f32) {
 		rigid_body.tentative_inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(rigid_body.tentative_orientation, rigid_body.inv_local_inertia_tensor);
 
 		rigid_body.tentative_transform = linalg.matrix4_from_trs(rigid_body.tentative_position, rigid_body.tentative_orientation, rigid_body.size);
-		move_rigid_body_tentatively_in_grid(&game.entity_grid, lookup, rigid_body);
+		entity_grid_move_rigid_body_tentatively(&scene.entity_grid, lookup, rigid_body);
 
 		rigid_body.checked_collision = false;
-		init_island(&game.islands, lookup, rigid_body);
+		init_island(&scene.islands, lookup, rigid_body);
 	}
 
 	if config.contact_point_helpers {
-		clear_contact_helpers(&game.contact_helpers);
+		clear_contact_helpers(&scene.contact_helpers);
 	}
 	
-	clear_constraints(&game.constraints);
-	find_car_spring_constraints_and_surface_type(&game.ground_grid, &game.entity_grid, &game.constraints, car, dt, game.oil_slick_lookups[:]);
+	clear_constraints(&scene.constraints);
+	find_car_spring_constraints_and_surface_type(&scene.ground_grid, &scene.entity_grid, &scene.constraints, car, dt, scene.oil_slicks[:]);
 	
 	additional_awake_entities := make([dynamic]Entity_Lookup, context.temp_allocator);
 
@@ -56,20 +54,20 @@ simulate :: proc(game: ^Game, dt: f32) {
 		provoking_hull := &car.collision_hulls[0];
 
 		// Ground collisions
-		nearby_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, car.bounds);
+		nearby_triangle_indices := ground_grid_find_nearby_triangles(&scene.ground_grid, car.bounds);
 
-		for ph in &car.collision_hulls { // #todo
-		for nearby_triangle_index in nearby_triangle_indices {
-			nearby_triangle := ground_grid_form_triangle(&game.ground_grid, nearby_triangle_index);
+		for &provoking_hull in car.collision_hulls {
+			for nearby_triangle_index in nearby_triangle_indices {
+				nearby_triangle := ground_grid_form_triangle(&scene.ground_grid, nearby_triangle_index);
 
-			if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], &nearby_triangle, &ph).?; ok {
-				add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
+				if manifold, ok := evaluate_ground_collision(scene.ground_grid.positions[:], &nearby_triangle, &provoking_hull).?; ok {
+					add_car_fixed_constraint_set(&scene.constraints, car, &manifold, dt);
+				}
 			}
-		}
 		}
 
 		// Collisions with other hulls
-		nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, car.bounds);
+		nearby_lookups := entity_grid_find_nearby_entities(&scene.entity_grid, car.bounds);
 
 		for nearby_lookup in nearby_lookups {
 			nearby_entity := get_entity(nearby_lookup);
@@ -108,14 +106,14 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 				switch e in nearby_entity.variant {
 				case ^Rigid_Body_Entity:
-					add_car_movable_constraint_set(&game.constraints, car, e, &manifold, dt);
-					car_collision_maybe_wake_island(&game.islands, &additional_awake_entities, e);
+					add_car_movable_constraint_set(&scene.constraints, car, e, &manifold, dt);
+					car_collision_maybe_wake_island(&scene.islands, &additional_awake_entities, e);
 					handle_status_effects(car, e);
 
 				case ^Inanimate_Entity:
 					// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
 					// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
-					add_car_fixed_constraint_set(&game.constraints, car, &manifold, dt);
+					add_car_fixed_constraint_set(&scene.constraints, car, &manifold, dt);
 
 				case ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
 					unreachable();
@@ -125,24 +123,24 @@ simulate :: proc(game: ^Game, dt: f32) {
 	}
 
 	// Rigid body collisions
-	for provoking_lookup, provoking_lookup_index in game.awake_rigid_body_lookups {
+	for provoking_lookup, provoking_lookup_index in scene.awake_rigid_bodies {
 		provoking_rigid_body := get_entity(provoking_lookup).variant.(^Rigid_Body_Entity);
 
 		// Collisions with the ground
-		nearby_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, provoking_rigid_body.bounds);
+		nearby_triangle_indices := ground_grid_find_nearby_triangles(&scene.ground_grid, provoking_rigid_body.bounds);
 
 		for provoking_hull in &provoking_rigid_body.collision_hulls {
 			for nearby_triangle_index in nearby_triangle_indices {
-				nearby_triangle := ground_grid_form_triangle(&game.ground_grid, nearby_triangle_index);
+				nearby_triangle := ground_grid_form_triangle(&scene.ground_grid, nearby_triangle_index);
 
-				if manifold, ok := evaluate_ground_collision(game.ground_grid.positions[:], &nearby_triangle, &provoking_hull).?; ok {
-					process_rigid_body_ground_collision(provoking_rigid_body, provoking_hull.kind, &game.constraints, &manifold, dt, &game.contact_helpers);
+				if manifold, ok := evaluate_ground_collision(scene.ground_grid.positions[:], &nearby_triangle, &provoking_hull).?; ok {
+					process_rigid_body_ground_collision(provoking_rigid_body, provoking_hull.kind, &scene.constraints, &manifold, dt, &scene.contact_helpers);
 				}
 			}
 		}
 
 		// Collisions with other hulls
-		nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, provoking_rigid_body.bounds);
+		nearby_lookups := entity_grid_find_nearby_entities(&scene.entity_grid, provoking_rigid_body.bounds);
 
 		for provoking_hull in &provoking_rigid_body.collision_hulls {
 			for nearby_lookup in nearby_lookups {
@@ -168,11 +166,11 @@ simulate :: proc(game: ^Game, dt: f32) {
 
 					switch e in nearby_entity.variant {
 					case ^Rigid_Body_Entity:
-						add_movable_constraint_set(&game.constraints, provoking_rigid_body, e, &manifold, dt);
-						rigid_body_collision_merge_islands(&game.islands, &additional_awake_entities, provoking_lookup, provoking_rigid_body, e);
+						add_movable_constraint_set(&scene.constraints, provoking_rigid_body, e, &manifold, dt);
+						rigid_body_collision_merge_islands(&scene.islands, &additional_awake_entities, provoking_lookup, provoking_rigid_body, e);
 					
 					case ^Inanimate_Entity:
-						add_fixed_constraint_set(&game.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
+						add_fixed_constraint_set(&scene.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
 					
 					case ^Car_Entity, ^Oil_Slick_Entity:
 						unreachable();
@@ -199,10 +197,10 @@ simulate :: proc(game: ^Game, dt: f32) {
 	}
 
 	if config.island_helpers {
-		update_island_helpers(&game.islands);
+		update_island_helpers(&scene.islands);
 	}
 	
-	solve_constraints(&game.constraints, car, dt);
+	solve_constraints(&scene.constraints, car, dt);
 
 	{
 		car.position += (car.velocity + car.bias_velocity) * dt;
@@ -214,14 +212,14 @@ simulate :: proc(game: ^Game, dt: f32) {
 		update_entity_transform(car);
 	}
 	
-	append(&game.awake_rigid_body_lookups, ..additional_awake_entities[:]);
+	append(&scene.awake_rigid_bodies, ..additional_awake_entities[:]);
 	
 	// Clear the entities woken up from awake islands colliding with asleep islands. We'll reuse this array to keep track
 	// of entities woken up from exploding barrels.
 	clear(&additional_awake_entities);
 
-	for i := len(game.awake_rigid_body_lookups) - 1; i >= 0; i -= 1 {
-		lookup := game.awake_rigid_body_lookups[i];
+	for i := len(scene.awake_rigid_bodies) - 1; i >= 0; i -= 1 {
+		lookup := scene.awake_rigid_bodies[i];
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		if rigid_body.exploding_health > 0 {
@@ -244,24 +242,25 @@ simulate :: proc(game: ^Game, dt: f32) {
 			rigid_body.checked_collision = false;
 		} else {
 			// Remove from entity grid
-			remove_entity_from_grid(&game.entity_grid, lookup, rigid_body);
+			// remove_entity_from_grid(&game.entity_grid, lookup, rigid_body);
+			entity_grid_remove(&scene.entity_grid, lookup, rigid_body);
 
 			// Remove from islands
-			remove_rigid_body_from_island(&game.islands, lookup, rigid_body);
+			remove_rigid_body_from_island(&scene.islands, lookup, rigid_body);
 
 			// Remove from awake rigid body lookups
-			unordered_remove(&game.awake_rigid_body_lookups, i);
+			unordered_remove(&scene.awake_rigid_bodies, i);
 
 			// Remove from status effects entities list
 			switch rigid_body.status_effect {
 			case .ExplodingShock:
-				i, ok := slice.linear_search(game.shock_entities[:], lookup);
+				i, ok := slice.linear_search(scene.shock_entities[:], lookup);
 				assert(ok);
-				unordered_remove(&game.shock_entities, i);
+				unordered_remove(&scene.shock_entities, i);
 			case .ExplodingFire:
-				i, ok := slice.linear_search(game.fire_entities[:], lookup);
+				i, ok := slice.linear_search(scene.fire_entities[:], lookup);
 				assert(ok);
-				unordered_remove(&game.fire_entities, i);
+				unordered_remove(&scene.fire_entities, i);
 			case .None, .Shock, .Fire:
 				unreachable();
 			}
@@ -277,7 +276,8 @@ simulate :: proc(game: ^Game, dt: f32) {
 			}
 			
 			// Apply explosion impulse to nearby rigid bodies
-			nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, bounds);
+			// nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, bounds);
+			nearby_lookups := entity_grid_find_nearby_entities(&scene.entity_grid, bounds);
 
 			for lookup in nearby_lookups {
 				nearby_rigid_body, ok := get_entity(lookup).variant.(^Rigid_Body_Entity);
@@ -286,12 +286,13 @@ simulate :: proc(game: ^Game, dt: f32) {
 				dir := linalg.normalize(nearby_rigid_body.position - rigid_body.position);
 				nearby_rigid_body.velocity += dir * 30;
 
-				maybe_wake_island_post_solve(&game.islands, nearby_rigid_body, &additional_awake_entities)
+				maybe_wake_island_post_solve(&scene.islands, nearby_rigid_body, &additional_awake_entities)
 			}
 
 			// Spawn shrapnel pieces
-			for shrapnel in &game.runtime_assets.shock_barrel_shrapnel {
+			for shrapnel in &runtime_assets.shock_barrel_shrapnel {
 				shrapnel_rigid_body, shrapnel_lookup := create_entity("shrapnel", shrapnel.geometry_lookup, Rigid_Body_Entity);
+				shrapnel_rigid_body.scene_associated = true;
 
 				shrapnel_rigid_body.position = math2.matrix4_transform_point(rigid_body.transform, shrapnel.position);
 				shrapnel_rigid_body.orientation = rigid_body.orientation * shrapnel.orientation;
@@ -304,7 +305,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 				hull := init_collision_hull(shrapnel.hull_local_position, shrapnel.hull_local_orientation, shrapnel.hull_local_size, .Box);
 				append(&shrapnel_rigid_body.collision_hulls, hull);
 				update_entity_hull_transforms_and_bounds(shrapnel_rigid_body, shrapnel_rigid_body.orientation, shrapnel_rigid_body.transform);
-				insert_entity_into_grid(&game.entity_grid, shrapnel_lookup, shrapnel_rigid_body);
+				entity_grid_insert(&scene.entity_grid, shrapnel_lookup, shrapnel_rigid_body);
 
 				append(&additional_awake_entities, shrapnel_lookup);
 				
@@ -315,6 +316,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 			switch rigid_body.status_effect {
 			case .ExplodingShock:
 				cloud, cloud_lookup := create_entity("shock cloud", nil, Cloud_Entity);
+				cloud.scene_associated = true;
 				cloud.position = rigid_body.position;
 				cloud.status_effect =.Shock;
 				update_entity_transform(cloud);
@@ -326,9 +328,9 @@ simulate :: proc(game: ^Game, dt: f32) {
 				hull := init_collision_hull(HULL_POSITION, linalg.QUATERNIONF32_IDENTITY, HULL_SIZE, .Sphere);
 				append(&cloud.collision_hulls, hull);
 				update_entity_hull_transforms_and_bounds(cloud, cloud.orientation, cloud.transform);
-				insert_entity_into_grid(&game.entity_grid, cloud_lookup, cloud);
+				entity_grid_insert(&scene.entity_grid, cloud_lookup, cloud);
 
-				append(&game.status_effect_cloud_lookups, cloud_lookup);
+				append(&scene.status_effect_clouds, cloud_lookup);
 			
 			case .ExplodingFire:
 				// #performance: There is some code in here that iterates over all the oil slicks. We could use some spatial partitioning
@@ -340,12 +342,12 @@ simulate :: proc(game: ^Game, dt: f32) {
 					center := math2.box_center(rigid_body.bounds);
 					explosion_bounds := math2.Box3f32 { center - EXPLOSION_RADIUS, center + EXPLOSION_RADIUS };
 
-					for oil_slick_lookup in game.oil_slick_lookups {
+					for oil_slick_lookup in scene.oil_slicks {
 						oil_slick := get_entity(oil_slick_lookup).variant.(^Oil_Slick_Entity);
 
 						if math2.box_intersects(oil_slick.bounds, explosion_bounds) {
 							oil_slick.on_fire = true;
-							append(&game.on_fire_oil_slick_lookups, oil_slick_lookup);
+							append(&scene.on_fire_oil_slicks, oil_slick_lookup);
 						}
 					}
 				}
@@ -365,7 +367,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 					geometry_make_box_helper(geometry, bounds.min, bounds.max);
 				}
 
-				ground_triangle_indices := ground_grid_find_nearby_triangles(&game.ground_grid, bounds);
+				ground_triangle_indices := ground_grid_find_nearby_triangles(&scene.ground_grid, bounds);
 
 				SQUARES :: 4;
 				for x in 0..<SQUARES {
@@ -389,7 +391,7 @@ simulate :: proc(game: ^Game, dt: f32) {
 							ray_direction := linalg.normalize(p - origin);
 							ray_length := linalg.length(segment);
 
-							ground_triangle := ground_grid_form_triangle(&game.ground_grid, ground_triangle_index);
+							ground_triangle := ground_grid_form_triangle(&scene.ground_grid, ground_triangle_index);
 
 							intersection_length := math2.ray_intersects_triangle(origin, ray_direction, ground_triangle.a, ground_triangle.b, ground_triangle.c);
 							if intersection_length <= 0 || intersection_length > ray_length {
@@ -402,10 +404,11 @@ simulate :: proc(game: ^Game, dt: f32) {
 							}
 
 							intersection_point := origin + ray_direction * intersection_length;
-							i := rand.int_max(len(game.runtime_assets.oil_slicks));
-							oil_slick_asset := &game.runtime_assets.oil_slicks[i];
+							i := rand.int_max(len(runtime_assets.oil_slicks));
+							oil_slick_asset := &runtime_assets.oil_slicks[i];
 
 							oil_slick_entity, oil_slick_entity_lookup := create_entity("oil slick", oil_slick_asset.geometry_lookup, Oil_Slick_Entity);
+							oil_slick_entity.scene_associated = true;
 							
 							orientation := linalg.quaternion_between_two_vector3(linalg.VECTOR3F32_Y_AXIS, ground_triangle.normal);
 
@@ -421,8 +424,8 @@ simulate :: proc(game: ^Game, dt: f32) {
 							append(&oil_slick_entity.collision_hulls, hull);
 
 							update_entity_hull_transforms_and_bounds(oil_slick_entity, oil_slick_entity.orientation, oil_slick_entity.transform);
-							append(&game.oil_slick_lookups, oil_slick_entity_lookup);
-							append(&game.on_fire_oil_slick_lookups, oil_slick_entity_lookup);
+							append(&scene.oil_slicks, oil_slick_entity_lookup);
+							append(&scene.on_fire_oil_slicks, oil_slick_entity_lookup);
 
 							break;
 						}
@@ -434,13 +437,12 @@ simulate :: proc(game: ^Game, dt: f32) {
 			}
 
 			// Rmove from entity geos
-			// #todo: Let's have this take in ALL the shit and handle it
-			remove_rigid_body_entity(lookup);
+			remove_entity(lookup);
 		}
 	}
 
-	sleep_islands(&game.islands, &game.awake_rigid_body_lookups);
-	append(&game.awake_rigid_body_lookups, ..additional_awake_entities[:]);
+	sleep_islands(&scene.islands, &scene.awake_rigid_bodies);
+	append(&scene.awake_rigid_bodies, ..additional_awake_entities[:]);
 }
 
 process_rigid_body_ground_collision :: proc(
@@ -524,7 +526,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 	spring_bounds := math2.box_union(spring_bounds_fl, spring_bounds_fr, spring_bounds_bl, spring_bounds_br);
 
 	nearby_triangle_indices := ground_grid_find_nearby_triangles(ground_grid, spring_bounds);
-	nearby_lookups := find_nearby_entities_in_grid(entity_grid, spring_bounds);
+	nearby_lookups := entity_grid_find_nearby_entities(entity_grid, spring_bounds);
 
 	manifold := Spring_Contact_Manifold {
 		normal = -extension_dir,
@@ -685,12 +687,12 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 		best_length := max(f32);
 		
 		face_normals :: [6]linalg.Vector3f32 {
-			linalg.Vector3f32 {  1,  0,  0 },
-			linalg.Vector3f32 { -1,  0,  0 },
-			linalg.Vector3f32 {  0,  1,  0 },
-			linalg.Vector3f32 {  0, -1,  0 },
-			linalg.Vector3f32 {  0,  0,  1 },
-			linalg.Vector3f32 {  0,  0, -1 },
+			{  1,  0,  0 },
+			{ -1,  0,  0 },
+			{  0,  1,  0 },
+			{  0, -1,  0 },
+			{  0,  0,  1 },
+			{  0,  0, -1 },
 		};
 
 		for face_normal in face_normals {
@@ -706,17 +708,17 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 			intersecting := false;
 
 			switch face_normal {
-			case linalg.Vector3f32 { 1, 0, 0 }, linalg.Vector3f32 { -1, 0, 0 }:
+			case { 1, 0, 0 }, { -1, 0, 0 }:
 				if p.z < 1 && p.z > -1 && p.y < 1 && p.y > -1 {
 					intersecting = true;
 				}
 			
-			case linalg.Vector3f32 { 0, 1, 0 }, linalg.Vector3f32 { 0, -1, 0 }:
+			case { 0, 1, 0 }, { 0, -1, 0 }:
 				if p.x < 1 && p.x > -1 && p.z < 1 && p.z > -1 {
 					intersecting = true;
 				}
 			
-			case linalg.Vector3f32 { 0, 0, 1 }, linalg.Vector3f32 { 0, 0, -1 }:
+			case { 0, 0, 1 }, { 0, 0, -1 }:
 				if p.x < 1 && p.x > -1 && p.y < 1 && p.y > -1 {
 					intersecting = true;
 				}
@@ -754,7 +756,7 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 
 				if p.x * p.x + p.z * p.z >= 1 do break top_bot;
 				
-				local_normal = linalg.Vector3f32 {0, -y, 0};
+				local_normal = { 0, -y, 0 };
 				length = t;
 				break;
 			}
@@ -785,7 +787,7 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 			p := s + t * v;
 			if abs(p.y) >= 1 do break sides;
 
-			local_normal = linalg.Vector3f32 {p.x, 0, p.z};
+			local_normal = { p.x, 0, p.z };
 			length = t;
 		}
 	

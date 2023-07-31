@@ -9,6 +9,7 @@ Entity :: struct {
 	free: bool,
 	generation: u32,
 	geometry_lookup: Maybe(Geometry_Lookup),
+	scene_associated: bool,
 	position: linalg.Vector3f32,
 	orientation: linalg.Quaternionf32,
 	size: linalg.Vector3f32,

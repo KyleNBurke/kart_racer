@@ -9,7 +9,7 @@ import "math2";
 CELL_SIZE: f32 : 20.0;
 
 Ground_Grid :: struct {
-	half_cell_count: u32,
+	half_cell_count: int,
 	positions: [dynamic]f32,
 	triangles: [dynamic]Ground_Grid_Triangle,
 	query_flags: [dynamic]u32,
@@ -27,42 +27,35 @@ Ground_Grid_Evaluated_Triangle :: struct {
 	normal: linalg.Vector3f32,
 }
 
-reset_ground_grid :: proc(using ground_grid: ^Ground_Grid, half_size: f32) {
-	delete(positions);
-	delete(triangles);
-	delete(query_flags);
+ground_grid_init :: proc(using ground_grid: ^Ground_Grid) {
+	// Since an index of 0 represents no ghost vertex, we fill the first position slot with something.
+	append(&positions, 0, 0, 0);
+}
 
-	current_cell_count := half_cell_count * 2;
-	for x in 0..<current_cell_count {
-		for y in 0..<current_cell_count {
-			delete(grid[x][y]);
+ground_grid_reset :: proc(using ground_grid: ^Ground_Grid, half_size: f32) {
+	half_cell_count = cast(int) max(math.ceil(half_size / CELL_SIZE), 5.0);
+	resize(&positions, 3); // Resize to the initial 3 values
+	clear(&triangles);
+	clear(&query_flags);
+
+	// Once we resize the grid, it can kill the internal memory so we must destroy it explicitly to not cause a memory leak.
+	for &col in grid {
+		for &cell in col {
+			delete(cell);
 		}
 
-		delete(grid[x]);
+		delete(col);
 	}
 
 	delete(grid);
-
-	half_cell_count = cast(u32) math.max(math.ceil(half_size / CELL_SIZE), 5.0);
+	
 	cell_count := half_cell_count * 2;
 
 	grid = make([dynamic][dynamic][dynamic]int, cell_count);
-	for x in 0..<cell_count {
-		grid[x] = make([dynamic][dynamic]int, cell_count);
 
-		for y in 0..<cell_count {
-			grid[x][y] = make([dynamic]int, 0);
-		}
+	for &col in grid {
+		col = make([dynamic][dynamic]int, cell_count);
 	}
-
-	positions = make([dynamic]f32, 3);
-
-	// Since an index of 0 represents no ghost vertex, we fill the first position slot with something.
-	positions[0] = 0.0;
-	positions[1] = 0.0;
-	positions[2] = 0.0;
-
-	triangles = make([dynamic]Ground_Grid_Triangle, 0);
 }
 
 insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: []u16, new_positions: []f32) {
@@ -70,7 +63,7 @@ insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: []
 	append(&positions, ..new_positions);
 
 	// Create a mapping from each triangle's edge to it's opposite vertex
-	edge_to_vertex_map := make(map[[2]int]int);
+	edge_to_vertex_map := make(map[[2]int]int, allocator = context.temp_allocator);
 
 	for triangle_index in 0..< len(new_indices) / 3 {
 		a_index := cast(int) new_indices[triangle_index * 3];
@@ -103,8 +96,8 @@ insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: []
 		b := linalg.Vector3f32 {positions[b_pos_index], positions[b_pos_index + 1], positions[b_pos_index + 2]};
 		c := linalg.Vector3f32 {positions[c_pos_index], positions[c_pos_index + 1], positions[c_pos_index + 2]};
 
-		bounds_min := linalg.min_triple(a, b, c);
-		bounds_max := linalg.max_triple(a, b, c);
+		bounds_min := linalg.min(a, b, c);
+		bounds_max := linalg.max(a, b, c);
 		bounds := math2.Box3f32 {bounds_min, bounds_max};
 
 		// Create triangle
@@ -127,8 +120,6 @@ insert_into_ground_grid :: proc(using ground_grid: ^Ground_Grid, new_indices: []
 			}
 		}
 	}
-
-	delete(edge_to_vertex_map);
 }
 
 ground_grid_find_nearby_triangles :: proc(ground_grid: ^Ground_Grid, bounds: math2.Box3f32) -> [dynamic]int {

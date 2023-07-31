@@ -3,6 +3,7 @@ package main;
 import "core:slice";
 import "core:strings";
 import "core:math/linalg";
+import "core:fmt";
 
 Entities_Geos :: struct {
 	geometries: [dynamic]Geometry,
@@ -43,6 +44,8 @@ create_geometry :: proc(name: string, on_no_entities: On_No_Entities = .Free) ->
 		lookup = { index, 0 };
 	}
 
+	log_verbosef("Created geometry '%s'\n", geometry.name);
+
 	return;
 }
 
@@ -78,7 +81,18 @@ create_entity :: proc(name: string, geometry_lookup: Maybe(Geometry_Lookup), $T:
 		entity.geometry_lookup = lookup;
 	}
 
+	log_verbosef("Created entity '%s'\n", entity.name);
+
 	return;
+}
+
+remove_scene_associated_entities :: proc() {
+	for entity, index in entities_geos.entities {
+		if entity.free || !entity.scene_associated do continue;
+
+		lookup := Entity_Lookup { index, entity.generation };
+		remove_entity(lookup);
+	}
 }
 
 get_geometry :: proc(lookup: Geometry_Lookup) -> ^Geometry {
@@ -98,25 +112,27 @@ get_entity :: proc(lookup: Entity_Lookup) -> ^Entity {
 remove_geometry :: proc(geometry_lookup: Geometry_Lookup) {
 	geometry := get_geometry(geometry_lookup);
 
-	if len(geometry.entity_lookups) > 0 {
-		// We just haven't yet needed to destroy a geometry with entities. Shouldn't be an issue to do.
-		unimplemented();
-	}
+	entity_lookups_count := len(geometry.entity_lookups);
+	assert(entity_lookups_count == 0, fmt.tprintf("Cannot remove geometry '%s', it has %v entities.", geometry.name, entity_lookups_count));
 
 	geometry.free = true;
 	geometry.generation += 1;
 	append(&entities_geos.free_geometries, geometry_lookup.index);
+
+	log_verbosef("Removed geometry '%s'\n", geometry.name);
 }
 
-@(private="file")
-remove_entity :: proc(entity_lookup: Entity_Lookup, entity: ^Entity) {
+// @(private="file")
+remove_entity :: proc(entity_lookup: Entity_Lookup) {
+	entity := get_entity(entity_lookup);
+
 	// Remove the entity_lookup from the associated geometry
 	if geometry_lookup, ok := entity.geometry_lookup.?; ok {
 		geometry := get_geometry(geometry_lookup);
 		entity_lookups := &geometry.entity_lookups;
 
-		removal_index, ok := slice.linear_search(entity_lookups[:], entity_lookup);
-		assert(ok);
+		removal_index, found := slice.linear_search(entity_lookups[:], entity_lookup);
+		assert(found);
 		unordered_remove(entity_lookups, removal_index);
 
 		// If we removed the last entity from the geometry, free it if needed
@@ -124,6 +140,8 @@ remove_entity :: proc(entity_lookup: Entity_Lookup, entity: ^Entity) {
 			geometry.free = true;
 			geometry.generation += 1;
 			append(&entities_geos.free_geometries, geometry_lookup.index);
+
+			log_verbosef("Removed geometry '%s'\n", geometry.name);
 		}
 	}
 
@@ -134,32 +152,32 @@ remove_entity :: proc(entity_lookup: Entity_Lookup, entity: ^Entity) {
 		delete(hull.positions);
 	}
 
+	entity_name := strings.clone(entity.name, context.temp_allocator);
+
 	delete(entity.name);
 	delete(entity.collision_hulls);
 	entity.free = true;
 	entity.generation += 1;
 	append(&entities_geos.free_entities, entity_lookup.index);
-}
 
-remove_inanimate_entity :: proc(lookup: Entity_Lookup) {
-	entity := get_entity(lookup);
-	_, ok := entity.variant.(^Inanimate_Entity);
-	assert(ok);
-
-	remove_entity(lookup, entity);
-
-	// Nothing else to destroy/free on an inanimate entity
-}
-
-remove_rigid_body_entity :: proc(lookup: Entity_Lookup) {
-	entity := get_entity(lookup);
-	rigid_body, ok := entity.variant.(^Rigid_Body_Entity);
-	assert(ok);
-
-	remove_entity(lookup, entity);
-
-	delete(rigid_body.shock_particles);
-	delete(rigid_body.fire_particles);
+	// Free the variant specific resources.
+	switch variant in entity.variant {
+	case ^Rigid_Body_Entity:
+		delete(variant.shock_particles);
+		delete(variant.fire_particles);
+	case ^Car_Entity:
+		delete(variant.shock_particles);
+		delete(variant.fire_particles);
+	case ^Cloud_Entity:
+		delete(variant.particles);
+	case ^Oil_Slick_Entity:
+		delete(variant.fire_particles);
+	case ^Boost_Jet_Entity:
+		delete(variant.particles);
+	case ^Inanimate_Entity, ^Bumper_Entity:
+	}
+	
+	log_verbosef("Removed entity '%s'\n", entity_name);
 }
 
 cleanup_entities_geos :: proc() {

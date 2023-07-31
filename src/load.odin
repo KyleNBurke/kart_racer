@@ -4,6 +4,7 @@ import "core:os";
 import "core:math/linalg";
 import "core:fmt";
 import "core:strings";
+import "core:slice";
 
 POSITION_CHECK_VALUE :: 0b10101010_10101010_10101010_10101010;
 
@@ -75,34 +76,46 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 	return indices, attributes;
 }
 
-load_level :: proc(using game: ^Game) {
+load_scene :: proc(scene: ^Scene) {
+	{ // Clear things out
+		clear(&scene.awake_rigid_bodies);
+		clear(&scene.shock_entities);
+		clear(&scene.fire_entities);
+		clear(&scene.status_effect_clouds);
+		clear(&scene.oil_slicks);
+		clear(&scene.on_fire_oil_slicks);
+		clear(&scene.bumpers);
+		clear(&scene.boost_jets);
+
+		remove_scene_associated_entities();
+	}
+
 	REQUIRED_VERSION :: 3;
 	
-	file_path := fmt.tprintf("res/maps/%s.kgl", config.level);
-	bytes, success := os.read_entire_file_from_filename(file_path);
-	defer delete(bytes);
-	assert(success, fmt.tprintf("Failed to load level file %s", file_path));
+	bytes, success := os.read_entire_file_from_filename(scene.file_path, context.temp_allocator);
+	assert(success, fmt.tprintf("Failed to load level file %s", scene.file_path));
 	
 	pos := 0;
 
 	version := read_u32(&bytes, &pos);
 	assert(REQUIRED_VERSION == version, fmt.tprintf("[level loading] Required version %v but found %v.", REQUIRED_VERSION, version));
 
-	game.car_spawn_position = read_vec3(&bytes, &pos);
-	game.car_spawn_orientation = read_quat(&bytes, &pos);
+	// Spawn position & orientation
+	scene.spawn_position = read_vec3(&bytes, &pos);
+	scene.spawn_orientation = read_quat(&bytes, &pos);
 
-	// Init grids
+	// Reset grids
 	grid_half_size := read_f32(&bytes, &pos);
-	reset_ground_grid(&ground_grid, grid_half_size);
-	init_entity_grid(&entity_grid, grid_half_size);
+	ground_grid_reset(&scene.ground_grid, grid_half_size);
+	entity_grid_reset(&scene.entity_grid, grid_half_size);
 	
-	{
+	{ // Ground grid
 		meshes_count := read_u32(&bytes, &pos);
 
-		for i in 0..<meshes_count {
+		for _ in 0..<meshes_count {
 			indices, positions := read_indices_attributes(&bytes, &pos);
-			insert_into_ground_grid(&ground_grid, indices[:], positions[:]);
-			
+			insert_into_ground_grid(&scene.ground_grid, indices[:], positions[:]);
+
 			delete(indices);
 			delete(positions);
 
@@ -119,7 +132,11 @@ load_level :: proc(using game: ^Game) {
 		indices, attributes := read_indices_attributes(&bytes, &pos);
 
 		geometry, geometry_lookup := create_geometry(name);
-		geometry_make_triangle_mesh(geometry, indices, attributes, .Lambert);
+		geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
+
+		delete(indices);
+		delete(attributes);
+
 		append(&geometry_lookups, geometry_lookup);
 
 		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -138,6 +155,7 @@ load_level :: proc(using game: ^Game) {
 
 			geometry_lookup := geometry_lookups[geometry_index];
 			inanimate_entity, entity_lookup := create_entity(name, geometry_lookup, Inanimate_Entity);
+			inanimate_entity.scene_associated = true;
 
 			inanimate_entity.position = position;
 			inanimate_entity.orientation = orientation;
@@ -157,7 +175,7 @@ load_level :: proc(using game: ^Game) {
 
 			if hull_count > 0 {
 				update_entity_hull_transforms_and_bounds(inanimate_entity, inanimate_entity.orientation, inanimate_entity.transform);
-				insert_entity_into_grid(&entity_grid, entity_lookup, inanimate_entity);
+				entity_grid_insert(&scene.entity_grid, entity_lookup, inanimate_entity);
 			}
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -166,7 +184,7 @@ load_level :: proc(using game: ^Game) {
 
 	{ // Rigid body islands
 		island_count := read_u32(&bytes, &pos);
-		init_islands(&islands, island_count);
+		islands_reset(&scene.islands, island_count);
 		
 		for island_index in 0..<island_count {
 			bodies_count := read_u32(&bytes, &pos);
@@ -193,6 +211,7 @@ load_level :: proc(using game: ^Game) {
 
 				geometry_lookup := geometry_lookups[geometry_index];
 				rigid_body, entity_lookup := create_entity(name, geometry_lookup, Rigid_Body_Entity);
+				rigid_body.scene_associated = true;
 
 				rigid_body.position = position;
 				rigid_body.orientation = orientation;
@@ -214,20 +233,22 @@ load_level :: proc(using game: ^Game) {
 				}
 
 				update_entity_hull_transforms_and_bounds(rigid_body, rigid_body.orientation, rigid_body.transform);
-				insert_entity_into_grid(&entity_grid, entity_lookup, rigid_body);
+				entity_grid_insert(&scene.entity_grid, entity_lookup, rigid_body);
 
 				if config.init_sleeping_islands {
-					add_rigid_body_to_island(&islands, int(island_index), entity_lookup, rigid_body);
+					add_rigid_body_to_sleeping_island(&scene.islands, int(island_index), entity_lookup, rigid_body);
 				} else {
-					append(&awake_rigid_body_lookups, entity_lookup);
+					append(&scene.awake_rigid_bodies, entity_lookup);
 				}
 				
 				switch status_effect {
-					case .None:
-					case .Shock, .ExplodingShock:
-						append(&shock_entities, entity_lookup);
-					case .Fire, .ExplodingFire:
-						append(&fire_entities, entity_lookup);
+				case .None:
+				case .Shock, .ExplodingShock:
+					init_shock_particles(rigid_body);
+					append(&scene.shock_entities, entity_lookup);
+				case .Fire, .ExplodingFire:
+					init_fire_particles(rigid_body);
+					append(&scene.fire_entities, entity_lookup);
 				}
 
 				assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
@@ -248,8 +269,9 @@ load_level :: proc(using game: ^Game) {
 
 			geometry_lookup := geometry_lookups[geometry_index];
 			entity, entity_lookup := create_entity(name, geometry_lookup, Oil_Slick_Entity);
+			entity.scene_associated = true;
 			entity.desired_fire_particles = particles_count;
-			append(&game.oil_slick_lookups, entity_lookup);
+			append(&scene.oil_slicks, entity_lookup);
 
 			local_position := read_vec3(&bytes, &pos);
 			local_orientation := read_quat(&bytes, &pos);
@@ -276,13 +298,14 @@ load_level :: proc(using game: ^Game) {
 
 			geometry_lookup := geometry_lookups[geometry_index];
 			entity, entity_lookup := create_entity(name, geometry_lookup, Bumper_Entity);
+			entity.scene_associated = true;
 			
 			entity.position = position;
 			entity.orientation = orientation;
 			entity.size = size;
 			update_entity_transform(entity);
 
-			append(&game.bumper_lookups, entity_lookup);
+			append(&scene.bumpers, entity_lookup);
 
 			hull_position := read_vec3(&bytes, &pos);
 			hull_orientation := read_quat(&bytes, &pos);
@@ -292,7 +315,7 @@ load_level :: proc(using game: ^Game) {
 			append(&entity.collision_hulls, hull);
 			update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
 
-			insert_entity_into_grid(&entity_grid, entity_lookup, entity);
+			entity_grid_insert(&scene.entity_grid, entity_lookup, entity);
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 		}
@@ -310,13 +333,14 @@ load_level :: proc(using game: ^Game) {
 
 			geometry_lookup := geometry_lookups[geometry_index];
 			entity, entity_lookup := create_entity(name, geometry_lookup, Boost_Jet_Entity);
+			entity.scene_associated = true;
 
 			entity.position = position
 			entity.orientation = orientation;
 			entity.size = size;
 			update_entity_transform(entity);
 
-			append(&game.boost_jet_lookups, entity_lookup);
+			append(&scene.boost_jets, entity_lookup);
 
 			hull_position := read_vec3(&bytes, &pos);
 			hull_orientation := read_quat(&bytes, &pos);
@@ -326,7 +350,8 @@ load_level :: proc(using game: ^Game) {
 			append(&entity.collision_hulls, hull);
 			update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
 
-			insert_entity_into_grid(&entity_grid, entity_lookup, entity);
+			entity_grid_insert(&scene.entity_grid, entity_lookup, entity);
+			init_boost_jet_particles(entity);
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 		}
@@ -343,11 +368,11 @@ load_level :: proc(using game: ^Game) {
 		}
 	}
 
-	fmt.printf("Loaded level file %s\n", file_path);
+	fmt.printf("Loaded level file %s\n", scene.file_path);
 	return;
 }
 
-load_car :: proc(game: ^Game) {
+load_car :: proc(car: ^^Car_Entity, scene: ^Scene) {
 	REQUIRED_VERSION :: 2;
 	
 	bytes, success := os.read_entire_file_from_filename("res/car.kgc");
@@ -364,17 +389,19 @@ load_car :: proc(game: ^Game) {
 
 	{ // Geometry
 		geometry, geometry_lookup := create_geometry("car");
-		geometry_make_triangle_mesh(geometry, indices, attributes, .Lambert);
+		geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
 
-		entity, entity_lookup := create_entity("car", geometry_lookup, Car_Entity);
+		delete(indices);
+		delete(attributes);
 
-		entity.position = game.car_spawn_position;
-		entity.orientation = game.car_spawn_orientation;
-		update_entity_transform(entity);
+		created_car, _ := create_entity("car", geometry_lookup, Car_Entity);
+		car^ = created_car;
 
-		init_car_entity(entity);
+		car^.position = scene.spawn_position;
+		car^.orientation = scene.spawn_orientation;
+		update_entity_transform(car^);
 
-		game.car = entity;
+		init_car_entity(car^);
 	}
 
 	{ // Bottom hull
@@ -384,21 +411,24 @@ load_car :: proc(game: ^Game) {
 
 		local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_size);
 		hull := init_collision_hull(local_position, local_orientation, local_size, .Box);
-		append(&game.car.collision_hulls, hull);
+		append(&car^.collision_hulls, hull);
 	}
 
 	{ // Wheels
 		indices, attributes := read_indices_attributes(&bytes, &pos);
 
 		geometry, geometry_lookup := create_geometry("wheel");
-		geometry_make_triangle_mesh(geometry, indices, attributes, .Lambert);
+		geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
+
+		delete(indices);
+		delete(attributes);
 
 		for i in 0..<4 {
 			_, entity_lookup := create_entity("wheel", geometry_lookup, Inanimate_Entity);
-			game.car.wheels[i].entity_lookup = entity_lookup;
+			car^.wheels[i].entity_lookup = entity_lookup;
 		}
 
-		game.car.wheel_radius = read_f32(&bytes, &pos);
+		car^.wheel_radius = read_f32(&bytes, &pos);
 
 		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 	}
@@ -429,7 +459,10 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 			hull_size := read_vec3(&bytes, &pos);
 			
 			geometry, geometry_lookup := create_geometry("shrapnel", .Keep);
-			geometry_make_triangle_mesh(geometry, indices, attributes, .LambertTwoSided);
+			geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .LambertTwoSided);
+
+			delete(indices);
+			delete(attributes);
 
 			hull_local_transform := linalg.matrix4_from_trs(hull_position, hull_orientation, hull_size);
 
@@ -461,7 +494,10 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 			hull_indices, hull_positions := read_indices_attributes(&bytes, &pos);
 
 			geometry, geometry_lookup := create_geometry("Oil slick asset", .Keep);
-			geometry_make_triangle_mesh(geometry, indices, attributes, .Lambert);
+			geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
+
+			delete(indices);
+			delete(attributes);
 			
 			// #todo Should this be used? Is all we need for the oil slick asset this transform?
 			hull_local_transform := linalg.matrix4_from_trs(hull_position, hull_orientation, hull_size);
@@ -479,5 +515,40 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 
 			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 		}
+	}
+}
+
+init_scene :: proc(scene: ^Scene) {
+	FILE_PATH :: "res/tracks/%s.kgl";
+
+	scene.file_path = fmt.aprintf(FILE_PATH, config.level);
+	scene.reload_file_path = fmt.aprintf(FILE_PATH + ".reload", config.level);
+
+	time, error := os.last_write_time_by_name(scene.reload_file_path);
+	assert(error == os.ERROR_NONE || error == os.ERROR_FILE_NOT_FOUND);
+	
+	if error == os.ERROR_NONE {
+		scene.load_time = time;
+	}
+
+	load_scene(scene);
+}
+
+cleanup_scene :: proc(scene: ^Scene) {
+	delete(scene.file_path);
+	delete(scene.reload_file_path);
+}
+
+hot_reload_scene_if_needed :: proc(game: ^Game) {
+	scene := &game.scene;
+	
+	time, error := os.last_write_time_by_name(scene.reload_file_path);
+	assert(error == os.ERROR_NONE || error == os.ERROR_FILE_NOT_FOUND);
+
+	if error == os.ERROR_FILE_NOT_FOUND do return;
+
+	if time > scene.load_time {
+		load_scene(scene);
+		scene.load_time = time;
 	}
 }

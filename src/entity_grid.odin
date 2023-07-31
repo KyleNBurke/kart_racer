@@ -8,26 +8,32 @@ import "math2";
 CELL_SIZE: f32 : 20;
 
 Entity_Grid :: struct {
-	half_cell_count: u32,
+	half_cell_count: int,
 	cells: [dynamic][dynamic][dynamic]Entity_Lookup,
-	query_runs: [dynamic]u32,
 }
 
-init_entity_grid :: proc(grid: ^Entity_Grid, half_size: f32) {
-	grid.half_cell_count = cast(u32) math.max(math.ceil(half_size / CELL_SIZE), 5.0);
-	cell_count := grid.half_cell_count * 2;
-	grid.cells = make([dynamic][dynamic][dynamic]Entity_Lookup, cell_count);
+entity_grid_reset :: proc(using grid: ^Entity_Grid, half_size: f32) {
+	half_cell_count = cast(int) max(math.ceil(half_size / CELL_SIZE), 5.0);
 
-	for x in 0..<cell_count {
-		grid.cells[x] = make([dynamic][dynamic]Entity_Lookup, cell_count);
-
-		for y in 0..<cell_count {
-			grid.cells[x][y] = make([dynamic]Entity_Lookup, 0);
+	// Once we resize the grid, it can kill in internal memory so we must destroy it explicitly to not cause a memory leak.
+	for &col in cells {
+		for &cell in col {
+			delete(cell);
 		}
+
+		delete(col);
+	}
+	
+	cell_count := half_cell_count * 2;
+
+	resize(&cells, cell_count);
+
+	for &col in cells {
+		col = make([dynamic][dynamic]Entity_Lookup, cell_count);
 	}
 }
 
-insert_entity_into_grid :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup, entity: ^Entity) {
+entity_grid_insert :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup, entity: ^Entity) {
 	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, entity.bounds);
 	assert(ok);
 
@@ -38,7 +44,7 @@ insert_entity_into_grid :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup
 	}
 }
 
-remove_entity_from_grid :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup, entity: ^Entity) {
+entity_grid_remove :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup, entity: ^Entity) {
 	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, entity.bounds);
 	if !ok do return;
 
@@ -51,7 +57,7 @@ remove_entity_from_grid :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup
 	}
 }
 
-move_rigid_body_tentatively_in_grid :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
+entity_grid_move_rigid_body_tentatively :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
 	// Remove the lookup from the old cells which this entity spans
 	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, rigid_body.bounds);
 	if !ok do return;
@@ -80,7 +86,7 @@ move_rigid_body_tentatively_in_grid :: proc(grid: ^Entity_Grid, entity_lookup: E
 	}
 }
 
-find_nearby_entities_in_grid :: proc(grid: ^Entity_Grid, bounds: math2.Box3f32) -> [dynamic]Entity_Lookup {
+entity_grid_find_nearby_entities :: proc(grid: ^Entity_Grid, bounds: math2.Box3f32) -> [dynamic]Entity_Lookup {
 	@(static) query_run: u32 = 0;
 
 	if query_run == max(u32) {
@@ -109,7 +115,7 @@ find_nearby_entities_in_grid :: proc(grid: ^Entity_Grid, bounds: math2.Box3f32) 
 	return lookups;
 }
 
-cleanup_entity_grid :: proc(grid: ^Entity_Grid) {
+entity_grid_cleanup :: proc(grid: ^Entity_Grid) {
 	for col in &grid.cells {
 		for row in &col {
 			delete(row);

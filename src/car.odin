@@ -26,20 +26,16 @@ SHOCK_PARTICLE_COLOR_FADE_TIME :: 2.0;
 SHOCK_PARTICLE_SIZE :: 0.1;
 
 Car_Helpers :: struct {
-	front_tire_left_geo_lookup, // #todo: rename front_left_tire
-	back_tire_left_geo_lookup: Geometry_Lookup, // #todo: rename back_left_tire
+	front_left_tire_geo_lookup,
+	back_left_tire_geo_lookup: Geometry_Lookup,
 }
 
-init_car_helpers :: proc() -> Car_Helpers {
+init_car_helpers :: proc(car_helpers: ^Car_Helpers) {
 	_, front_left_tire_geo_lookup := create_geometry("Front left tire helper", .KeepRender);
 	_, back_left_tire_geo_lookup := create_geometry("Back left tire helper", .KeepRender);
 
-	car_helpers := Car_Helpers {
-		front_tire_left_geo_lookup = front_left_tire_geo_lookup,
-		back_tire_left_geo_lookup = back_left_tire_geo_lookup,	
-	};
-
-	return car_helpers;
+	car_helpers.front_left_tire_geo_lookup = front_left_tire_geo_lookup;
+	car_helpers.back_left_tire_geo_lookup = back_left_tire_geo_lookup;
 }
 
 shock_car :: proc(car: ^Car_Entity) {
@@ -407,6 +403,12 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 
 		// Air controls
 		pitch_multiplier := gamepad_stick_adjusted_pos(gamepad, 1);
+		
+		if glfw.GetKey(window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS {
+			if glfw.GetKey(window, glfw.KEY_W) == glfw.PRESS do pitch_multiplier += 1;
+			if glfw.GetKey(window, glfw.KEY_S) == glfw.PRESS do pitch_multiplier -= 1;
+		}
+
 		pitch_ang_vel := linalg.dot(car_left, car.angular_velocity);
 
 		pitch_accel: f32;
