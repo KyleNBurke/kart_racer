@@ -25,19 +25,6 @@ import "core:fmt";
 SHOCK_PARTICLE_COLOR_FADE_TIME :: 2.0;
 SHOCK_PARTICLE_SIZE :: 0.1;
 
-Car_Helpers :: struct {
-	front_left_tire_geo_lookup,
-	back_left_tire_geo_lookup: Geometry_Lookup,
-}
-
-init_car_helpers :: proc(car_helpers: ^Car_Helpers) {
-	_, front_left_tire_geo_lookup := create_geometry("Front left tire helper", .KeepRender);
-	_, back_left_tire_geo_lookup := create_geometry("Back left tire helper", .KeepRender);
-
-	car_helpers.front_left_tire_geo_lookup = front_left_tire_geo_lookup;
-	car_helpers.back_left_tire_geo_lookup = back_left_tire_geo_lookup;
-}
-
 shock_car :: proc(car: ^Car_Entity) {
 	car.shock_remaining_time = 1;
 

@@ -19,5 +19,5 @@ log_verbose :: proc(args: ..any, sep := " ") {
 log_verbosef :: proc(fmt_str: string, args: ..any) {
 	if !config.verbose_logging do return;
 	
-	fmt.printf(fmt_str, args);
+	fmt.printf(fmt_str, ..args);
 }

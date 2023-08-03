@@ -155,6 +155,8 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, texts: ^[dyna
 			when ODIN_DEBUG {
 				assert(geometry_offset <= instance_offset);
 				assert(first_instance <= MAX_ENTITIES);
+
+				assert(len(geometry.indices) > 0, fmt.tprintf("Could not render geometry '%s', it has no indices", geometry.name));
 			}
 
 			// Copy geometry data

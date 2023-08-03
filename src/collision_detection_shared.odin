@@ -52,7 +52,7 @@ furthest_point_hull :: proc(hull: ^Collision_Hull, direction: linalg.Vector3f32)
 			point = linalg.Vector3f32 {
 				xz.x,
 				math.sign_f32(local_direction.y),
-				xz.y
+				xz.y,
 			};
 
 		case .Sphere:

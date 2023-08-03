@@ -39,7 +39,6 @@ Scene :: struct {
 	constraints: Constraints,
 	hull_helpers: Hull_Helpers,
 	contact_helpers: [dynamic]Geometry_Lookup,
-	car_helpers: Car_Helpers,
 	shock_entities: [dynamic]Entity_Lookup,
 	fire_entities: [dynamic]Entity_Lookup,
 	spawn_position: linalg.Vector3f32,
@@ -100,7 +99,6 @@ init :: proc(game: ^Game) {
 	load_runtime_assets(&game.runtime_assets);
 
 	init_hull_helpers(&game.scene.hull_helpers);
-	init_car_helpers(&game.scene.car_helpers);
 
 	free_all(context.temp_allocator);
 }

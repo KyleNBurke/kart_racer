@@ -106,8 +106,13 @@ Hull_Helpers :: struct {
 
 init_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 	box_helper_geo, box_helper_geo_lookup := create_geometry("box hull visualizer", .Keep);
+	geometry_make_box_helper(box_helper_geo, VEC3_NEG_ONE, VEC3_ONE)
+
 	cylinder_helper_geo, cylinder_helper_geo_lookup := create_geometry("cylinder hull visualizer", .Keep);
+	geometry_make_cylinder_helper(cylinder_helper_geo);
+
 	sphere_helper_geo, sphere_helper_geo_lookup := create_geometry("sphere hull visualizer", .Keep);
+	geometry_make_sphere_helper(sphere_helper_geo, VEC3_ZERO, 1);
 
 	hull_helpers.box_helper_geo_lookup = box_helper_geo_lookup;
 	hull_helpers.cylinder_helper_geo_lookup = cylinder_helper_geo_lookup;
@@ -119,7 +124,7 @@ cleanup_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 }
 
 update_entity_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
-	for lookup in &hull_helpers.hull_helpers {
+	for lookup in hull_helpers.hull_helpers {
 		remove_entity(lookup);
 	}
 
@@ -144,9 +149,9 @@ update_entity_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 				continue;
 			}
 
-			entity, lookup := create_entity("hull helper", geometry_lookup, Inanimate_Entity);
+			entity, entity_lookup := create_entity("hull helper", geometry_lookup, Inanimate_Entity);
 			entity.transform = hull.global_transform;
-			append(&hull_helpers.hull_helpers, lookup);
+			append(&hull_helpers.hull_helpers, entity_lookup);
 		}
 	}
 }

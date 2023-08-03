@@ -122,7 +122,6 @@ remove_geometry :: proc(geometry_lookup: Geometry_Lookup) {
 	log_verbosef("Removed geometry '%s'\n", geometry.name);
 }
 
-// @(private="file")
 remove_entity :: proc(entity_lookup: Entity_Lookup) {
 	entity := get_entity(entity_lookup);
 
