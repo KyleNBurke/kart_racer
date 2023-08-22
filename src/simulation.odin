@@ -10,32 +10,35 @@ import "math2";
 GRAVITY: f32 : -20.0;
 EXPLOSION_RADIUS :: 10;
 
-simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
-	{ // Tentatively step the car forward
+simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
+	// Tentatively step the cars forward
+	for lookup in scene.all_players {
+		car := get_entity(lookup).variant.(^Car_Entity);
+
 		car.velocity.y += GRAVITY * dt;
 		car.tentative_position = car.position + car.velocity * dt;
 
 		tentative_orientation := math2.integrate_angular_velocity(car.angular_velocity, car.orientation, dt);
 		car.tentative_inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(tentative_orientation, CAR_INV_LOCAL_INERTIA_TENSOR);
-
 		car.tentative_transform = linalg.matrix4_from_trs(car.tentative_position, tentative_orientation, linalg.Vector3f32 {1, 1, 1});
-
-		update_entity_hull_transforms_and_bounds(car, tentative_orientation, car.tentative_transform);
+		
+		entity_grid_move_tentatively(&scene.entity_grid, lookup, car, tentative_orientation, car.tentative_transform);
 	}
 
 	clear_islands(&scene.islands);
 
+	// Tentatively step the rigid bodies forward
 	for lookup in scene.awake_rigid_bodies {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
 		rigid_body.velocity.y += GRAVITY * dt;
 		rigid_body.tentative_position = rigid_body.position + rigid_body.velocity * dt;
 
-		rigid_body.tentative_orientation = math2.integrate_angular_velocity(rigid_body.angular_velocity, rigid_body.orientation, dt);
-		rigid_body.tentative_inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(rigid_body.tentative_orientation, rigid_body.inv_local_inertia_tensor);
-
-		rigid_body.tentative_transform = linalg.matrix4_from_trs(rigid_body.tentative_position, rigid_body.tentative_orientation, rigid_body.size);
-		entity_grid_move_rigid_body_tentatively(&scene.entity_grid, lookup, rigid_body);
+		tentative_orientation := math2.integrate_angular_velocity(rigid_body.angular_velocity, rigid_body.orientation, dt);
+		rigid_body.tentative_inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(tentative_orientation, rigid_body.inv_local_inertia_tensor);
+		rigid_body.tentative_transform = linalg.matrix4_from_trs(rigid_body.tentative_position, tentative_orientation, rigid_body.size);
+		
+		entity_grid_move_tentatively(&scene.entity_grid, lookup, rigid_body, tentative_orientation, rigid_body.tentative_transform);
 
 		rigid_body.checked_collision = false;
 		init_island(&scene.islands, lookup, rigid_body);
@@ -46,11 +49,15 @@ simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Asset
 	}
 	
 	clear_constraints(&scene.constraints);
-	find_car_spring_constraints_and_surface_type(&scene.ground_grid, &scene.entity_grid, &scene.constraints, car, dt, scene.oil_slicks[:]);
 	
 	additional_awake_entities := make([dynamic]Entity_Lookup, context.temp_allocator);
 
-	{ // Car collisions
+	// Car collisions
+	for lookup in scene.all_players {
+		car := get_entity(lookup).variant.(^Car_Entity);
+
+		find_car_spring_constraints_and_surface_type(&scene.ground_grid, &scene.entity_grid, &scene.constraints, car, dt, scene.oil_slicks[:]);
+
 		provoking_hull := &car.collision_hulls[0];
 
 		// Ground collisions
@@ -79,7 +86,7 @@ simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Asset
 				switch e in nearby_entity.variant {
 				case ^Cloud_Entity:
 					shock_car(car);
-					continue;
+					continue; // todo: In all these continues, don't we really want to break from the nearby_hull loop instead of moving on to the next nearby hull?
 
 				case ^Bumper_Entity:
 					// #todo Should there be an explosion constraint? I.e. a constraint that tries to get the car to a target velocity? (Is this what a motor constraint is?)
@@ -95,7 +102,10 @@ simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Asset
 					car.velocity += dir * 150 * dt;
 					continue;
 
-				case ^Car_Entity, ^Oil_Slick_Entity:
+				case ^Car_Entity:
+					continue; // Do want to handle this in the future.
+				
+				case ^Oil_Slick_Entity:
 					unreachable();
 
 				case ^Inanimate_Entity, ^Rigid_Body_Entity:
@@ -120,6 +130,8 @@ simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Asset
 				}
 			}
 		}
+
+		car.checked_collision = true;
 	}
 
 	// Rigid body collisions
@@ -148,9 +160,13 @@ simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Asset
 
 				nearby_entity := get_entity(nearby_lookup);
 
-				if nearby_rigid_body, ok := nearby_entity.variant.(^Rigid_Body_Entity); ok {
-					if nearby_rigid_body.checked_collision do continue;
-					if provoking_rigid_body.collision_exclude && nearby_rigid_body.collision_exclude do continue;
+				#partial switch nearby_entity_variant in nearby_entity.variant {
+				case ^Rigid_Body_Entity:
+					if nearby_entity_variant.checked_collision do continue;
+					if nearby_entity_variant.collision_exclude && nearby_entity_variant.collision_exclude do continue;
+				
+				case ^Car_Entity:
+					if nearby_entity_variant.checked_collision do continue;
 				}
 
 				for nearby_hull in &nearby_entity.collision_hulls {
@@ -172,7 +188,12 @@ simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Asset
 					case ^Inanimate_Entity:
 						add_fixed_constraint_set(&scene.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
 					
-					case ^Car_Entity, ^Oil_Slick_Entity:
+					case ^Car_Entity:
+						// This is unreachable beacuse it would've already been handled in the car collision detection loop above.
+						// Once we process that collision we set checked_collision on the car to true.
+						unreachable();
+						
+					case ^Oil_Slick_Entity:
 						unreachable();
 					
 					case ^Cloud_Entity:
@@ -200,9 +221,11 @@ simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Asset
 		update_island_helpers(&scene.islands);
 	}
 	
-	solve_constraints(&scene.constraints, car, dt);
+	solve_constraints(&scene.constraints, dt);
 
-	{
+	for lookup in scene.all_players {
+		car := get_entity(lookup).variant.(^Car_Entity);
+		
 		car.position += (car.velocity + car.bias_velocity) * dt;
 		car.orientation = math2.integrate_angular_velocity(car.angular_velocity + car.bias_angular_velocity, car.orientation, dt);
 
@@ -270,9 +293,9 @@ simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Asset
 			bounds := math2.Box3f32 { center - EXPLOSION_RADIUS, center + EXPLOSION_RADIUS };
 			
 			// Appy explosion impulse to car if nearby
-			if math2.box_intersects(bounds, car.bounds) {
-				dir := linalg.normalize(car.position - rigid_body.position);
-				car.velocity += dir * 30;
+			if math2.box_intersects(bounds, scene.player.bounds) {
+				dir := linalg.normalize(scene.player.position - rigid_body.position);
+				scene.player.velocity += dir * 30;
 			}
 			
 			// Apply explosion impulse to nearby rigid bodies
@@ -400,7 +423,7 @@ simulate :: proc(car: ^Car_Entity, scene: ^Scene, runtime_assets: ^Runtime_Asset
 							
 							if config.explosion_helpers {
 								geometry, _ := create_geometry("explosion helper", .KeepRender);
-								geometry_make_line_helper(geometry, origin, segment);
+								geometry_make_line_helper_origin_vector(geometry, origin, segment);
 							}
 
 							intersection_point := origin + ray_direction * intersection_length;
@@ -570,11 +593,8 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 			}
 
 			switch _ in nearby_entity.variant {
-			case ^Rigid_Body_Entity, ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
+			case ^Rigid_Body_Entity, ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
 				continue;
-
-			case ^Car_Entity:
-				unreachable();
 
 			case ^Inanimate_Entity:
 			}
@@ -619,7 +639,8 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 	car.surface_type = .Normal;
 
 	if small_array.len(manifold.contacts) > 0 {
-		set_spring_constraint_set(constraints, car, &manifold, dt);
+		// set_spring_constraint_set(constraints, car, &manifold, dt); // TODO: THIS MUST ADD TO THE LIST
+		add_spring_constraint_set(constraints, car, &manifold, dt);
 
 		// Check if car is on an oil slick
 		probe_start := car.position + extension_dir * SPRING_BODY_POINT_Y;
@@ -828,7 +849,7 @@ clear_contact_helpers :: proc(contact_helpers: ^[dynamic]Geometry_Lookup) {
 add_contact_helper :: proc(contact_helpers: ^[dynamic]Geometry_Lookup, manifold: ^Contact_Manifold) {
 	for contact in small_array.slice(&manifold.contacts) {
 		geometry, geometry_lookup := create_geometry("contact helper", .KeepRender);
-		geometry_make_line_helper(geometry, contact.position_b, manifold.normal * 3);
+		geometry_make_line_helper_origin_vector(geometry, contact.position_b, manifold.normal * 3);
 		append(contact_helpers, geometry_lookup);
 	}
 }

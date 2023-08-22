@@ -95,24 +95,51 @@ geometry_make_box :: proc(geo: ^Geometry, color: [3]f32 = GREY, pipeline: Pipeli
 	);
 }
 
-geometry_make_line_helper :: proc(geo: ^Geometry, origin, vector: linalg.Vector3f32, color: [3]f32 = YELLOW) {
+geometry_make_line_helper_origin_vector :: proc(geo: ^Geometry, origin, vector: linalg.Vector3f32, color: [3]f32 = YELLOW) {
+	s := origin;
+	e := origin + vector;
+
+	geometry_make_line_helper_start_end(geo, s, e, color);
+}
+
+geometry_make_line_helper_start_end :: proc(geo: ^Geometry, start, end: linalg.Vector3f32, color: [3]f32 = YELLOW) {
 	clear(&geo.indices);
 	clear(&geo.attributes);
 	geo.pipeline = .Line;
 
 	append(&geo.indices, 0, 1);
 
-	s := origin;
-	e := origin + vector;
-
-	s_x, s_y, s_z := s[0], s[1], s[2];
-	e_x, e_y, e_z := e[0], e[1], e[2];
+	s_x, s_y, s_z := start[0], start[1], start[2];
+	e_x, e_y, e_z := end[0], end[1], end[2];
 	r, g, b := color[0], color[1], color[2];
 
 	append(&geo.attributes,
 		s_x, s_y, s_z, r, g, b,
 		e_x, e_y, e_z, r, g, b,
 	);
+}
+
+geometry_make_line_helper_points_strip :: proc(geo: ^Geometry, points: []f32, color := YELLOW) {
+	clear(&geo.indices);
+	clear(&geo.attributes);
+	geo.pipeline = .Line;
+
+	r, g, b := color[0], color[1], color[2];
+
+	for i in 0..<(len(points) / 3) {
+		s := u16(i);
+		e := u16(i) + 1;
+
+		if i != len(points) / 3 - 1 {
+			append(&geo.indices, s, e);
+		}
+
+		x := points[i * 3];
+		y := points[i * 3 + 1];
+		z := points[i * 3 + 2];
+
+		append(&geo.attributes, x, y, z, r, g, b);
+	}
 }
 
 geometry_make_box_helper :: proc(geo: ^Geometry, min, max: linalg.Vector3f32, color: [3]f32 = YELLOW) {

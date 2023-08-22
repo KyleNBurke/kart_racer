@@ -86,7 +86,7 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 			// is in the middle of constraint resolution and it depends on the car's position for correctness. Instead,
 			// we should probably flip a boolean requesting the car's position be reset and do it in the main loop.
 			// This is really just some debug shit so for now I don't really care.
-			respawn_car(game.car, game.scene.spawn_position, game.scene.spawn_orientation);
+			respawn_player(game.scene.player, game.scene.spawn_position, game.scene.spawn_orientation);
 		}
 
 		camera_handle_key_press(&callback_state.game.camera, key, window);

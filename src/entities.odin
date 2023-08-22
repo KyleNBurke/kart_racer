@@ -46,7 +46,6 @@ Rigid_Body_Entity :: struct {
 	checked_collision: bool,
 	mass: f32,
 	tentative_position: linalg.Vector3f32,
-	tentative_orientation: linalg.Quaternionf32,
 	tentative_transform: linalg.Matrix4f32,
 	inv_local_inertia_tensor: linalg.Matrix3f32,
 	tentative_inv_global_inertia_tensor: linalg.Matrix3f32,
@@ -78,6 +77,7 @@ Surface_Type :: enum { Normal, Oil }
 
 Car_Entity :: struct {
 	using entity: Entity,
+	checked_collision: bool,
 	tentative_inv_global_inertia_tensor: linalg.Matrix3f32,
 	velocity: linalg.Vector3f32,
 	angular_velocity: linalg.Vector3f32,
@@ -92,8 +92,11 @@ Car_Entity :: struct {
 	on_fire_remaining_time: f32,
 	shock_elapsed_ramp_down_time: f32,
 	on_fire_elapsed_ramp_up_time: f32,
-	wheel_radius: f32,
+	wheel_radius: f32, // #todo: Pull this out
 	wheels: [4]Wheel,
+	input_accel_multiplier: f32,
+	input_steer_multiplier: f32,
+	input_handbreak: bool,
 	sliding: bool,
 	handbrake_duration: f32,
 	finished_slide: bool,

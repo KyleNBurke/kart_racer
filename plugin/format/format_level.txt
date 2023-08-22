@@ -103,3 +103,8 @@ Boost jets count: u32
 	hull local size        vec3
 	position check         u32
 	...
+
+AI path
+	points count u32
+	point        vec3
+	...

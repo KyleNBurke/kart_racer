@@ -1,8 +1,8 @@
-from bpy.types import Context, Depsgraph, Object, Mesh
+from bpy.types import Context, Depsgraph, Object, Mesh, Curve, Spline, BezierSplinePoint
 from . import util
 from .util import WObject
 
-VERSION = 3
+VERSION = 4
 
 def export(operator, context: Context):
 	depsgraph: Depsgraph = context.evaluated_depsgraph_get()
@@ -21,12 +21,13 @@ def export(operator, context: Context):
 	export_oil_slicks(depsgraph, graph, file, mesh_name_to_index_max)
 	export_bumpers(depsgraph, graph, file, mesh_name_to_index_max)
 	export_boost_jets(depsgraph, graph, file, mesh_name_to_index_max)
+	export_ai_paths(depsgraph, graph, file)
 
 	file.close()
+	print("Exported", operator.filepath)
 
 	write_reload_trigger_file(operator.filepath)
 
-	print("Exported", operator.filepath)
 	return {'FINISHED'}
 
 def export_spawn_point(graph, file):
@@ -391,3 +392,48 @@ def write_reload_trigger_file(filepath):
 	file = open(trigger_filepath, 'w')
 	file.close()
 	print("Wrote reload trigger file ", trigger_filepath)
+
+def export_ai_paths(depsgraph: Depsgraph, graph, file):
+	print("--- AI paths ---")
+
+	def compare(w_object: WObject):
+		return w_object.object.kg_type == 'ideal_path'
+
+	w_object = util.search_graph_one(graph, compare)
+
+	if w_object == None:
+		print("No path found")
+	else:
+		print("Found path", w_object.unique_name)
+		curve: Curve = w_object.object.data
+		spline: Spline = curve.splines[0]
+
+		util.write_u32(file, (len(spline.bezier_points) - 1) * 3 + 1)
+		print((len(spline.bezier_points) - 1) * 3 + 1, "points")
+
+		global_matrix = w_object.object.matrix_world
+
+		for i in range(len(spline.bezier_points) - 1):
+			handle_0 = spline.bezier_points[i]
+			handle_1 = spline.bezier_points[i + 1]
+
+			pos_0 = util.blender_position_to_game_position(global_matrix @ handle_0.co)
+			pos_1 = util.blender_position_to_game_position(global_matrix @ handle_0.handle_right)
+			pos_2 = util.blender_position_to_game_position(global_matrix @ handle_1.handle_left)
+			
+			util.write_vec3(file, pos_0)
+			util.write_vec3(file, pos_1)
+			util.write_vec3(file, pos_2)
+
+			print(handle_0.co, handle_0.handle_right, handle_1.handle_left)
+		
+		# If the loop is closed, I don't think we need to write this end point since it's the beginning of the first curve
+		handle = spline.bezier_points[-1]
+		pos = util.blender_position_to_game_position(global_matrix @ handle.co)
+		util.write_vec3(file, pos)
+
+		print(handle.co)
+	
+	util.write_cursor_check(file)
+
+	print()

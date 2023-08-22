@@ -20,7 +20,6 @@ Game :: struct {
 	camera: Camera,
 	font: Font,
 	texts: [dynamic]Text,
-	car: ^Car_Entity,
 	runtime_assets: Runtime_Assets,
 	frame_metrics: Frame_Metrics,
 	single_stepping: bool,
@@ -48,6 +47,9 @@ Scene :: struct {
 	on_fire_oil_slicks: [dynamic]Entity_Lookup,
 	bumpers: [dynamic]Entity_Lookup,
 	boost_jets: [dynamic]Entity_Lookup,
+	all_players: [AI_PLAYERS_COUNT + 1]Entity_Lookup, // First item is the human player
+	player: ^Car_Entity,
+	ai: AI,
 }
 
 main :: proc() {
@@ -95,10 +97,16 @@ init :: proc(game: ^Game) {
 	ground_grid_init(&game.scene.ground_grid);
 
 	init_scene(&game.scene);
-	load_car(&game.car, &game.scene);
+	init_players(&game.scene);
 	load_runtime_assets(&game.runtime_assets);
 
+	ai_init(&game.scene.ai);
+
 	init_hull_helpers(&game.scene.hull_helpers);
+
+	if config.ai_path_helper {
+		ai_show_path_helper(&game.scene.ai);
+	}
 
 	free_all(context.temp_allocator);
 }
@@ -174,31 +182,39 @@ update :: proc(game: ^Game, dt: f32) {
 		hot_reload_scene_if_needed(game);
 
 		if gamepad_button_pressed(&game.gamepad, glfw.GAMEPAD_BUTTON_X) {
-			respawn_car(game.car, game.scene.spawn_position, game.scene.spawn_orientation);
+			respawn_player(game.scene.player, game.scene.spawn_position, game.scene.spawn_orientation);
 		}
 	}
 
 	if game.single_stepping {
 		if game.step {
-			move_car(&game.gamepad, game.window, game.car, dt);
-			simulate(game.car, &game.scene, &game.runtime_assets, dt);
-			position_and_orient_wheels(game.car, dt);
+			set_player_inputs(&game.gamepad, game.window, game.scene.player);
+			set_ai_player_inputs(&game.scene.ai);
+			move_players(game.scene.all_players[:], dt);
+			simulate(&game.scene, &game.runtime_assets, dt);
+			position_and_orient_wheels(game.scene.player, dt);
 			game.step = false;
 		}
 	} else {
-		move_car(&game.gamepad, game.window, game.car, dt);
-		simulate(game.car, &game.scene, &game.runtime_assets, dt);
-		position_and_orient_wheels(game.car, dt);
+		set_player_inputs(&game.gamepad, game.window, game.scene.player);
+		set_ai_player_inputs(&game.scene.ai);
+		move_players(game.scene.all_players[:], dt);
+		simulate(&game.scene, &game.runtime_assets, dt);
+		position_and_orient_wheels(game.scene.player, dt);
 	}
 
-	move_camera(&game.camera, &game.gamepad, game.window, game.car, dt);
+	ai_signal_update_if_ready(&game.scene.ai, dt);
+
+	ai_car := get_entity(game.scene.ai.players[0].lookup).variant.(^Car_Entity);
+	move_camera(&game.camera, &game.gamepad, game.window, ai_car, dt);
+	// move_camera(&game.camera, &game.gamepad, game.window, game.scene.player, dt);
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
 
 	scene := &game.scene;
 	update_shock_entity_particles(scene.shock_entities[:], dt);
 	update_fire_entity_particles(scene.fire_entities[:], dt);
 	update_status_effect_cloud_particles(scene.status_effect_clouds[:], dt);
-	update_car_status_effects_and_particles(game.car, game.camera.transform, dt);
+	update_car_status_effects_and_particles(game.scene.player, game.camera.transform, dt);
 	update_on_fire_oil_slicks(scene.on_fire_oil_slicks[:], dt);
 	animate_bumpers(scene.bumpers[:], dt);
 	update_boost_jet_particles(scene.boost_jets[:], dt);
@@ -216,7 +232,7 @@ immediate_mode_render_game :: proc(game: ^Game) {
 
 	draw_shock_entity_particles(vulkan, scene.shock_entities[:]);
 	draw_fire_entity_particles(vulkan, scene.fire_entities[:]);
-	draw_car_status_effects(vulkan, game.car);
+	draw_car_status_effects(vulkan, game.scene.player);
 	draw_status_effect_clouds(vulkan, scene.status_effect_clouds[:]);
 	draw_on_fire_oil_slicks(vulkan, scene.on_fire_oil_slicks[:]);
 	draw_boost_jet_particles(vulkan, scene.boost_jets[:]);

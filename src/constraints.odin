@@ -17,6 +17,7 @@ SPRING_EQUILIBRIUM_LENGTH: f32 : 0.4;
 // only the relevent variables are used.
 
 Spring_Constraint_Set :: struct {
+	car: ^Car_Entity,
 	n: linalg.Vector3f32,
 	constraints: small_array.Small_Array(4, Spring_Constraint),
 }
@@ -31,6 +32,7 @@ Spring_Constraint :: struct {
 }
 
 Car_Fixed_Constraint_Set :: struct {
+	car: ^Car_Entity,
 	n: linalg.Vector3f32,
 	constraints: small_array.Small_Array(4, Car_Fixed_Constraint),
 }
@@ -66,6 +68,7 @@ Fixed_Constraint :: struct {
 }
 
 Car_Movable_Constraint_Set :: struct {
+	car: ^Car_Entity,
 	rigid_body_b: ^Rigid_Body_Entity,
 	n: linalg.Vector3f32,
 	constraints: small_array.Small_Array(4, Car_Movable_Constraint),
@@ -114,7 +117,7 @@ Cylinder_Rolling :: struct {
 }
 
 Constraints :: struct {
-	spring_constraint_set: Maybe(Spring_Constraint_Set),
+	spring_constraint_sets: [dynamic]Spring_Constraint_Set,
 	car_fixed_constraint_sets: [dynamic]Car_Fixed_Constraint_Set,
 	car_movable_constraint_sets: [dynamic]Car_Movable_Constraint_Set,
 	fixed_constraint_sets: [dynamic]Fixed_Constraint_Set,
@@ -123,7 +126,7 @@ Constraints :: struct {
 }
 
 clear_constraints :: proc(using constraints: ^Constraints) {
-	spring_constraint_set = nil;
+	clear(&spring_constraint_sets);
 	clear(&car_fixed_constraint_sets);
 	clear(&car_movable_constraint_sets);
 	clear(&fixed_constraint_sets);
@@ -131,12 +134,12 @@ clear_constraints :: proc(using constraints: ^Constraints) {
 	clear(&cylinders_rolling);
 }
 
-set_spring_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, manifold: ^Spring_Contact_Manifold, dt: f32) {
+add_spring_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, manifold: ^Spring_Contact_Manifold, dt: f32) {
 	n := manifold.normal;
-	
-	spring_constraint_set := Spring_Constraint_Set {
-		n = n,
-	};
+
+	constraint_set: Spring_Constraint_Set; // todo: Prefer this style
+	constraint_set.car = car;
+	constraint_set.n = n;
 
 	inverse_mass := 1.0 / CAR_MASS;
 
@@ -164,7 +167,7 @@ set_spring_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, m
 		position_error := equilibrium_length - contact.length;
 		bias := beta / dt * -position_error;
 
-		small_array.append(&spring_constraint_set.constraints, Spring_Constraint {
+		small_array.append(&constraint_set.constraints, Spring_Constraint {
 			r = r,
 			rxn = rxn,
 			effective_mass_inv = effective_mass_inv,
@@ -173,15 +176,15 @@ set_spring_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, m
 		});
 	}
 
-	constraints.spring_constraint_set = spring_constraint_set;
+	append(&constraints.spring_constraint_sets, constraint_set);
 }
 
 add_car_fixed_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, manifold: ^Contact_Manifold, dt: f32) {
 	n := manifold.normal;
 
-	constraint_set := Car_Fixed_Constraint_Set {
-		n = n,
-	};
+	constraint_set: Car_Fixed_Constraint_Set;
+	constraint_set.car = car;
+	constraint_set.n = n;
 
 	inverse_mass := 1.0 / CAR_MASS;
 
@@ -210,10 +213,10 @@ add_car_fixed_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity
 add_car_movable_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Entity, rigid_body_b: ^Rigid_Body_Entity, manifold: ^Contact_Manifold, dt: f32) {
 	n := manifold.normal;
 
-	constraint_set := Car_Movable_Constraint_Set {
-		rigid_body_b = rigid_body_b,
-		n = n,
-	};
+	constraint_set: Car_Movable_Constraint_Set;
+	constraint_set.car = car;
+	constraint_set.rigid_body_b = rigid_body_b;
+	constraint_set.n = n;
 
 	inverse_mass_a := 1.0 / CAR_MASS;
 	inverse_mass_b := 1.0 / rigid_body_b.mass;
@@ -365,9 +368,11 @@ add_movable_constraint_set :: proc(constraints: ^Constraints, rigid_body_a, rigi
 	append(&constraints.movable_constraint_sets, constraint_set);
 }
 
-solve_constraints :: proc(using constraints: ^Constraints, car: ^Car_Entity, dt: f32) {
+solve_constraints :: proc(using constraints: ^Constraints, dt: f32) {
 	for _ in 0..<10 {
-		if constraint_set, ok := spring_constraint_set.?; ok {
+		for constraint_set in &spring_constraint_sets {
+			car := constraint_set.car;
+
 			for _, constraint_index in small_array.slice(&constraint_set.constraints) {
 				constraint := small_array.get_ptr(&constraint_set.constraints, constraint_index);
 
@@ -385,6 +390,8 @@ solve_constraints :: proc(using constraints: ^Constraints, car: ^Car_Entity, dt:
 		}
 
 		for constraint_set in &car_fixed_constraint_sets {
+			car := constraint_set.car;
+
 			for _, constraint_index in small_array.slice(&constraint_set.constraints) {
 				constraint := small_array.get_ptr(&constraint_set.constraints, constraint_index);
 				contact_velocity := car.velocity + linalg.cross(car.angular_velocity, constraint.r);
@@ -417,6 +424,7 @@ solve_constraints :: proc(using constraints: ^Constraints, car: ^Car_Entity, dt:
 		}
 
 		for constraint_set in &car_movable_constraint_sets {
+			car := constraint_set.car;
 			rigid_body_b := constraint_set.rigid_body_b;
 
 			for _, constraint_index in small_array.slice(&constraint_set.constraints) {

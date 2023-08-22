@@ -183,25 +183,50 @@ calculate_car_inertia_tensor :: proc(orientation: linalg.Quaternionf32) -> linal
 	return math2.calculate_inv_global_inertia_tensor(orientation, INV_LOCAL_INERTIA_TENSOR);
 }
 
-move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity, dt: f32) {
-	accel_multiplier: f32 = 0;
-	steer_multiplier: f32 = 0;
-	
+set_player_inputs :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, player: ^Car_Entity) {
+	// #todo: When using keyboard and controller at same time, this would mess up the values.
+
 	{ // Calculate a value between -1 and 1 to determine how much linear force to apply
+		accel_multiplier: f32 = 0;
+
 		if glfw.GetKey(window, glfw.KEY_W) == glfw.PRESS do accel_multiplier += 1;
 		if glfw.GetKey(window, glfw.KEY_S) == glfw.PRESS do accel_multiplier -= 1;
 
 		accel_multiplier += gamepad_trigger_pos(gamepad, 5);
 		accel_multiplier -= gamepad_trigger_pos(gamepad, 4);
+
+		player.input_accel_multiplier = accel_multiplier;
 	}
 
 	{ // Calculate a value between -1 and 1 to determine the desired cornering angle
+		steer_multiplier: f32 = 0;
+
 		if glfw.GetKey(window, glfw.KEY_A) == glfw.PRESS do steer_multiplier += 1;
 		if glfw.GetKey(window, glfw.KEY_D) == glfw.PRESS do steer_multiplier -= 1;
 
 		steer_multiplier += gamepad_stick_adjusted_pos(gamepad, 0);
-	}
 
+		player.input_steer_multiplier = steer_multiplier;
+	}
+	
+	player.input_handbreak = false;
+
+	if glfw.GetKey(window, glfw.KEY_SPACE) == glfw.PRESS || gamepad_button_held(gamepad, glfw.GAMEPAD_BUTTON_A) {
+		player.input_handbreak = true;
+	}
+}
+
+move_players :: proc(players: []Entity_Lookup, dt: f32) {
+	for lookup in players {
+		car := get_entity(lookup).variant.(^Car_Entity);
+		move_car(car, dt);
+	}
+}
+
+CAR_TOP_SPEED: f32 : 35;
+
+@(private = "file")
+move_car :: proc(car: ^Car_Entity, dt: f32) {
 	car_forward := math2.matrix4_forward(car.transform);
 	car_up := math2.matrix4_up(car.transform);
 	car_left := math2.matrix4_left(car.transform);
@@ -219,15 +244,14 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 		surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal + back_left_contact_normal + back_right_contact_normal);
 		surface_forward := linalg.normalize(linalg.cross(car_left, surface_normal));
 
-		TOP_SPEED: f32 : 35;
 		vel := linalg.dot(surface_forward, car_vel);
 
 		surface_velocity := car_vel - linalg.projection(car_vel, surface_normal); // project velocity onto surface plane
 		surface_velocity_dir := linalg.normalize(surface_velocity);
 		slip_angle := math.acos(linalg.dot(surface_velocity_dir, car_forward));
 
-		if glfw.GetKey(window, glfw.KEY_SPACE) == glfw.PRESS || gamepad_button_held(gamepad, glfw.GAMEPAD_BUTTON_A) {
-			car.handbrake_duration = 0;
+		if car.input_handbreak {
+			car.handbrake_duration = 0; // #todo: Is this weird? Do I even need the bool?
 		}
 
 		handbraking := false;
@@ -265,13 +289,13 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 			ang_vel := linalg.dot(car_ang_vel, surface_normal);
 			ang_accel: f32;
 			
-			if steer_multiplier == 0 {
+			if car.input_steer_multiplier == 0 {
 				ang_accel = -clamp(ang_vel, -ANG_FRIC * dt, ANG_FRIC * dt);
 			} else {
 				MAX_ROTATION_SPEED :: 2;
 
 				if abs(ang_vel) <= MAX_ROTATION_SPEED {
-					ang_accel = math.sign(steer_multiplier) * min(MAX_ROTATION_SPEED - abs(ang_vel), 5 * abs(steer_multiplier) * dt);
+					ang_accel = math.sign(car.input_steer_multiplier) * min(MAX_ROTATION_SPEED - abs(ang_vel), 5 * abs(car.input_steer_multiplier) * dt);
 				} else {
 					// If you're spinning more than the max rotation speed and the steer angle is in the opposite direction, we could
 					// apply a rotational acceleration in that direction to slow it down. Right now, we're just applying the friction.
@@ -286,7 +310,7 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 			// Increase the lateral deceleration when the speed is high.
 			// This is for leaving the drift. Without it, the car takes a tad too long to leave the sliding state.
 			if vel > 25 {
-				lat_fric_multiplier := clamp(vel / TOP_SPEED, 0, 1);
+				lat_fric_multiplier := clamp(vel / CAR_TOP_SPEED, 0, 1);
 				lat_fric += 10 * lat_fric_multiplier
 			}
 
@@ -305,9 +329,9 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 			if front_left_contact_normal_ok || front_right_contact_normal_ok {
 				LOW_SPEED :: 0.2;
 				HIGH_SPEED :: 0.08;
-				max_steer_angle := HIGH_SPEED + (LOW_SPEED - HIGH_SPEED) * clamp((TOP_SPEED - vel) / TOP_SPEED, 0, 1);
+				max_steer_angle := HIGH_SPEED + (LOW_SPEED - HIGH_SPEED) * clamp((CAR_TOP_SPEED - vel) / CAR_TOP_SPEED, 0, 1);
 
-				target_steer_angle: f32 = max_steer_angle * steer_multiplier;
+				target_steer_angle: f32 = max_steer_angle * car.input_steer_multiplier;
 				car.current_steer_angle += clamp(target_steer_angle - car.current_steer_angle, -0.8 * dt, 0.8 * dt);
 
 				tire_forward := math2.vector3_rotate(car_forward, car_up, car.current_steer_angle);
@@ -338,21 +362,21 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 		BRAKE_FORCE: f32 : 30;
 		accel: f32;
 
-		if vel > TOP_SPEED {
-			if accel_multiplier < 0 {
+		if vel > CAR_TOP_SPEED {
+			if car.input_accel_multiplier < 0 {
 				// Apply brake force
-				accel = -min(vel, -accel_multiplier * BRAKE_FORCE * dt);
+				accel = -min(vel, -car.input_accel_multiplier * BRAKE_FORCE * dt);
 			} else {
 				// Apply drag to get car to top speed
-				accel = -min(vel - TOP_SPEED, 20 * dt);
+				accel = -min(vel - CAR_TOP_SPEED, 20 * dt);
 			}
 		} else {
-			if accel_multiplier > 0 {
+			if car.input_accel_multiplier > 0 {
 				// Apply acceleration to get car to top speed
-				accel = min(TOP_SPEED - vel, accel_multiplier * accel_slide_multiplier * 50 * dt);
-			} else if accel_multiplier < 0 {
+				accel = min(CAR_TOP_SPEED - vel, car.input_accel_multiplier * accel_slide_multiplier * 50 * dt);
+			} else if car.input_accel_multiplier < 0 {
 				// Apply brake force
-				accel = -min(vel, -accel_multiplier * BRAKE_FORCE * dt);
+				accel = -min(vel, -car.input_accel_multiplier * BRAKE_FORCE * dt);
 			} else {
 				// Apply drag
 				accel = -min(vel, 10 * dt);
@@ -362,18 +386,18 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 		car.velocity += surface_forward * accel;
 
 		{ // Set weight distribution multiplier
-			v: f32 = clamp(vel / TOP_SPEED, 0, 1);
+			v: f32 = clamp(vel / CAR_TOP_SPEED, 0, 1);
 
-			if accel_multiplier > 0 {
+			if car.input_accel_multiplier > 0 {
 				a := accel / (50 * dt);
 				car.weight_distribution_multiplier = a * (1 - v);
-			} else if accel_multiplier < 0 {
+			} else if car.input_accel_multiplier < 0 {
 				a := accel / (BRAKE_FORCE * dt);
 				car.weight_distribution_multiplier = a * v;
 			}
 		}
 
-		if true {
+		if false {
 			car_geo := get_geometry(car.geometry_lookup.?);
 
 			color: [3]f32;
@@ -386,6 +410,7 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 			geometry_set_color(car_geo, color);
 		}
 	} else {
+		/* #todo
 		PITCH_DRAG :: 1.5;
 
 		// Air controls
@@ -407,6 +432,7 @@ move_car :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, car: ^Car_Entity,
 		}
 
 		car.angular_velocity += car_left * pitch_accel;
+		*/
 	}
 }
 
@@ -457,7 +483,7 @@ position_and_orient_wheels :: proc(car: ^Car_Entity, dt: f32) {
 	}
 }
 
-respawn_car :: proc(car: ^Car_Entity, position: linalg.Vector3f32, orientation: linalg.Quaternionf32) {
+respawn_player :: proc(car: ^Car_Entity, position: linalg.Vector3f32, orientation: linalg.Quaternionf32) {
 	car.position = position;
 	car.orientation = orientation;
 

@@ -90,7 +90,7 @@ load_scene :: proc(scene: ^Scene) {
 		remove_scene_associated_entities();
 	}
 
-	REQUIRED_VERSION :: 3;
+	REQUIRED_VERSION :: 4;
 	
 	bytes, success := os.read_entire_file_from_filename(scene.file_path, context.temp_allocator);
 	assert(success, fmt.tprintf("Failed to load level file %s", scene.file_path));
@@ -368,16 +368,140 @@ load_scene :: proc(scene: ^Scene) {
 		}
 	}
 
+	{ // AI paths
+		point_count := read_u32(&bytes, &pos);
+
+		points := make([dynamic]linalg.Vector3f32, 0, point_count, context.temp_allocator);
+		
+		for _ in 0..<point_count {
+			p := read_vec3(&bytes, &pos);
+			append(&points, p);
+		}
+
+		curves := (point_count - 1) / 3;
+		for curve_index in 0..<curves {
+			p0 := points[curve_index * 3]
+			p1 := points[curve_index * 3 + 1]
+			p2 := points[curve_index * 3 + 2]
+			p3 := points[curve_index * 3 + 3]
+
+			curve := Curve {
+				p0, p1, p2, p3,
+				0, // Could be calculated during the level export
+			};
+
+			append(&scene.ai.path, curve);
+		}
+
+		calculate_curve_lengths(scene.ai.path[:])
+
+		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+	}
+
 	fmt.printf("Loaded level file %s\n", scene.file_path);
 	return;
+}
+
+init_players :: proc(scene: ^Scene) {
+	car_geometry_lookup: Geometry_Lookup;
+
+	hull_local_position: linalg.Vector3f32;
+	hull_local_orientation: linalg.Quaternionf32;
+	hull_local_size: linalg.Vector3f32;
+
+	wheel_geometry_lookup: Geometry_Lookup;
+	wheel_radius: f32;
+
+	{ // Load data from file
+		REQUIRED_VERSION :: 2;
+	
+		bytes, success := os.read_entire_file_from_filename("res/car.kgc");
+		assert(success);
+		defer delete(bytes);
+		
+		pos := 0;
+
+		{ // Version check
+			version := read_u32(&bytes, &pos);
+			assert(REQUIRED_VERSION == version, fmt.tprintf("[car loading] Required version %v but found %v.", REQUIRED_VERSION, version));
+		}
+
+		{ // Car geometry
+			indices, attributes := read_indices_attributes(&bytes, &pos);
+			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+
+			geometry, geometry_lookup := create_geometry("car");
+			geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
+			car_geometry_lookup = geometry_lookup;
+
+			delete(indices);
+			delete(attributes);
+		}
+
+		{ // Bottom hull
+			hull_local_position = read_vec3(&bytes, &pos);
+			hull_local_orientation = read_quat(&bytes, &pos);
+			hull_local_size = read_vec3(&bytes, &pos);
+		}
+
+		{ // Wheels
+			indices, attributes := read_indices_attributes(&bytes, &pos);
+
+			geometry, geometry_lookup := create_geometry("wheel");
+			geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
+			wheel_geometry_lookup = geometry_lookup;
+
+			delete(indices);
+			delete(attributes);
+
+			wheel_radius = read_f32(&bytes, &pos);
+			
+			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+		}
+	}
+
+	// Init players
+	for _, i in scene.all_players {
+		entity, entity_lookup := create_entity("player", car_geometry_lookup, Car_Entity);
+		init_car_entity(entity);
+
+		entity.position.x = 5 + f32(i) * 5;
+		entity.position.y = 5;
+		update_entity_transform(entity);
+
+		hull := init_collision_hull(hull_local_position, hull_local_orientation, hull_local_size, .Box);
+		append(&entity.collision_hulls, hull);
+
+		update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
+		entity_grid_insert(&scene.entity_grid, entity_lookup, entity);
+
+		for i in 0..<4 {
+			_, entity_lookup := create_entity("player_wheel", wheel_geometry_lookup, Inanimate_Entity);
+			entity.wheels[i].entity_lookup = entity_lookup;
+		}
+
+		entity.wheel_radius = wheel_radius;
+
+		scene.all_players[i] = entity_lookup;
+	}
+
+	// The first item in all_players is the actual human player
+	scene.player = get_entity(scene.all_players[0]).variant.(^Car_Entity);
+
+	ai_player := get_entity(scene.all_players[1]);
+	ai_player.position.x = -50;
+
+	for i in 0..<AI_PLAYERS_COUNT {
+		scene.ai.players[i].lookup = scene.all_players[i + 1];
+	}
 }
 
 load_car :: proc(car: ^^Car_Entity, scene: ^Scene) {
 	REQUIRED_VERSION :: 2;
 	
 	bytes, success := os.read_entire_file_from_filename("res/car.kgc");
-	defer delete(bytes);
 	assert(success);
+	defer delete(bytes);
 	
 	pos := 0;
 

@@ -2,6 +2,7 @@ package main;
 
 import "core:math";
 import "core:slice";
+import "core:math/linalg";
 import "math2";
 
 @(private="file")
@@ -57,9 +58,9 @@ entity_grid_remove :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup, ent
 	}
 }
 
-entity_grid_move_rigid_body_tentatively :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity) {
+entity_grid_move_tentatively :: proc(grid: ^Entity_Grid, entity_lookup: Entity_Lookup, entity: ^Entity, tentative_orientation: linalg.Quaternionf32, tentative_transform: linalg.Matrix4f32) {
 	// Remove the lookup from the old cells which this entity spans
-	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, rigid_body.bounds);
+	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok := bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, entity.bounds);
 	if !ok do return;
 
 	for x in grid_min_x..<grid_max_x {
@@ -73,10 +74,10 @@ entity_grid_move_rigid_body_tentatively :: proc(grid: ^Entity_Grid, entity_looku
 	}
 
 	// Update the global transform matrix and the global bounds
-	update_entity_hull_transforms_and_bounds(rigid_body, rigid_body.tentative_orientation, rigid_body.tentative_transform);
+	update_entity_hull_transforms_and_bounds(entity, tentative_orientation, tentative_transform);
 
 	// Add the lookup to the new cells which this hull spans
-	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok = bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, rigid_body.bounds);
+	grid_min_x, grid_min_y, grid_max_x, grid_max_y, ok = bounds_to_grid_cells(grid.half_cell_count, CELL_SIZE, entity.bounds);
 	if !ok do return;
 
 	for x in grid_min_x..<grid_max_x {
