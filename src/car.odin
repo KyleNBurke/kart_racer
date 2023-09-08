@@ -235,18 +235,17 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 	car_ang_vel := car.angular_velocity;
 	car_tensor := calculate_car_inertia_tensor(car.orientation);
 
-	front_left_contact_normal, front_left_contact_normal_ok := car.wheels[0].contact_normal.?;
-	front_right_contact_normal, front_right_contact_normal_ok := car.wheels[1].contact_normal.?;
-	back_left_contact_normal, back_left_contact_normal_ok := car.wheels[2].contact_normal.?;
-	back_right_contact_normal, back_right_contact_normal_ok := car.wheels[3].contact_normal.?;
+	// front_left_contact_normal, front_left_contact_normal_ok := car.wheels[0].contact_normal.?;
+	// front_right_contact_normal, front_right_contact_normal_ok := car.wheels[1].contact_normal.?;
+	// back_left_contact_normal, back_left_contact_normal_ok := car.wheels[2].contact_normal.?;
+	// back_right_contact_normal, back_right_contact_normal_ok := car.wheels[3].contact_normal.?;
 
-	if front_left_contact_normal_ok || front_right_contact_normal_ok || back_left_contact_normal_ok || back_right_contact_normal_ok {
-		surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal + back_left_contact_normal + back_right_contact_normal);
-		surface_forward := linalg.normalize(linalg.cross(car_left, surface_normal));
+	if car.surface_normal != 0 {
+		surface_forward := linalg.normalize(linalg.cross(car_left, car.surface_normal));
 
 		vel := linalg.dot(surface_forward, car_vel);
 
-		surface_velocity := car_vel - linalg.projection(car_vel, surface_normal); // project velocity onto surface plane
+		surface_velocity := car_vel - linalg.projection(car_vel, car.surface_normal); // project velocity onto surface plane
 		surface_velocity_dir := linalg.normalize(surface_velocity);
 		slip_angle := math.acos(linalg.dot(surface_velocity_dir, car_forward));
 
@@ -286,7 +285,7 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 			ANG_FRIC :: 6; // Rotational deceleration
 
 			car.current_steer_angle = 0;
-			ang_vel := linalg.dot(car_ang_vel, surface_normal);
+			ang_vel := linalg.dot(car_ang_vel, car.surface_normal);
 			ang_accel: f32;
 			
 			if car.input_steer_multiplier == 0 {
@@ -303,7 +302,7 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 				}
 			}
 
-			car.angular_velocity += surface_normal * ang_accel;
+			car.angular_velocity += car.surface_normal * ang_accel;
 
 			lat_fric: f32 = 20; // Lateral deceleration
 
@@ -314,7 +313,7 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 				lat_fric += 10 * lat_fric_multiplier
 			}
 
-			surface_lat := linalg.normalize(linalg.cross(car_forward, surface_normal));
+			surface_lat := linalg.normalize(linalg.cross(car_forward, car.surface_normal));
 			lat_vel := linalg.dot(car_vel, surface_lat);
 			lat_accel := clamp(lat_vel, -lat_fric * dt, lat_fric * dt);
 			car.velocity -= surface_lat * lat_accel;
@@ -326,7 +325,9 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 				car.finished_slide = true;
 			}
 		} else {
-			if front_left_contact_normal_ok || front_right_contact_normal_ok {
+			front_surface_normal := linalg.normalize0(car.wheels[0].contact_normal + car.wheels[1].contact_normal);
+
+			if front_surface_normal != 0 {
 				LOW_SPEED :: 0.2;
 				HIGH_SPEED :: 0.08;
 				max_steer_angle := HIGH_SPEED + (LOW_SPEED - HIGH_SPEED) * clamp((CAR_TOP_SPEED - vel) / CAR_TOP_SPEED, 0, 1);
@@ -335,7 +336,6 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 				car.current_steer_angle += clamp(target_steer_angle - car.current_steer_angle, -0.8 * dt, 0.8 * dt);
 
 				tire_forward := math2.vector3_rotate(car_forward, car_up, car.current_steer_angle);
-				front_surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
 				tire_surface_left := linalg.normalize(linalg.cross(front_surface_normal, tire_forward));
 				
 				tire_vel := car_vel + linalg.cross(car_ang_vel, car_forward * SPRING_BODY_POINT_Z);
@@ -346,8 +346,9 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 				car.angular_velocity -= car_tensor * front_surface_normal * tire_fric;
 			}
 
-			if back_left_contact_normal_ok || back_right_contact_normal_ok {
-				back_surface_normal := linalg.normalize(back_left_contact_normal + back_right_contact_normal);
+			back_surface_normal := linalg.normalize0(car.wheels[2].contact_normal + car.wheels[3].contact_normal);
+
+			if back_surface_normal != 0 {
 				tire_surface_left := linalg.normalize(linalg.cross(back_surface_normal, car_forward));
 				
 				tire_vel := car_vel + linalg.cross(car_ang_vel, -car_forward * SPRING_BODY_POINT_Z);
@@ -436,6 +437,8 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 	}
 }
 
+// #todo: Move this inside the other proc so that we're not recalculating the surface normal stuff
+/*
 position_and_orient_wheels :: proc(car: ^Car_Entity, dt: f32) {
 	// Calculate wheel orientations
 	body_left := math2.matrix4_left(car.transform);
@@ -482,6 +485,7 @@ position_and_orient_wheels :: proc(car: ^Car_Entity, dt: f32) {
 		update_entity_transform(wheel_entity); 
 	}
 }
+*/
 
 respawn_player :: proc(car: ^Car_Entity, position: linalg.Vector3f32, orientation: linalg.Quaternionf32) {
 	car.position = position;

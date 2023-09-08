@@ -517,17 +517,19 @@ Spring_Contact_Intermediary :: struct {
 	normal: linalg.Vector3f32,
 }
 
+// Move to car.odin? Can move back
+SPRING_BODY_POINT_X: f32 : 0.8;
+SPRING_BODY_POINT_Y: f32 : 0.35
 SPRING_BODY_POINT_Z: f32 : 1.1;
+
+SPRING_BODY_POINT_LOCAL_FL :: linalg.Vector3f32 { SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y,  SPRING_BODY_POINT_Z};
+SPRING_BODY_POINT_LOCAL_FR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y,  SPRING_BODY_POINT_Z};
+
 SPRING_MAX_LENGTH: f32 : 0.8;
 
 find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, entity_grid: ^Entity_Grid, constraints: ^Constraints, car: ^Car_Entity, dt: f32, oil_slicks: []Entity_Lookup) {
 	extension_dir := -math2.matrix4_up(car.tentative_transform);
-
-	SPRING_BODY_POINT_X: f32 : 0.8;
-	SPRING_BODY_POINT_Y: f32 : 0.35
-
-	SPRING_BODY_POINT_LOCAL_FL :: linalg.Vector3f32 { SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y,  SPRING_BODY_POINT_Z};
-	SPRING_BODY_POINT_LOCAL_FR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y,  SPRING_BODY_POINT_Z};
+	
 	SPRING_BODY_POINT_LOCAL_BL :: linalg.Vector3f32 { SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
 	SPRING_BODY_POINT_LOCAL_BR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
 
@@ -546,7 +548,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 	spring_bounds_bl := math2.Box3f32 {linalg.min(spring_body_point_bl, spring_wheel_point_bl), linalg.max(spring_body_point_bl, spring_wheel_point_bl)};
 	spring_bounds_br := math2.Box3f32 {linalg.min(spring_body_point_br, spring_wheel_point_br), linalg.max(spring_body_point_br, spring_wheel_point_br)};
 
-	spring_bounds := math2.box_union(spring_bounds_fl, spring_bounds_fr, spring_bounds_bl, spring_bounds_br);
+	spring_bounds := math2.box_union_4(spring_bounds_fl, spring_bounds_fr, spring_bounds_bl, spring_bounds_br);
 
 	nearby_triangle_indices := ground_grid_find_nearby_triangles(ground_grid, spring_bounds);
 	nearby_lookups := entity_grid_find_nearby_entities(entity_grid, spring_bounds);
@@ -557,6 +559,8 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 
 	spring_body_points := [?]linalg.Vector3f32 {spring_body_point_fl, spring_body_point_fr, spring_body_point_bl, spring_body_point_br};
 	MAX_COLLISION_NORMAL_ANGLE: f32 : math.PI / 4;
+
+	surface_normal_dir: linalg.Vector3f32;
 
 	for spring_index in 0..<4 {
 		best_spring_contact := Spring_Contact_Intermediary {
@@ -623,7 +627,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 		wheel.body_point = spring_body_point;
 
 		if best_spring_contact.length == max(f32) {
-			wheel.contact_normal = nil;
+			wheel.contact_normal = 0;
 			wheel.spring_length = SPRING_MAX_LENGTH;
 		} else {
 			small_array.append(&manifold.contacts, Spring_Contact {
@@ -633,8 +637,13 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 
 			wheel.contact_normal = best_spring_contact.normal;
 			wheel.spring_length = best_spring_contact.length;
+
+			surface_normal_dir += best_spring_contact.normal;
 		}
 	}
+
+	// Calculate the surface normal
+	car.surface_normal = linalg.normalize0(surface_normal_dir);
 
 	car.surface_type = .Normal;
 

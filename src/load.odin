@@ -370,6 +370,7 @@ load_scene :: proc(scene: ^Scene) {
 
 	{ // AI paths
 		point_count := read_u32(&bytes, &pos);
+		fmt.println(point_count);
 
 		points := make([dynamic]linalg.Vector3f32, 0, point_count, context.temp_allocator);
 		
@@ -489,7 +490,8 @@ init_players :: proc(scene: ^Scene) {
 	scene.player = get_entity(scene.all_players[0]).variant.(^Car_Entity);
 
 	ai_player := get_entity(scene.all_players[1]);
-	ai_player.position.x = -50;
+	ai_player.position.x = -55;
+	ai_player.position.z = 80;
 
 	for i in 0..<AI_PLAYERS_COUNT {
 		scene.ai.players[i].lookup = scene.all_players[i + 1];

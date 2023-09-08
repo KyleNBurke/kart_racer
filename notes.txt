@@ -87,6 +87,9 @@ Todo
 	- If the exporter finds a rigid body not part of a rigid body island, produce a warning. The rigid body will not be exported.
 	- If the spawn point is not a bit above the ground mesh, produce a warning. The car will just fall through.
 	- [BUG] You can export a rigid body without a collision hull.
+- Immediate mode rendering for the helpers?
+	- Would allow us to remove the .KeepRender shit I think?
+- AI framerate?
 	
 - Sequential impulse solver positional corrections
 	https://www.gamedev.net/forums/topic/714397-sequential-impulse-solver-bounce-without-restitution/5457082/

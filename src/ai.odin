@@ -15,19 +15,34 @@ AI :: struct {
 	elapsed_time: f32,
 	path: [dynamic]Curve,
 	players: [AI_PLAYERS_COUNT]AI_Player,
-	closest_point_line_geo_helper: Geometry_Lookup,
-	target_point_line_geo_helper: Geometry_Lookup,
 }
 
 AI_Player :: struct {
 	lookup: Entity_Lookup,
-	target_point: linalg.Vector3f32,
+	helpers: [dynamic]Geometry_Lookup,
+
+	origin,
+	closest_point,
+	extended_point,
+	max_l, max_r,
+	left_dir, right_dir: linalg.Vector3f32,
+	zones: [dynamic]Zone,
+	surface_forward: linalg.Vector3f32,
+	bounds: math2.Box3f32,
+	target_angle: f32,
 }
 
 Curve :: struct {
 	p0, p1, p2, p3: linalg.Vector3f32,
 	length: f32,
 }
+
+Zone :: struct {
+	start: bool,
+	angle: f32,
+}
+
+RAY_COUNT :: 8;
 
 calculate_curve_lengths :: proc(curves: []Curve) {
 	p0 := curves[0].p0;
@@ -51,7 +66,7 @@ calculate_curve_lengths :: proc(curves: []Curve) {
 }
 
 ai_signal_update_if_ready :: proc(ai: ^AI, dt: f32) {
-	UPDATE_INTERVAL: f32 : 1 / 100;
+	UPDATE_INTERVAL: f32 : 1 / 30;
 
 	ai.elapsed_time += dt;
 
@@ -61,79 +76,283 @@ ai_signal_update_if_ready :: proc(ai: ^AI, dt: f32) {
 	}
 }
 
-ai_init :: proc(ai: ^AI) {
-	geometry, geometry_lookup := create_geometry("ai_line_helper", .KeepRender);
-	geometry_make_line_helper_origin_vector(geometry, {0, 0, 0}, {0, 0, 1}); // #todo: Hate that I have to do this.
-	ai.closest_point_line_geo_helper = geometry_lookup;
-
-	geometry, geometry_lookup = create_geometry("ai_tangent_line_helper", .KeepRender);
-	geometry_make_line_helper_origin_vector(geometry, {0, 0, 0}, {0, 0, 1}); // #todo: Hate that I have to do this.
-	ai.target_point_line_geo_helper = geometry_lookup;
-
-	thread.create_and_start_with_data(ai, ai_update_players);
+ai_init :: proc(scene: ^Scene) {
+	thread.create_and_start_with_data(scene, ai_update_players);
 }
 
-ai_update_players :: proc(ai: rawptr) {
-	ai := cast(^AI) ai;
+ai_update_players :: proc(scene: rawptr) {
+	scene := cast(^Scene) scene;
+	ai := &scene.ai;
 	
 	for {
 		sync.sema_wait(&ai.semaphore);
 		
 		for &player in ai.players {
-			car := get_entity(player.lookup).variant.(^Car_Entity);
-
-			closest_point, target_point := find_target_point_on_path(car.position, ai.path[:]);
-			player.target_point = target_point;
+			update_player_new(&player, ai.path[:], &scene.entity_grid);
 		}
 	}
 }
 
+import "core:slice";
+
+@(private = "file")
+update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entity_Grid) {
+	car := get_entity(player.lookup).variant.(^Car_Entity);
+
+	car_left := math2.matrix4_left(car.transform);
+	surface_forward := linalg.normalize(linalg.cross(car_left, car.surface_normal));
+	origin := car.position + surface_forward * 0.8;
+	player.origin = origin;
+
+	// Find extended point
+	closest_point, extended_point := find_target_point_on_path_2(origin, path);
+	player.closest_point = closest_point;
+	player.extended_point = extended_point;
+
+	RAY_LEN :: 20;
+	MAX_ANGLE :: 0.8;
+	
+	nearby_lookups: [dynamic]Entity_Lookup;
+	{
+		forward := origin + surface_forward * RAY_LEN;
+
+		max_l_dir := math2.vector3_rotate(surface_forward, car.surface_normal, MAX_ANGLE);
+		max_r_dir := math2.vector3_rotate(surface_forward, car.surface_normal, -MAX_ANGLE);
+		max_l := origin + max_l_dir * RAY_LEN;
+		max_r := origin + max_r_dir * RAY_LEN;
+		player.max_l = max_l;
+		player.max_r = max_r;
+
+		bounds := math2.Box3f32 {
+			math2.vector3_min(origin, forward, max_l, max_r),
+			math2.vector3_max(origin, forward, max_l, max_r),
+		};
+
+		player.bounds = bounds;
+
+		// This query is returning back the car at the beggining, need to look into that.
+		nearby_lookups = entity_grid_find_nearby_entities(entity_grid, bounds);
+	}
+
+	zones := make([dynamic]Zone, context.temp_allocator);
+
+	for nearby_lookup in nearby_lookups {
+		if player.lookup == nearby_lookup do continue;
+
+		nearby_entity := get_entity(nearby_lookup);
+
+		for &hull in nearby_entity.collision_hulls {
+			center_dir := math2.box_center(hull.global_bounds) - origin;
+			left_dir := linalg.cross(car.surface_normal, center_dir);
+			right_dir := linalg.cross(center_dir, car.surface_normal);
+			player.left_dir = left_dir;
+			player.right_dir = right_dir;
+
+			// #todo: Disable the padding and ensure the angles are tight. Probably need to project everything onto the surf norm.
+			ZONE_PADDING :: 0.08;
+
+			// #todo: Consider the length of the point?
+
+			furthest_left_point := furthest_point_hull(&hull, left_dir);
+			furthest_left_dir := linalg.normalize(furthest_left_point - origin);
+			furthest_left_angle_mag := math.acos(linalg.dot(furthest_left_dir, surface_forward));
+			furthest_left_angle_sign := math.sign(linalg.dot(car_left, furthest_left_dir));
+			furthest_left_angle := furthest_left_angle_mag * furthest_left_angle_sign + ZONE_PADDING;
+			
+			furthest_right_point := furthest_point_hull(&hull, right_dir);
+			furthest_right_dir := linalg.normalize(furthest_right_point - origin);
+			furthest_right_angle_mag := math.acos(linalg.dot(furthest_right_dir, surface_forward));
+			furthest_right_angle_sign := math.sign(linalg.dot(car_left, furthest_right_dir));
+			furthest_right_angle := furthest_right_angle_mag * furthest_right_angle_sign - ZONE_PADDING;
+
+			if abs(furthest_left_angle) < MAX_ANGLE {
+				append(&zones, Zone { true, furthest_left_angle });
+			}
+
+			if abs(furthest_right_angle) < MAX_ANGLE {
+				append(&zones, Zone { false, furthest_right_angle });
+			}
+		}
+	}
+
+	// Sort
+	order :: proc(a, b: Zone) -> bool {
+		return a.angle >= b.angle;
+	}
+
+	slice.sort_by(zones[:], order);
+
+	// Simplify zones
+	// We could simplify further by only adding the zone if the extended angle is in it
+
+	final_zones := make([dynamic]Zone, context.temp_allocator);
+	if len(zones) > 0 { // Could probs combine these two ifs?
+		count: int;
+		i: int;
+
+		first_zone := &zones[0];
+		if !first_zone.start {
+			count = 1;
+		}
+
+		for i < len(zones) {
+			zone := zones[i];
+
+			if zone.start {
+				count += 1;
+
+				if count == 1 {
+					append(&final_zones, zone);
+				}
+			} else {
+				count -= 1;
+
+				if count == 0 {
+					append(&final_zones, zone);
+				}
+			}
+
+			i += 1;
+		}
+	}
+
+	delete(player.zones);
+	player.zones = slice.clone_to_dynamic(final_zones[:]);
+	player.surface_forward = surface_forward;
+
+	// Calculate the target angle from the extended point and correct it if necessary
+	target_angle: f32;
+
+	{
+		extended_dir := linalg.normalize(extended_point - origin);
+		extended_angle_mag := math.acos(linalg.dot(surface_forward, extended_dir));
+		extended_angle_sign := math.sign(linalg.dot(car_left, extended_dir));
+		extended_angle := extended_angle_mag * extended_angle_sign;
+
+		target_angle = extended_angle;
+
+		in_inner_zone := false;
+		zone_left_angle, zone_right_angle: f32;
+
+		for &zone, i in final_zones {
+			if zone.start || i == 0 do continue;
+
+			prev_zone := &final_zones[i - 1];
+			left_angle := prev_zone.angle;
+			right_angle := zone.angle;
+
+			if extended_angle < left_angle && extended_angle > right_angle {
+				zone_left_angle = left_angle;
+				zone_right_angle = right_angle;
+				in_inner_zone = true;
+				break;
+			}
+		}
+
+		if in_inner_zone {
+			angle_to_left := zone_left_angle - extended_angle;
+			angle_to_right := extended_angle - zone_right_angle;
+
+			assert(angle_to_left >= 0);
+			assert(angle_to_right >= 0);
+
+			if angle_to_left < angle_to_right {
+				target_angle = zone_left_angle;
+			} else {
+				target_angle = zone_right_angle;
+			}
+		} else if len(final_zones) > 0 { // remove combine with above
+			first_zone := &final_zones[0];
+			last_zone := &final_zones[len(final_zones) - 1];
+
+			if !first_zone.start {
+				right_angle := first_zone.angle;
+
+				if extended_angle > right_angle {
+					target_angle = right_angle;
+				}
+			} else if last_zone.start {
+				left_angle := last_zone.angle;
+
+				if extended_angle < left_angle {
+					target_angle = left_angle;
+				}
+			}
+		}
+
+		player.target_angle = target_angle;
+	}
+
+	{ // Drive torwards the target angle
+		// Calculate a smoothed steer angle from the target angle
+		MAX_SMOOTH_ANGLE :: 0.3;
+		mag := abs(target_angle);
+
+		if mag < MAX_SMOOTH_ANGLE {
+			// Needs to be pretty aggressive so that values near 0 really get shrunk down
+			mag = MAX_SMOOTH_ANGLE * math.pow(mag / MAX_SMOOTH_ANGLE, 4);
+		}
+
+		steer_angle := math.sign(target_angle) * mag;
+
+		// Calculate the input steer multiplier from the steer angle
+		car.input_steer_multiplier = steer_angle / MAX_ANGLE;
+	}
+
+	car.input_accel_multiplier = 0.001;
+}
+
 set_ai_player_inputs :: proc(ai: ^AI) {
+	// Bro I REALLY need to do an immediate mode helper rendering thing, it would completely eliminate the need for this
 	for &player in ai.players {
+		for lookup in player.helpers {
+			remove_geometry(lookup);
+		}
+	
+		clear(&player.helpers);
+
+		geo, geo_lookup := create_geometry("ai_helper", .KeepRender);
+		geometry_make_line_helper_start_end(geo, player.origin, player.closest_point, BLUE);
+		append(&player.helpers, geo_lookup);
+
+		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		geometry_make_line_helper_start_end(geo, player.origin, player.extended_point, BLUE);
+		append(&player.helpers, geo_lookup);
+
+		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		geometry_make_line_helper_start_end(geo, player.origin, player.max_l);
+		append(&player.helpers, geo_lookup);
+
+		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		geometry_make_line_helper_start_end(geo, player.origin, player.max_r);
+		append(&player.helpers, geo_lookup);
+
+		// geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		// geometry_make_line_helper_origin_vector(geo, player.origin, player.left_dir);
+		// append(&player.helpers, geo_lookup);
+
+		// geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		// geometry_make_line_helper_origin_vector(geo, player.origin, player.right_dir);
+		// append(&player.helpers, geo_lookup);
+
+		// geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		// geometry_make_box_helper(geo, player.bounds.min, player.bounds.max);
+		// append(&player.helpers, geo_lookup);
+
 		car := get_entity(player.lookup).variant.(^Car_Entity);
 
-		current_heading := math2.matrix4_forward(car.transform);
-		target_heading := linalg.normalize(player.target_point - car.position);
-		heading_diff := linalg.dot(current_heading, target_heading);
-		
-		{ // Steer angle
-			plane_normal := linalg.cross(target_heading, linalg.Vector3f32 {0, 1, 0});
-			steer_angle_dir := math.sign(linalg.dot(plane_normal, current_heading));
-			
-			MAX_DIFF :: 0.9;
-			steer_angle_mag: f32
+		for zone in player.zones {
+			dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, zone.angle);
 
-			if heading_diff > MAX_DIFF {
-				steer_angle_mag = 1 - (heading_diff - MAX_DIFF) / (1 - MAX_DIFF);
-			} else {
-				steer_angle_mag = 1;
-			}
-			
-			car.input_steer_multiplier = steer_angle_dir * steer_angle_mag;
+			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+			geometry_make_line_helper_origin_vector(geo, player.origin, dir * 20, RED);
+			append(&player.helpers, geo_lookup);
 		}
 
-		{ // Acceleration/braking
-			HIGH_DIFF :: 0.95;
-			LOW_DIFF :: 0.7;
-			LOW_SPEED :: 15;
-
-			target_speed: f32;
-			if heading_diff > HIGH_DIFF {
-				target_speed = CAR_TOP_SPEED;
-			} else if heading_diff < LOW_DIFF {
-				target_speed = LOW_SPEED;
-			} else {
-				target_speed = math.remap(heading_diff, LOW_DIFF, HIGH_DIFF, LOW_SPEED, CAR_TOP_SPEED);
-			}
-
-			current_speed := linalg.dot(current_heading, car.velocity);
-			
-			car.input_accel_multiplier = (target_speed - current_speed) / 10;
-		}
-
-		// Ehh don't like this here but also it's just some debug shit
-		target_line_helper_geometry := get_geometry(ai.target_point_line_geo_helper);
-		geometry_make_line_helper_start_end(target_line_helper_geometry, car.position, player.target_point, BLUE);
+		dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, player.target_angle);
+		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		geometry_make_line_helper_origin_vector(geo, player.origin, dir * 22, GREEN);
+		append(&player.helpers, geo_lookup);
 	}
 }
 
@@ -237,10 +456,6 @@ find_target_point_on_path_2 :: proc(origin: linalg.Vector3f32, path: []Curve) ->
 	closest_curve_index: int;
 
 	for &curve, curve_index in path {
-		closest_curve_t: f32;
-		closest_curve_p: linalg.Vector3f32;
-		closest_curve_dist_sq := max(f32);
-
 		DIV :: 50;
 
 		// Comment
@@ -249,18 +464,18 @@ find_target_point_on_path_2 :: proc(origin: linalg.Vector3f32, path: []Curve) ->
 			p := find_point_on_curve(&curve, t);
 			d_sq := linalg.length2(origin - p);
 			
-			if d_sq < closest_curve_dist_sq {
-				closest_curve_t = t;
-				closest_curve_p = p;
-				closest_curve_dist_sq = d_sq;
+			if d_sq < closest_dist_sq {
+				closest_t = t;
+				closest_point = p;
+				closest_dist_sq = d_sq;
+				closest_curve_index = curve_index;
 			}
 		}
 	}
-
 	
 	{ // Move the closest point forwards along the path
 		curve := &path[closest_curve_index];
-		target_t := closest_t + 10 / curve.length;
+		target_t := closest_t + 15 / curve.length;
 
 		if target_t > 1 {
 			// Need to the convert the remaining length in this curve's space to a t value in the next curve's space

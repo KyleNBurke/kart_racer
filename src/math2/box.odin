@@ -38,7 +38,22 @@ box_intersects :: proc(a, b: Box3f32) -> bool {
 		a.min.z < b.max.z && a.max.z > b.min.z;
 }
 
-box_union :: proc(b1, b2, b3, b4: Box3f32) -> Box3f32 {
+// #todo: Is there a better way to do these unions? With varargs or something?
+box_union_2 :: proc(b1, b2: Box3f32) -> Box3f32 {
+	min_x := min(b1.min.x, b2.min.x);
+	min_y := min(b1.min.y, b2.min.y);
+	min_z := min(b1.min.z, b2.min.z);
+	min := linalg.Vector3f32 { min_x, min_y, min_z };
+
+	max_x := max(b1.max.x, b2.max.x);
+	max_y := max(b1.max.y, b2.max.y);
+	max_z := max(b1.max.z, b2.max.z);
+	max := linalg.Vector3f32 { max_x, max_y, max_z };
+
+	return Box3f32 { min, max };
+}
+
+box_union_4 :: proc(b1, b2, b3, b4: Box3f32) -> Box3f32 {
 	min_x := min(b1.min.x, b2.min.x, b3.min.x, b4.min.x);
 	min_y := min(b1.min.y, b2.min.y, b3.min.y, b4.min.y);
 	min_z := min(b1.min.z, b2.min.z, b3.min.z, b4.min.z);

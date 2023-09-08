@@ -100,7 +100,7 @@ init :: proc(game: ^Game) {
 	init_players(&game.scene);
 	load_runtime_assets(&game.runtime_assets);
 
-	ai_init(&game.scene.ai);
+	ai_init(&game.scene);
 
 	init_hull_helpers(&game.scene.hull_helpers);
 
@@ -192,7 +192,8 @@ update :: proc(game: ^Game, dt: f32) {
 			set_ai_player_inputs(&game.scene.ai);
 			move_players(game.scene.all_players[:], dt);
 			simulate(&game.scene, &game.runtime_assets, dt);
-			position_and_orient_wheels(game.scene.player, dt);
+			// position_and_orient_wheels(game.scene.player, dt);
+			ai_signal_update_if_ready(&game.scene.ai, dt);
 			game.step = false;
 		}
 	} else {
@@ -200,10 +201,9 @@ update :: proc(game: ^Game, dt: f32) {
 		set_ai_player_inputs(&game.scene.ai);
 		move_players(game.scene.all_players[:], dt);
 		simulate(&game.scene, &game.runtime_assets, dt);
-		position_and_orient_wheels(game.scene.player, dt);
+		// position_and_orient_wheels(game.scene.player, dt);
+		ai_signal_update_if_ready(&game.scene.ai, dt);
 	}
-
-	ai_signal_update_if_ready(&game.scene.ai, dt);
 
 	ai_car := get_entity(game.scene.ai.players[0].lookup).variant.(^Car_Entity);
 	move_camera(&game.camera, &game.gamepad, game.window, ai_car, dt);

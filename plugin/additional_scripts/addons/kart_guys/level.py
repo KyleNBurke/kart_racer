@@ -394,6 +394,7 @@ def write_reload_trigger_file(filepath):
 	print("Wrote reload trigger file ", trigger_filepath)
 
 def export_ai_paths(depsgraph: Depsgraph, graph, file):
+	# #todo: Handle/error on unlinked segments
 	print("--- AI paths ---")
 
 	def compare(w_object: WObject):

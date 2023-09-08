@@ -88,15 +88,15 @@ calculate_inv_global_inertia_tensor :: proc(orientation: linalg.Quaternionf32, i
 }
 
 matrix4_left :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
-	return linalg.Vector3f32 {m[0][0], m[0][1], m[0][2]};
+	return { m[0][0], m[0][1], m[0][2] };
 }
 
 matrix4_up :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
-	return linalg.Vector3f32 {m[1][0], m[1][1], m[1][2]};
+	return { m[1][0], m[1][1], m[1][2] };
 }
 
 matrix4_forward :: proc(m: linalg.Matrix4f32) -> linalg.Vector3f32 {
-	return linalg.Vector3f32 {m[2][0], m[2][1], m[2][2]};
+	return { m[2][0], m[2][1], m[2][2] };
 }
 
 /*
@@ -178,6 +178,30 @@ ray_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, a, b, c: l
 
 	dist := (1 / det) * linalg.dot(q, ac);
 	return dist;
+}
+
+vector3_min :: proc(vecs: ..linalg.Vector3f32) -> linalg.Vector3f32 {
+	x, y, z := max(f32), max(f32), max(f32);
+
+	for &vec in vecs {
+		x = min(x, vec.x);
+		y = min(y, vec.y);
+		z = min(z, vec.z);
+	}
+
+	return linalg.Vector3f32 { x, y, z };
+}
+
+vector3_max :: proc(vecs: ..linalg.Vector3f32) -> linalg.Vector3f32 {
+	x, y, z := min(f32), min(f32), min(f32);
+
+	for &vec in vecs {
+		x = max(x, vec.x);
+		y = max(y, vec.y);
+		z = max(z, vec.z);
+	}
+
+	return linalg.Vector3f32 { x, y, z };
 }
 
 @(test, private)

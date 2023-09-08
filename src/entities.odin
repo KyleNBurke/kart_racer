@@ -94,6 +94,7 @@ Car_Entity :: struct {
 	on_fire_elapsed_ramp_up_time: f32,
 	wheel_radius: f32, // #todo: Pull this out
 	wheels: [4]Wheel,
+	surface_normal: linalg.Vector3f32,
 	input_accel_multiplier: f32,
 	input_steer_multiplier: f32,
 	input_handbreak: bool,
@@ -116,7 +117,7 @@ Car_Entity :: struct {
 Wheel :: struct {
 	entity_lookup: Entity_Lookup,
 	body_point: linalg.Vector3f32,
-	contact_normal: Maybe(linalg.Vector3f32),
+	contact_normal: linalg.Vector3f32,
 	spring_length: f32,
 }
 
