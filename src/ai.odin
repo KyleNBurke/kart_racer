@@ -26,7 +26,7 @@ AI_Player :: struct {
 	extended_point,
 	max_l, max_r,
 	left_dir, right_dir: linalg.Vector3f32,
-	zones: [dynamic]Zone,
+	start_zone_angle, end_zone_angle: f32,
 	surface_forward: linalg.Vector3f32,
 	bounds: math2.Box3f32,
 	target_angle: f32,
@@ -165,121 +165,87 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 			furthest_right_angle_sign := math.sign(linalg.dot(car_left, furthest_right_dir));
 			furthest_right_angle := furthest_right_angle_mag * furthest_right_angle_sign - ZONE_PADDING;
 
-			if abs(furthest_left_angle) < MAX_ANGLE {
-				append(&zones, Zone { true, furthest_left_angle });
-			}
+			if abs(furthest_left_angle) < MAX_ANGLE || abs(furthest_right_angle) < MAX_ANGLE {
+				furthest_left_angle_clamped := math.clamp(furthest_left_angle, -MAX_ANGLE, MAX_ANGLE);
+				furthest_right_angle_clamped := math.clamp(furthest_right_angle, -MAX_ANGLE, MAX_ANGLE);
 
-			if abs(furthest_right_angle) < MAX_ANGLE {
-				append(&zones, Zone { false, furthest_right_angle });
+				append(&zones, Zone { true, furthest_left_angle_clamped });
+				append(&zones, Zone { false, furthest_right_angle_clamped });
 			}
 		}
 	}
 
-	// Sort
-	order :: proc(a, b: Zone) -> bool {
-		return a.angle >= b.angle;
-	}
-
-	slice.sort_by(zones[:], order);
-
-	// Simplify zones
-	// We could simplify further by only adding the zone if the extended angle is in it
-
-	final_zones := make([dynamic]Zone, context.temp_allocator);
-	if len(zones) > 0 { // Could probs combine these two ifs?
-		count: int;
-		i: int;
-
-		first_zone := &zones[0];
-		if !first_zone.start {
-			count = 1;
-		}
-
-		for i < len(zones) {
-			zone := zones[i];
-
-			if zone.start {
-				count += 1;
-
-				if count == 1 {
-					append(&final_zones, zone);
-				}
-			} else {
-				count -= 1;
-
-				if count == 0 {
-					append(&final_zones, zone);
-				}
-			}
-
-			i += 1;
-		}
-	}
-
-	delete(player.zones);
-	player.zones = slice.clone_to_dynamic(final_zones[:]);
-	player.surface_forward = surface_forward;
-
-	// Calculate the target angle from the extended point and correct it if necessary
+	// Calculate extended angle
 	target_angle: f32;
 
 	{
 		extended_dir := linalg.normalize(extended_point - origin);
 		extended_angle_mag := math.acos(linalg.dot(surface_forward, extended_dir));
 		extended_angle_sign := math.sign(linalg.dot(car_left, extended_dir));
-		extended_angle := extended_angle_mag * extended_angle_sign;
+		target_angle = extended_angle_mag * extended_angle_sign;
+	}
 
-		target_angle = extended_angle;
-
-		in_inner_zone := false;
-		zone_left_angle, zone_right_angle: f32;
-
-		for &zone, i in final_zones {
-			if zone.start || i == 0 do continue;
-
-			prev_zone := &final_zones[i - 1];
-			left_angle := prev_zone.angle;
-			right_angle := zone.angle;
-
-			if extended_angle < left_angle && extended_angle > right_angle {
-				zone_left_angle = left_angle;
-				zone_right_angle = right_angle;
-				in_inner_zone = true;
-				break;
-			}
+	if len(zones) > 0 {
+		// Sort
+		order :: proc(a, b: Zone) -> bool {
+			return a.angle >= b.angle;
 		}
 
-		if in_inner_zone {
-			angle_to_left := zone_left_angle - extended_angle;
-			angle_to_right := extended_angle - zone_right_angle;
+		slice.sort_by(zones[:], order);
 
-			assert(angle_to_left >= 0);
-			assert(angle_to_right >= 0);
+		// Simplify zones
+		in_zone := false;
+		start_angle, end_angle: f32;
+		start_index, end_index: int;
+		count: int;
 
-			if angle_to_left < angle_to_right {
-				target_angle = zone_left_angle;
+		for &zone, i in zones {
+			if zone.start {
+				count += 1;
+				
+				if count == 1 {
+					start_angle = zone.angle;
+					start_index = i;
+				}
 			} else {
-				target_angle = zone_right_angle;
-			}
-		} else if len(final_zones) > 0 { // remove combine with above
-			first_zone := &final_zones[0];
-			last_zone := &final_zones[len(final_zones) - 1];
+				count -= 1;
 
-			if !first_zone.start {
-				right_angle := first_zone.angle;
+				if count == 0 {
+					end_angle = zone.angle;
+					end_index = i;
 
-				if extended_angle > right_angle {
-					target_angle = right_angle;
-				}
-			} else if last_zone.start {
-				left_angle := last_zone.angle;
-
-				if extended_angle < left_angle {
-					target_angle = left_angle;
+					if target_angle < start_angle && target_angle > end_angle {
+						in_zone = true;
+						break;
+					}
 				}
 			}
 		}
 
+		if in_zone {
+			if start_index == 0 {
+				target_angle = end_angle;
+			} else if end_index == len(zones) - 1 {
+				target_angle = start_angle;
+			} else {
+				angle_to_left := start_angle - target_angle;
+				angle_to_right := target_angle - end_angle;
+
+				assert(angle_to_left >= 0);
+				assert(angle_to_right >= 0);
+
+				if angle_to_left < angle_to_right {
+					target_angle = start_angle;
+				} else {
+					target_angle = end_angle;
+				}
+			}
+
+			player.start_zone_angle = start_angle;
+			player.end_zone_angle = end_angle;
+		}
+
+		player.surface_forward = surface_forward;
 		player.target_angle = target_angle;
 	}
 
@@ -341,13 +307,23 @@ set_ai_player_inputs :: proc(ai: ^AI) {
 
 		car := get_entity(player.lookup).variant.(^Car_Entity);
 
-		for zone in player.zones {
+		/*for zone in player.zones {
 			dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, zone.angle);
 
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
 			geometry_make_line_helper_origin_vector(geo, player.origin, dir * 20, RED);
 			append(&player.helpers, geo_lookup);
-		}
+		}*/
+
+		start_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, player.start_zone_angle);
+		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		geometry_make_line_helper_origin_vector(geo, player.origin, start_zone_dir * 20, RED);
+		append(&player.helpers, geo_lookup);
+
+		end_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, player.end_zone_angle);
+		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		geometry_make_line_helper_origin_vector(geo, player.origin, end_zone_dir * 20, RED);
+		append(&player.helpers, geo_lookup);
 
 		dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, player.target_angle);
 		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
