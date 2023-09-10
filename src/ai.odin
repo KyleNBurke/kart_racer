@@ -148,29 +148,38 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 			player.left_dir = left_dir;
 			player.right_dir = right_dir;
 
-			// #todo: Disable the padding and ensure the angles are tight. Probably need to project everything onto the surf norm.
-			ZONE_PADDING :: 0.08;
+			PADDING :: 0.5;
 
 			// #todo: Consider the length of the point?
 
-			furthest_left_point := furthest_point_hull(&hull, left_dir);
-			furthest_left_dir := linalg.normalize(furthest_left_point - origin);
-			furthest_left_angle_mag := math.acos(linalg.dot(furthest_left_dir, surface_forward));
-			furthest_left_angle_sign := math.sign(linalg.dot(car_left, furthest_left_dir));
-			furthest_left_angle := furthest_left_angle_mag * furthest_left_angle_sign + ZONE_PADDING;
-			
-			furthest_right_point := furthest_point_hull(&hull, right_dir);
-			furthest_right_dir := linalg.normalize(furthest_right_point - origin);
-			furthest_right_angle_mag := math.acos(linalg.dot(furthest_right_dir, surface_forward));
-			furthest_right_angle_sign := math.sign(linalg.dot(car_left, furthest_right_dir));
-			furthest_right_angle := furthest_right_angle_mag * furthest_right_angle_sign - ZONE_PADDING;
+			l_p := furthest_point_hull(&hull, left_dir);
+			l_dir := l_p - origin;
+			l_proj := l_p - linalg.dot(l_dir, car.surface_normal) * car.surface_normal;
+			l_proj_dir := l_proj - origin;
+			l_proj_pad_trans_dir := linalg.normalize(linalg.cross(car.surface_normal, l_proj_dir));
+			l_proj_pad_p := l_proj + l_proj_pad_trans_dir * PADDING;
+			l_proj_pad_dir := linalg.normalize(l_proj_pad_p - origin);
+			l_proj_pad_angle_mag := math.acos(linalg.dot(l_proj_pad_dir, surface_forward));
+			l_proj_pad_angle_sign := math.sign(linalg.dot(car_left, l_proj_pad_dir));
+			l_proj_pad_angle := l_proj_pad_angle_mag * l_proj_pad_angle_sign;
 
-			if abs(furthest_left_angle) < MAX_ANGLE || abs(furthest_right_angle) < MAX_ANGLE {
-				furthest_left_angle_clamped := math.clamp(furthest_left_angle, -MAX_ANGLE, MAX_ANGLE);
-				furthest_right_angle_clamped := math.clamp(furthest_right_angle, -MAX_ANGLE, MAX_ANGLE);
+			r_p := furthest_point_hull(&hull, right_dir);
+			r_dir := r_p - origin;
+			r_proj := r_p - linalg.dot(r_dir, car.surface_normal) * car.surface_normal;
+			r_proj_dir := r_proj - origin;
+			r_proj_pad_trans_dir := linalg.normalize(linalg.cross(r_proj_dir, car.surface_normal));
+			r_proj_pad_p := r_proj + r_proj_pad_trans_dir * PADDING;
+			r_proj_pad_dir := linalg.normalize(r_proj_pad_p - origin);
+			r_proj_pad_angle_mag := math.acos(linalg.dot(r_proj_pad_dir, surface_forward));
+			r_proj_pad_angle_sign := math.sign(linalg.dot(car_left, r_proj_pad_dir));
+			r_proj_pad_angle := r_proj_pad_angle_mag * r_proj_pad_angle_sign;
 
-				append(&zones, Zone { true, furthest_left_angle_clamped });
-				append(&zones, Zone { false, furthest_right_angle_clamped });
+			if abs(l_proj_pad_angle) < MAX_ANGLE || abs(r_proj_pad_angle) < MAX_ANGLE {
+				l_proj_pad_angle_clamped := math.clamp(l_proj_pad_angle, -MAX_ANGLE, MAX_ANGLE);
+				r_proj_pad_angle_clmaped := math.clamp(r_proj_pad_angle, -MAX_ANGLE, MAX_ANGLE);
+
+				append(&zones, Zone { true, l_proj_pad_angle_clamped });
+				append(&zones, Zone { false, r_proj_pad_angle_clmaped });
 			}
 		}
 	}
