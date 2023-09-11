@@ -4,6 +4,7 @@ import "core:math";
 import "core:math/linalg";
 import "core:thread";
 import "core:sync";
+import "core:slice";
 import "math2";
 
 import "core:fmt";
@@ -24,11 +25,10 @@ AI_Player :: struct {
 	origin,
 	closest_point,
 	extended_point,
-	max_l, max_r,
-	left_dir, right_dir: linalg.Vector3f32,
-	start_zone_angle, end_zone_angle: f32,
-	surface_forward: linalg.Vector3f32,
+	max_l, max_r: linalg.Vector3f32,
 	bounds: math2.Box3f32,
+	start_zone_angle, end_zone_angle: Maybe(f32),
+	surface_forward: linalg.Vector3f32,
 	target_angle: f32,
 }
 
@@ -93,8 +93,6 @@ ai_update_players :: proc(scene: rawptr) {
 	}
 }
 
-import "core:slice";
-
 @(private = "file")
 update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entity_Grid) {
 	car := get_entity(player.lookup).variant.(^Car_Entity);
@@ -102,6 +100,7 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 	car_left := math2.matrix4_left(car.transform);
 	surface_forward := linalg.normalize(linalg.cross(car_left, car.surface_normal));
 	origin := car.position + surface_forward * 0.8;
+	player.surface_forward = surface_forward;
 	player.origin = origin;
 
 	// Find extended point
@@ -145,8 +144,6 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 			center_dir := math2.box_center(hull.global_bounds) - origin;
 			left_dir := linalg.cross(car.surface_normal, center_dir);
 			right_dir := linalg.cross(center_dir, car.surface_normal);
-			player.left_dir = left_dir;
-			player.right_dir = right_dir;
 
 			PADDING :: 0.5;
 
@@ -193,6 +190,9 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 		extended_angle_sign := math.sign(linalg.dot(car_left, extended_dir));
 		target_angle = extended_angle_mag * extended_angle_sign;
 	}
+
+	player.start_zone_angle = nil;
+	player.end_zone_angle = nil;
 
 	if len(zones) > 0 {
 		// Sort
@@ -253,10 +253,9 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 			player.start_zone_angle = start_angle;
 			player.end_zone_angle = end_angle;
 		}
-
-		player.surface_forward = surface_forward;
-		player.target_angle = target_angle;
 	}
+
+	player.target_angle = target_angle;
 
 	{ // Drive torwards the target angle
 		// Calculate a smoothed steer angle from the target angle
@@ -274,11 +273,10 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 		car.input_steer_multiplier = steer_angle / MAX_ANGLE;
 	}
 
-	car.input_accel_multiplier = 0.001;
+	car.input_accel_multiplier = 0.1;
 }
 
-set_ai_player_inputs :: proc(ai: ^AI) {
-	// Bro I REALLY need to do an immediate mode helper rendering thing, it would completely eliminate the need for this
+ai_show_helpers :: proc(ai: ^AI) {
 	for &player in ai.players {
 		for lookup in player.helpers {
 			remove_geometry(lookup);
@@ -303,36 +301,24 @@ set_ai_player_inputs :: proc(ai: ^AI) {
 		append(&player.helpers, geo_lookup);
 
 		// geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		// geometry_make_line_helper_origin_vector(geo, player.origin, player.left_dir);
-		// append(&player.helpers, geo_lookup);
-
-		// geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		// geometry_make_line_helper_origin_vector(geo, player.origin, player.right_dir);
-		// append(&player.helpers, geo_lookup);
-
-		// geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
 		// geometry_make_box_helper(geo, player.bounds.min, player.bounds.max);
 		// append(&player.helpers, geo_lookup);
 
 		car := get_entity(player.lookup).variant.(^Car_Entity);
 
-		/*for zone in player.zones {
-			dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, zone.angle);
-
+		if angle, ok := player.start_zone_angle.?; ok {
+			start_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, angle);
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.origin, dir * 20, RED);
+			geometry_make_line_helper_origin_vector(geo, player.origin, start_zone_dir * 20, RED);
 			append(&player.helpers, geo_lookup);
-		}*/
+		}
 
-		start_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, player.start_zone_angle);
-		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		geometry_make_line_helper_origin_vector(geo, player.origin, start_zone_dir * 20, RED);
-		append(&player.helpers, geo_lookup);
-
-		end_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, player.end_zone_angle);
-		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		geometry_make_line_helper_origin_vector(geo, player.origin, end_zone_dir * 20, RED);
-		append(&player.helpers, geo_lookup);
+		if angle, ok := player.end_zone_angle.?; ok {
+			end_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, angle);
+			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+			geometry_make_line_helper_origin_vector(geo, player.origin, end_zone_dir * 20, RED);
+			append(&player.helpers, geo_lookup);
+		}
 
 		dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, player.target_angle);
 		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);

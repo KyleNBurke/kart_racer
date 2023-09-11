@@ -104,7 +104,7 @@ init :: proc(game: ^Game) {
 
 	init_hull_helpers(&game.scene.hull_helpers);
 
-	if config.ai_path_helper {
+	if config.ai_helpers {
 		ai_show_path_helper(&game.scene.ai);
 	}
 
@@ -189,7 +189,6 @@ update :: proc(game: ^Game, dt: f32) {
 	if game.single_stepping {
 		if game.step {
 			set_player_inputs(&game.gamepad, game.window, game.scene.player);
-			set_ai_player_inputs(&game.scene.ai);
 			move_players(game.scene.all_players[:], dt);
 			simulate(&game.scene, &game.runtime_assets, dt);
 			// position_and_orient_wheels(game.scene.player, dt);
@@ -198,7 +197,6 @@ update :: proc(game: ^Game, dt: f32) {
 		}
 	} else {
 		set_player_inputs(&game.gamepad, game.window, game.scene.player);
-		set_ai_player_inputs(&game.scene.ai);
 		move_players(game.scene.all_players[:], dt);
 		simulate(&game.scene, &game.runtime_assets, dt);
 		// position_and_orient_wheels(game.scene.player, dt);
@@ -221,6 +219,10 @@ update :: proc(game: ^Game, dt: f32) {
 
 	if config.hull_helpers {
 		update_entity_hull_helpers(&scene.hull_helpers);
+	}
+
+	if config.ai_helpers {
+		ai_show_helpers(&game.scene.ai);
 	}
 
 	free_all(context.temp_allocator);
