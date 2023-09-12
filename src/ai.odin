@@ -20,8 +20,8 @@ AI :: struct {
 
 AI_Player :: struct {
 	lookup: Entity_Lookup,
+	
 	helpers: [dynamic]Geometry_Lookup,
-
 	origin,
 	closest_point,
 	extended_point,
@@ -98,7 +98,7 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 	car := get_entity(player.lookup).variant.(^Car_Entity);
 
 	car_left := math2.matrix4_left(car.transform);
-	surface_forward := linalg.normalize(linalg.cross(car_left, car.surface_normal));
+	surface_forward := linalg.normalize(linalg.cross(car_left, car.surface_normal)); // #todo: Do once
 	origin := car.position + surface_forward * 0.8;
 	player.surface_forward = surface_forward;
 	player.origin = origin;
@@ -145,7 +145,7 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 			left_dir := linalg.cross(car.surface_normal, center_dir);
 			right_dir := linalg.cross(center_dir, car.surface_normal);
 
-			PADDING :: 0.5;
+			PADDING :: 1;
 
 			// #todo: Consider the length of the point?
 
@@ -181,14 +181,13 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 		}
 	}
 
-	// Calculate extended angle
+	// Calculate the target angle from extended point
 	target_angle: f32;
-
 	{
-		extended_dir := linalg.normalize(extended_point - origin);
-		extended_angle_mag := math.acos(linalg.dot(surface_forward, extended_dir));
-		extended_angle_sign := math.sign(linalg.dot(car_left, extended_dir));
-		target_angle = extended_angle_mag * extended_angle_sign;
+		target_dir := linalg.normalize(extended_point - origin);
+		target_angle_mag := math.acos(linalg.dot(surface_forward, target_dir));
+		target_angle_sign := math.sign(linalg.dot(car_left, target_dir));
+		target_angle = target_angle_mag * target_angle_sign;
 	}
 
 	player.start_zone_angle = nil;
@@ -202,7 +201,7 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 
 		slice.sort_by(zones[:], order);
 
-		// Simplify zones
+		// Check if we're in a zone
 		in_zone := false;
 		start_angle, end_angle: f32;
 		start_index, end_index: int;
@@ -232,6 +231,7 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 		}
 
 		if in_zone {
+			// Move target angle
 			if start_index == 0 {
 				target_angle = end_angle;
 			} else if end_index == len(zones) - 1 {
@@ -255,22 +255,15 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 		}
 	}
 
-	player.target_angle = target_angle;
-
 	{ // Drive torwards the target angle
-		// Calculate a smoothed steer angle from the target angle
 		MAX_SMOOTH_ANGLE :: 0.3;
 		mag := abs(target_angle);
 
 		if mag < MAX_SMOOTH_ANGLE {
-			// Needs to be pretty aggressive so that values near 0 really get shrunk down
-			mag = MAX_SMOOTH_ANGLE * math.pow(mag / MAX_SMOOTH_ANGLE, 4);
+			car.input_steer_multiplier = target_angle / MAX_SMOOTH_ANGLE;
+		} else {
+			car.input_steer_multiplier = math.sign(target_angle);
 		}
-
-		steer_angle := math.sign(target_angle) * mag;
-
-		// Calculate the input steer multiplier from the steer angle
-		car.input_steer_multiplier = steer_angle / MAX_ANGLE;
 	}
 
 	car.input_accel_multiplier = 0.1;
@@ -320,9 +313,11 @@ ai_show_helpers :: proc(ai: ^AI) {
 			append(&player.helpers, geo_lookup);
 		}
 
-		dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, player.target_angle);
+		car_left := math2.matrix4_left(car.transform);
+		surface_forward := linalg.normalize(linalg.cross(car_left, car.surface_normal));
+		target_dir := math2.vector3_rotate(surface_forward, car.surface_normal, player.target_angle);
 		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		geometry_make_line_helper_origin_vector(geo, player.origin, dir * 22, GREEN);
+		geometry_make_line_helper_origin_vector(geo, player.origin, target_dir * 10, GREEN);
 		append(&player.helpers, geo_lookup);
 	}
 }

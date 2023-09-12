@@ -490,7 +490,7 @@ init_players :: proc(scene: ^Scene) {
 	scene.player = get_entity(scene.all_players[0]).variant.(^Car_Entity);
 
 	ai_player := get_entity(scene.all_players[1]);
-	ai_player.position.x = -55;
+	ai_player.position.x = -60;
 	ai_player.position.z = 80;
 
 	for i in 0..<AI_PLAYERS_COUNT {

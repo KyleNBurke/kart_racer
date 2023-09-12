@@ -64,7 +64,7 @@ Todo
 - Improve car wheel helpers
 	- Render them up to date
 	- Make config setting
-- Clean up the -vet things
+- [laptop] Clean up the -vet things
 - Wireframe triangle geometry for mesh hull helpers.
 - Hull bounds helpers - this is different than the hull helpers, it would show you the axis aligned bounding boxes of the hulls.
 - Shader hot reloading?
@@ -87,9 +87,12 @@ Todo
 	- If the exporter finds a rigid body not part of a rigid body island, produce a warning. The rigid body will not be exported.
 	- If the spawn point is not a bit above the ground mesh, produce a warning. The car will just fall through.
 	- [BUG] You can export a rigid body without a collision hull.
+- Immediate mode UI rendering.
 - Immediate mode rendering for the helpers?
 	- Would allow us to remove the .KeepRender shit I think?
-- AI framerate?
+	- Would really cleanup the AI helper rendering, there is state we must transition over the main thread so we can do the entity/geometry creation there.
+- [laptop] AI framerate?
+- [laptop] Reorganize the math2 + other util stuff into subfiles/packages or something?
 	
 - Sequential impulse solver positional corrections
 	https://www.gamedev.net/forums/topic/714397-sequential-impulse-solver-bounce-without-restitution/5457082/
