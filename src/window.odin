@@ -66,7 +66,7 @@ content_scale_callback : glfw.WindowContentScaleProc : proc "c" (window: glfw.Wi
 }
 
 key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: c.int) {
-	context = runtime.default_context()
+	context = runtime.default_context();
 	callback_state := cast(^Callback_State) glfw.GetWindowUserPointer(window);
 	game := callback_state.game;
 

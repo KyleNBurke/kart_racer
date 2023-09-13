@@ -39,6 +39,7 @@ Curve :: struct {
 
 Zone :: struct {
 	start: bool,
+	over_edge: bool,
 	angle: f32,
 }
 
@@ -108,11 +109,12 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 	player.closest_point = closest_point;
 	player.extended_point = extended_point;
 
-	RAY_LEN :: 20;
 	MAX_ANGLE :: 0.8;
 	
+	// Find nearby entities
 	nearby_lookups: [dynamic]Entity_Lookup;
 	{
+		RAY_LEN :: 20;
 		forward := origin + surface_forward * RAY_LEN;
 
 		max_l_dir := math2.vector3_rotate(surface_forward, car.surface_normal, MAX_ANGLE);
@@ -129,10 +131,11 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 
 		player.bounds = bounds;
 
-		// This query is returning back the car at the beggining, need to look into that.
+		// #todo: This query is returning back the human player car at the beggining, need to look into that.
 		nearby_lookups = entity_grid_find_nearby_entities(entity_grid, bounds);
 	}
 
+	// Find all zones within the cone of the player
 	zones := make([dynamic]Zone, context.temp_allocator);
 
 	for nearby_lookup in nearby_lookups {
@@ -141,43 +144,64 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 		nearby_entity := get_entity(nearby_lookup);
 
 		for &hull in nearby_entity.collision_hulls {
+			MAX_DIST :: 20;
 			center_dir := math2.box_center(hull.global_bounds) - origin;
-			left_dir := linalg.cross(car.surface_normal, center_dir);
-			right_dir := linalg.cross(center_dir, car.surface_normal);
 
-			PADDING :: 1;
-
-			// #todo: Consider the length of the point?
-
-			l_p := furthest_point_hull(&hull, left_dir);
-			l_dir := l_p - origin;
-			l_proj := l_p - linalg.dot(l_dir, car.surface_normal) * car.surface_normal;
-			l_proj_dir := l_proj - origin;
-			l_proj_pad_trans_dir := linalg.normalize(linalg.cross(car.surface_normal, l_proj_dir));
-			l_proj_pad_p := l_proj + l_proj_pad_trans_dir * PADDING;
-			l_proj_pad_dir := linalg.normalize(l_proj_pad_p - origin);
-			l_proj_pad_angle_mag := math.acos(linalg.dot(l_proj_pad_dir, surface_forward));
-			l_proj_pad_angle_sign := math.sign(linalg.dot(car_left, l_proj_pad_dir));
-			l_proj_pad_angle := l_proj_pad_angle_mag * l_proj_pad_angle_sign;
-
-			r_p := furthest_point_hull(&hull, right_dir);
-			r_dir := r_p - origin;
-			r_proj := r_p - linalg.dot(r_dir, car.surface_normal) * car.surface_normal;
-			r_proj_dir := r_proj - origin;
-			r_proj_pad_trans_dir := linalg.normalize(linalg.cross(r_proj_dir, car.surface_normal));
-			r_proj_pad_p := r_proj + r_proj_pad_trans_dir * PADDING;
-			r_proj_pad_dir := linalg.normalize(r_proj_pad_p - origin);
-			r_proj_pad_angle_mag := math.acos(linalg.dot(r_proj_pad_dir, surface_forward));
-			r_proj_pad_angle_sign := math.sign(linalg.dot(car_left, r_proj_pad_dir));
-			r_proj_pad_angle := r_proj_pad_angle_mag * r_proj_pad_angle_sign;
-
-			if abs(l_proj_pad_angle) < MAX_ANGLE || abs(r_proj_pad_angle) < MAX_ANGLE {
-				l_proj_pad_angle_clamped := math.clamp(l_proj_pad_angle, -MAX_ANGLE, MAX_ANGLE);
-				r_proj_pad_angle_clmaped := math.clamp(r_proj_pad_angle, -MAX_ANGLE, MAX_ANGLE);
-
-				append(&zones, Zone { true, l_proj_pad_angle_clamped });
-				append(&zones, Zone { false, r_proj_pad_angle_clmaped });
+			// Should probably account for the center of the hull being far away but one of the closest points 
+			// is within MAX_DIST
+			if linalg.length2(center_dir) > MAX_DIST * MAX_DIST {
+				continue;
 			}
+
+			PADDING :: 1.5;
+			angle_l, angle_r: f32;
+			
+			{
+				left_dir := linalg.cross(car.surface_normal, center_dir);
+				p := furthest_point_hull(&hull, left_dir);
+				p_dir := p - origin;
+				proj := p - linalg.dot(p_dir, car.surface_normal) * car.surface_normal;
+				proj_dir := proj - origin;
+				proj_pad_trans_dir := linalg.normalize(linalg.cross(car.surface_normal, proj_dir));
+				proj_pad_p := proj + proj_pad_trans_dir * PADDING;
+				proj_pad_dir := linalg.normalize(proj_pad_p - origin);
+				angle_mag := math.acos(linalg.dot(proj_pad_dir, surface_forward));
+				angle_sign := math.sign(linalg.dot(car_left, proj_pad_dir));
+				angle_l = angle_mag * angle_sign;
+			}
+
+			if angle_l < -MAX_ANGLE do continue;
+
+			{
+				right_dir := linalg.cross(center_dir, car.surface_normal);
+				p := furthest_point_hull(&hull, right_dir);
+				p_dir := p - origin;
+				p_proj := p - linalg.dot(p_dir, car.surface_normal) * car.surface_normal;
+				proj_dir := p_proj - origin;
+				proj_pad_trans_dir := linalg.normalize(linalg.cross(proj_dir, car.surface_normal));
+				proj_pad_p := p_proj + proj_pad_trans_dir * PADDING;
+				proj_pad_dir := linalg.normalize(proj_pad_p - origin);
+				angle_mag := math.acos(linalg.dot(proj_pad_dir, surface_forward));
+				angle_sign := math.sign(linalg.dot(car_left, proj_pad_dir));
+				angle_r = angle_mag * angle_sign;
+			}
+
+			if angle_r > MAX_ANGLE do continue;
+
+			over_edge_l := false;
+			if angle_l > MAX_ANGLE {
+				over_edge_l = true;
+				angle_l = MAX_ANGLE;
+			}
+
+			over_edge_r := false;
+			if angle_r < -MAX_ANGLE {
+				over_edge_r = true;
+				angle_r = -MAX_ANGLE;
+			}
+
+			append(&zones, Zone { true,  over_edge_l, angle_l });
+			append(&zones, Zone { false, over_edge_r, angle_r });
 		}
 	}
 
@@ -193,6 +217,7 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 	player.start_zone_angle = nil;
 	player.end_zone_angle = nil;
 
+	// Determine if the player is in a zone so we can move the target angle
 	if len(zones) > 0 {
 		// Sort
 		order :: proc(a, b: Zone) -> bool {
@@ -204,7 +229,8 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 		// Check if we're in a zone
 		in_zone := false;
 		start_angle, end_angle: f32;
-		start_index, end_index: int;
+		start_over_edge := false;
+		end_over_edge := false;
 		count: int;
 
 		for &zone, i in zones {
@@ -213,14 +239,14 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 				
 				if count == 1 {
 					start_angle = zone.angle;
-					start_index = i;
+					start_over_edge = zone.over_edge;
 				}
 			} else {
 				count -= 1;
 
 				if count == 0 {
 					end_angle = zone.angle;
-					end_index = i;
+					end_over_edge = zone.over_edge;
 
 					if target_angle < start_angle && target_angle > end_angle {
 						in_zone = true;
@@ -230,20 +256,22 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 			}
 		}
 
+		// If the player is in a zone, move the target angle
 		if in_zone {
-			// Move target angle
-			if start_index == 0 {
+			if start_over_edge {
 				target_angle = end_angle;
-			} else if end_index == len(zones) - 1 {
+			} else if end_over_edge {
 				target_angle = start_angle;
+			} else if start_over_edge && end_over_edge {
+				// zone spans entire cone so just drive forward
 			} else {
-				angle_to_left := start_angle - target_angle;
-				angle_to_right := target_angle - end_angle;
+				angle_to_start := start_angle - target_angle;
+				angle_to_end := target_angle - end_angle;
 
-				assert(angle_to_left >= 0);
-				assert(angle_to_right >= 0);
+				assert(angle_to_start >= 0);
+				assert(angle_to_end >= 0);
 
-				if angle_to_left < angle_to_right {
+				if angle_to_start < angle_to_end {
 					target_angle = start_angle;
 				} else {
 					target_angle = end_angle;
@@ -254,6 +282,8 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 			player.end_zone_angle = end_angle;
 		}
 	}
+
+	player.target_angle = target_angle;
 
 	{ // Drive torwards the target angle
 		MAX_SMOOTH_ANGLE :: 0.3;
@@ -302,14 +332,14 @@ ai_show_helpers :: proc(ai: ^AI) {
 		if angle, ok := player.start_zone_angle.?; ok {
 			start_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, angle);
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.origin, start_zone_dir * 20, RED);
+			geometry_make_line_helper_origin_vector(geo, player.origin, start_zone_dir * 20, CYAN);
 			append(&player.helpers, geo_lookup);
 		}
 
 		if angle, ok := player.end_zone_angle.?; ok {
 			end_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, angle);
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.origin, end_zone_dir * 20, RED);
+			geometry_make_line_helper_origin_vector(geo, player.origin, end_zone_dir * 20, CYAN);
 			append(&player.helpers, geo_lookup);
 		}
 
