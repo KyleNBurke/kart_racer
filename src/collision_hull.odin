@@ -108,15 +108,14 @@ Hull_Helpers :: struct {
 init_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 	box_helper_geo, box_helper_geo_lookup := create_geometry("box hull visualizer", .Keep);
 	geometry_make_box_helper(box_helper_geo, VEC3_NEG_ONE, VEC3_ONE)
+	hull_helpers.box_helper_geo_lookup = box_helper_geo_lookup;
 
 	cylinder_helper_geo, cylinder_helper_geo_lookup := create_geometry("cylinder hull visualizer", .Keep);
 	geometry_make_cylinder_helper(cylinder_helper_geo);
+	hull_helpers.cylinder_helper_geo_lookup = cylinder_helper_geo_lookup;
 
 	sphere_helper_geo, sphere_helper_geo_lookup := create_geometry("sphere hull visualizer", .Keep);
 	geometry_make_sphere_helper(sphere_helper_geo, VEC3_ZERO, 1);
-
-	hull_helpers.box_helper_geo_lookup = box_helper_geo_lookup;
-	hull_helpers.cylinder_helper_geo_lookup = cylinder_helper_geo_lookup;
 	hull_helpers.sphere_helper_geo_lookup = sphere_helper_geo_lookup;
 }
 
@@ -131,7 +130,10 @@ update_entity_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 
 	clear(&hull_helpers.hull_helpers);
 
-	for &entity, entity_index in entities_geos.entities {
+	entities_count := len(entities_geos.entities);
+
+	for i in 0..<entities_count {
+		entity := entities_geos.entities[i];
 		if entity.free do continue;
 
 		for &hull in entity.collision_hulls {

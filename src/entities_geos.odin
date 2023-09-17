@@ -44,7 +44,7 @@ create_geometry :: proc(name: string, on_no_entities: On_No_Entities = .Free) ->
 		lookup = { index, 0 };
 	}
 
-	log_verbosef("Created geometry '%s'\n", geometry.name);
+	log_verbosef("Created geometry '%s' %v\n", geometry.name, lookup);
 
 	return;
 }
@@ -60,7 +60,7 @@ create_entity :: proc(name: string, geometry_lookup: Maybe(Geometry_Lookup), $T:
 	entity.size = VEC3_ONE;
 	update_entity_transform(entity);
 
-	if index, ok := pop_safe(&entities_geos.free_geometries); ok {
+	if index, ok := pop_safe(&entities_geos.free_entities); ok {
 		current_entity := entities_geos.entities[index];
 		entity.generation = current_entity.generation;
 		free(current_entity);
@@ -81,7 +81,7 @@ create_entity :: proc(name: string, geometry_lookup: Maybe(Geometry_Lookup), $T:
 		entity.geometry_lookup = lookup;
 	}
 
-	log_verbosef("Created entity '%s'\n", entity.name);
+	log_verbosef("Created entity '%s' %v\n", entity.name, entity_lookup);
 
 	return;
 }
@@ -119,7 +119,7 @@ remove_geometry :: proc(geometry_lookup: Geometry_Lookup) {
 	geometry.generation += 1;
 	append(&entities_geos.free_geometries, geometry_lookup.index);
 
-	log_verbosef("Removed geometry '%s'\n", geometry.name);
+	log_verbosef("Removed geometry '%s' %v\n", geometry.name, geometry_lookup);
 }
 
 remove_entity :: proc(entity_lookup: Entity_Lookup) {
@@ -140,7 +140,7 @@ remove_entity :: proc(entity_lookup: Entity_Lookup) {
 			geometry.generation += 1;
 			append(&entities_geos.free_geometries, geometry_lookup.index);
 
-			log_verbosef("Removed geometry '%s'\n", geometry.name);
+			log_verbosef("Removed geometry '%s' %v\n", geometry.name, geometry_lookup);
 		}
 	}
 
@@ -176,7 +176,7 @@ remove_entity :: proc(entity_lookup: Entity_Lookup) {
 	case ^Inanimate_Entity, ^Bumper_Entity:
 	}
 	
-	log_verbosef("Removed entity '%s'\n", entity_name);
+	log_verbosef("Removed entity '%s', %v\n", entity_name, entity_lookup);
 }
 
 cleanup_entities_geos :: proc() {

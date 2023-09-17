@@ -93,6 +93,7 @@ Todo
 	- Would really cleanup the AI helper rendering, there is state we must transition over the main thread so we can do the entity/geometry creation there.
 - [laptop] AI framerate?
 - [laptop] Reorganize the math2 + other util stuff into subfiles/packages or something?
+- Save last get call from get_geometry, then check it in make_geometry...()?
 	
 - Sequential impulse solver positional corrections
 	https://www.gamedev.net/forums/topic/714397-sequential-impulse-solver-bounce-without-restitution/5457082/

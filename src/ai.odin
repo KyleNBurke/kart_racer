@@ -160,6 +160,11 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 				left_dir := linalg.cross(car.surface_normal, center_dir);
 				p := furthest_point_hull(&hull, left_dir);
 				p_dir := p - origin;
+
+				left_dir = linalg.cross(car.surface_normal, p_dir);
+				p = furthest_point_hull(&hull, left_dir);
+				p_dir = p - origin;
+
 				proj := p - linalg.dot(p_dir, car.surface_normal) * car.surface_normal;
 				proj_dir := proj - origin;
 				proj_pad_trans_dir := linalg.normalize(linalg.cross(car.surface_normal, proj_dir));
@@ -176,6 +181,11 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 				right_dir := linalg.cross(center_dir, car.surface_normal);
 				p := furthest_point_hull(&hull, right_dir);
 				p_dir := p - origin;
+
+				right_dir = linalg.cross(p_dir, car.surface_normal);
+				p = furthest_point_hull(&hull, right_dir);
+				p_dir = p - origin;
+
 				p_proj := p - linalg.dot(p_dir, car.surface_normal) * car.surface_normal;
 				proj_dir := p_proj - origin;
 				proj_pad_trans_dir := linalg.normalize(linalg.cross(proj_dir, car.surface_normal));
@@ -265,16 +275,13 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 			} else if start_over_edge && end_over_edge {
 				// zone spans entire cone so just drive forward
 			} else {
-				angle_to_start := start_angle - target_angle;
-				angle_to_end := target_angle - end_angle;
+				start := abs(start_angle);
+				end := abs(end_angle);
 
-				assert(angle_to_start >= 0);
-				assert(angle_to_end >= 0);
-
-				if angle_to_start < angle_to_end {
-					target_angle = start_angle;
-				} else {
+				if start > end {
 					target_angle = end_angle;
+				} else {
+					target_angle = start_angle;
 				}
 			}
 
@@ -287,16 +294,28 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 
 	{ // Drive torwards the target angle
 		MAX_SMOOTH_ANGLE :: 0.3;
-		mag := abs(target_angle);
+		mag := min(abs(target_angle), MAX_ANGLE);
 
 		if mag < MAX_SMOOTH_ANGLE {
 			car.input_steer_multiplier = target_angle / MAX_SMOOTH_ANGLE;
 		} else {
 			car.input_steer_multiplier = math.sign(target_angle);
 		}
-	}
 
-	car.input_accel_multiplier = 0.1;
+		target_speed: f32;
+
+		// if mag < 1 {
+		// 	target_speed = CAR_TOP_SPEED;
+		// } else {
+			target_speed = (1 - mag / MAX_ANGLE) * (CAR_TOP_SPEED - 5) + 5;
+		// }
+
+		curr_speed := linalg.dot(surface_forward, car.velocity);
+
+		// fmt.println(mag, target_speed);
+
+		car.input_accel_multiplier = math.sign(target_speed - curr_speed);
+	}
 }
 
 ai_show_helpers :: proc(ai: ^AI) {
@@ -332,14 +351,14 @@ ai_show_helpers :: proc(ai: ^AI) {
 		if angle, ok := player.start_zone_angle.?; ok {
 			start_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, angle);
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.origin, start_zone_dir * 20, CYAN);
+			geometry_make_line_helper_origin_vector(geo, player.origin, start_zone_dir * 20, RED);
 			append(&player.helpers, geo_lookup);
 		}
 
 		if angle, ok := player.end_zone_angle.?; ok {
 			end_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, angle);
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.origin, end_zone_dir * 20, CYAN);
+			geometry_make_line_helper_origin_vector(geo, player.origin, end_zone_dir * 20, RED);
 			append(&player.helpers, geo_lookup);
 		}
 
