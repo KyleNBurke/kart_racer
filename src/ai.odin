@@ -186,10 +186,10 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 				p = furthest_point_hull(&hull, right_dir);
 				p_dir = p - origin;
 
-				p_proj := p - linalg.dot(p_dir, car.surface_normal) * car.surface_normal;
-				proj_dir := p_proj - origin;
+				proj := p - linalg.dot(p_dir, car.surface_normal) * car.surface_normal;
+				proj_dir := proj - origin;
 				proj_pad_trans_dir := linalg.normalize(linalg.cross(proj_dir, car.surface_normal));
-				proj_pad_p := p_proj + proj_pad_trans_dir * PADDING;
+				proj_pad_p := proj + proj_pad_trans_dir * PADDING;
 				proj_pad_dir := linalg.normalize(proj_pad_p - origin);
 				angle_mag := math.acos(linalg.dot(proj_pad_dir, surface_forward));
 				angle_sign := math.sign(linalg.dot(car_left, proj_pad_dir));
@@ -342,9 +342,9 @@ ai_show_helpers :: proc(ai: ^AI) {
 		geometry_make_line_helper_start_end(geo, player.origin, player.max_r);
 		append(&player.helpers, geo_lookup);
 
-		// geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		// geometry_make_box_helper(geo, player.bounds.min, player.bounds.max);
-		// append(&player.helpers, geo_lookup);
+		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		geometry_make_box_helper(geo, player.bounds.min, player.bounds.max, PURPLE);
+		append(&player.helpers, geo_lookup);
 
 		car := get_entity(player.lookup).variant.(^Car_Entity);
 
