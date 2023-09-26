@@ -10,6 +10,7 @@ import "math2";
 import "core:fmt";
 
 AI :: struct {
+	thread: ^thread.Thread,
 	semaphore: sync.Sema,
 	elapsed_time: f32,
 	path: [dynamic]Curve,
@@ -76,7 +77,20 @@ ai_signal_update_if_ready :: proc(ai: ^AI, dt: f32) {
 }
 
 ai_init :: proc(scene: ^Scene) {
-	thread.create_and_start_with_data(scene, ai_update_players);
+	scene.ai.thread = thread.create_and_start_with_data(scene, ai_update_players);
+}
+
+ai_debug_cleanup :: proc(ai: ^AI) {
+	thread.terminate(ai.thread, 0);
+	thread.destroy(ai.thread);
+	
+	delete(ai.path);
+
+	for &player in ai.players {
+		delete(player.helpers);
+	}
+
+	delete(ai.players);
 }
 
 ai_update_players :: proc(scene: rawptr) {

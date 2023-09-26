@@ -116,6 +116,4 @@ For a cool particle explosion effect do this:
 	particle.position += particle.velocity * dt;
 
 Todo now
-- Config option for AI helpers
-- Memory leaks
 - Velocity check for objects >= AI car velocity

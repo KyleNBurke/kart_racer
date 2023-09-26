@@ -266,6 +266,7 @@ debug_cleanup :: proc(game: ^Game) {
 	cleanup_constraints(&scene.constraints);
 	cleanup_islands(&scene.islands);
 	cleanup_runtime_assets(&game.runtime_assets);
+	ai_debug_cleanup(&scene.ai);
 
 	for &text in game.texts {
 		cleanup_text(&text);
@@ -274,6 +275,7 @@ debug_cleanup :: proc(game: ^Game) {
 	cleanup_entities_geos();
 
 	// Cleanup scene should do all this and hold all theses variables too.
+	delete(scene.all_players);
 	delete(scene.on_fire_oil_slicks);
 	delete(scene.oil_slicks);
 	delete(scene.status_effect_clouds);
