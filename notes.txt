@@ -83,6 +83,13 @@ Todo
 		- Nose dive and pitch up work when against a wall?
 		- Adjust going off a jump and landing slide threshold?
 		- Pressing handbreak button in the air should start the timer once it hits the ground. If you don't hit the ground within a certain amount of time, ignore the button press?
+	- AI so that we can actually have other players on the track and it feels fun
+		- [done] Hull object avoidance
+		- Triangle object avoidance?
+		- Make spawn points on the main track and have them go around
+		- Smoother accel/decel (it's just 1 or -1 right now)
+		- Player vs player collisions
+			- Should not see each other as obsticals if velocity is >=
 - Mistakes we can catch / improvements that would help dev time
 	- If the exporter finds a rigid body not part of a rigid body island, produce a warning. The rigid body will not be exported.
 	- If the spawn point is not a bit above the ground mesh, produce a warning. The car will just fall through.
@@ -107,3 +114,8 @@ For a cool particle explosion effect do this:
 	particle.velocity.y += rand.float32_range(-RANGE, RANGE);
 	particle.velocity.z += rand.float32_range(-RANGE, RANGE);
 	particle.position += particle.velocity * dt;
+
+Todo now
+- Config option for AI helpers
+- Memory leaks
+- Velocity check for objects >= AI car velocity

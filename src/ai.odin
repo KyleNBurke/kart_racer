@@ -9,13 +9,11 @@ import "math2";
 
 import "core:fmt";
 
-AI_PLAYERS_COUNT :: 1;
-
 AI :: struct {
 	semaphore: sync.Sema,
 	elapsed_time: f32,
 	path: [dynamic]Curve,
-	players: [AI_PLAYERS_COUNT]AI_Player,
+	players: [dynamic]AI_Player,
 }
 
 AI_Player :: struct {
@@ -273,7 +271,7 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 			} else if end_over_edge {
 				target_angle = start_angle;
 			} else if start_over_edge && end_over_edge {
-				// zone spans entire cone so just drive forward
+				// zone spans entire cone so don't change target angle
 			} else {
 				start := abs(start_angle);
 				end := abs(end_angle);

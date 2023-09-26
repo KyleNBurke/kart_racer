@@ -76,6 +76,55 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 	return indices, attributes;
 }
 
+load_car_data:: proc(scene: ^Scene) {
+	REQUIRED_VERSION :: 2;
+	
+	bytes, success := os.read_entire_file_from_filename("res/car.kgc");
+	assert(success);
+	defer delete(bytes);
+	
+	pos := 0;
+	car_loaded_data := &scene.car_loaded_data;
+
+	{ // Version check
+		version := read_u32(&bytes, &pos);
+		assert(REQUIRED_VERSION == version, fmt.tprintf("[car loading] Required version %v but found %v.", REQUIRED_VERSION, version));
+	}
+
+	{ // Car geometry
+		indices, attributes := read_indices_attributes(&bytes, &pos);
+		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+
+		geometry, geometry_lookup := create_geometry("car");
+		geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
+		car_loaded_data.car_geometry_lookup = geometry_lookup;
+
+		delete(indices);
+		delete(attributes);
+	}
+
+	{ // Bottom hull
+		car_loaded_data.hull_local_position = read_vec3(&bytes, &pos);
+		car_loaded_data.hull_local_orientation = read_quat(&bytes, &pos);
+		car_loaded_data.hull_local_size = read_vec3(&bytes, &pos);
+	}
+
+	{ // Wheels
+		indices, attributes := read_indices_attributes(&bytes, &pos);
+
+		geometry, geometry_lookup := create_geometry("wheel");
+		geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
+		car_loaded_data.wheel_geometry_lookup = geometry_lookup;
+
+		delete(indices);
+		delete(attributes);
+
+		car_loaded_data.wheel_radius = read_f32(&bytes, &pos);
+		
+		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+	}
+}
+
 load_scene :: proc(scene: ^Scene) {
 	{ // Clear things out
 		clear(&scene.awake_rigid_bodies);
@@ -90,7 +139,7 @@ load_scene :: proc(scene: ^Scene) {
 		remove_scene_associated_entities();
 	}
 
-	REQUIRED_VERSION :: 4;
+	REQUIRED_VERSION :: 5;
 	
 	bytes, success := os.read_entire_file_from_filename(scene.file_path, context.temp_allocator);
 	assert(success, fmt.tprintf("Failed to load level file %s", scene.file_path));
@@ -100,9 +149,10 @@ load_scene :: proc(scene: ^Scene) {
 	version := read_u32(&bytes, &pos);
 	assert(REQUIRED_VERSION == version, fmt.tprintf("[level loading] Required version %v but found %v.", REQUIRED_VERSION, version));
 
-	// Spawn position & orientation
-	scene.spawn_position = read_vec3(&bytes, &pos);
-	scene.spawn_orientation = read_quat(&bytes, &pos);
+	{ // Spawn position & orientation
+		scene.spawn_position = read_vec3(&bytes, &pos);
+		scene.spawn_orientation = read_quat(&bytes, &pos);
+	}
 
 	// Reset grids
 	grid_half_size := read_f32(&bytes, &pos);
@@ -370,7 +420,6 @@ load_scene :: proc(scene: ^Scene) {
 
 	{ // AI paths
 		point_count := read_u32(&bytes, &pos);
-		fmt.println(point_count);
 
 		points := make([dynamic]linalg.Vector3f32, 0, point_count, context.temp_allocator);
 		
@@ -399,75 +448,53 @@ load_scene :: proc(scene: ^Scene) {
 		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 	}
 
-	fmt.printf("Loaded level file %s\n", scene.file_path);
-	return;
-}
+	// #todo: Update this to work with hot reloading.
+	// Need to pull this setup logic into a separate proc and when hot reloading, only
+	// reset the AI player positions?
 
-init_players :: proc(scene: ^Scene) {
-	car_geometry_lookup: Geometry_Lookup;
+	// Save a spot for the human player
+	append(&scene.all_players, Entity_Lookup {});
 
-	hull_local_position: linalg.Vector3f32;
-	hull_local_orientation: linalg.Quaternionf32;
-	hull_local_size: linalg.Vector3f32;
+	{ // AI spawn points
+		using scene.car_loaded_data;
+		count := read_u32(&bytes, &pos);
 
-	wheel_geometry_lookup: Geometry_Lookup;
-	wheel_radius: f32;
+		for _ in 0..<count {
+			name := read_string(&bytes, &pos);
+			position := read_vec3(&bytes, &pos);
+			orientation := read_quat(&bytes, &pos);
 
-	{ // Load data from file
-		REQUIRED_VERSION :: 2;
-	
-		bytes, success := os.read_entire_file_from_filename("res/car.kgc");
-		assert(success);
-		defer delete(bytes);
-		
-		pos := 0;
+			entity, entity_lookup := create_entity("ai_player", car_geometry_lookup, Car_Entity);
+			init_car_entity(entity);
+			entity.wheel_radius = wheel_radius;
 
-		{ // Version check
-			version := read_u32(&bytes, &pos);
-			assert(REQUIRED_VERSION == version, fmt.tprintf("[car loading] Required version %v but found %v.", REQUIRED_VERSION, version));
-		}
+			entity.position = position;
+			entity.orientation = orientation;
+			update_entity_transform(entity);
 
-		{ // Car geometry
-			indices, attributes := read_indices_attributes(&bytes, &pos);
-			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+			hull := init_collision_hull(hull_local_position, hull_local_orientation, hull_local_size, .Box);
+			append(&entity.collision_hulls, hull);
 
-			geometry, geometry_lookup := create_geometry("car");
-			geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
-			car_geometry_lookup = geometry_lookup;
+			update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
+			entity_grid_insert(&scene.entity_grid, entity_lookup, entity);
 
-			delete(indices);
-			delete(attributes);
-		}
+			append(&scene.all_players, entity_lookup);
 
-		{ // Bottom hull
-			hull_local_position = read_vec3(&bytes, &pos);
-			hull_local_orientation = read_quat(&bytes, &pos);
-			hull_local_size = read_vec3(&bytes, &pos);
-		}
-
-		{ // Wheels
-			indices, attributes := read_indices_attributes(&bytes, &pos);
-
-			geometry, geometry_lookup := create_geometry("wheel");
-			geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
-			wheel_geometry_lookup = geometry_lookup;
-
-			delete(indices);
-			delete(attributes);
-
-			wheel_radius = read_f32(&bytes, &pos);
-			
-			assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+			ai_player: AI_Player;
+			ai_player.lookup = entity_lookup;
+			append(&scene.ai.players, ai_player);
 		}
 	}
 
-	// Init players
-	for _, i in scene.all_players {
-		entity, entity_lookup := create_entity("player", car_geometry_lookup, Car_Entity);
-		init_car_entity(entity);
+	{ // Init human player
+		using scene.car_loaded_data;
 
-		entity.position.x = 5 + f32(i) * 5;
-		entity.position.y = 5;
+		entity, entity_lookup := create_entity("ai_player", car_geometry_lookup, Car_Entity);
+		init_car_entity(entity);
+		entity.wheel_radius = wheel_radius;
+		
+		entity.position = scene.spawn_position;
+		entity.orientation = scene.spawn_orientation;
 		update_entity_transform(entity);
 
 		hull := init_collision_hull(hull_local_position, hull_local_orientation, hull_local_size, .Box);
@@ -476,88 +503,12 @@ init_players :: proc(scene: ^Scene) {
 		update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
 		entity_grid_insert(&scene.entity_grid, entity_lookup, entity);
 
-		for i in 0..<4 {
-			_, entity_lookup := create_entity("player_wheel", wheel_geometry_lookup, Inanimate_Entity);
-			entity.wheels[i].entity_lookup = entity_lookup;
-		}
-
-		entity.wheel_radius = wheel_radius;
-
-		scene.all_players[i] = entity_lookup;
+		scene.player = entity;
+		scene.all_players[0] = entity_lookup;
 	}
 
-	// The first item in all_players is the actual human player
-	scene.player = get_entity(scene.all_players[0]).variant.(^Car_Entity);
-
-	ai_player := get_entity(scene.all_players[1]);
-	ai_player.position.x = -60;
-	ai_player.position.z = 80;
-
-	for i in 0..<AI_PLAYERS_COUNT {
-		scene.ai.players[i].lookup = scene.all_players[i + 1];
-	}
-}
-
-load_car :: proc(car: ^^Car_Entity, scene: ^Scene) {
-	REQUIRED_VERSION :: 2;
-	
-	bytes, success := os.read_entire_file_from_filename("res/car.kgc");
-	assert(success);
-	defer delete(bytes);
-	
-	pos := 0;
-
-	version := read_u32(&bytes, &pos);
-	assert(REQUIRED_VERSION == version, fmt.tprintf("[car loading] Required version %v but found %v.", REQUIRED_VERSION, version));
-
-	indices, attributes := read_indices_attributes(&bytes, &pos);
-	assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
-
-	{ // Geometry
-		geometry, geometry_lookup := create_geometry("car");
-		geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
-
-		delete(indices);
-		delete(attributes);
-
-		created_car, _ := create_entity("car", geometry_lookup, Car_Entity);
-		car^ = created_car;
-
-		car^.position = scene.spawn_position;
-		car^.orientation = scene.spawn_orientation;
-		update_entity_transform(car^);
-
-		init_car_entity(car^);
-	}
-
-	{ // Bottom hull
-		local_position := read_vec3(&bytes, &pos);
-		local_orientation := read_quat(&bytes, &pos);
-		local_size := read_vec3(&bytes, &pos);
-
-		local_transform := linalg.matrix4_from_trs(local_position, local_orientation, local_size);
-		hull := init_collision_hull(local_position, local_orientation, local_size, .Box);
-		append(&car^.collision_hulls, hull);
-	}
-
-	{ // Wheels
-		indices, attributes := read_indices_attributes(&bytes, &pos);
-
-		geometry, geometry_lookup := create_geometry("wheel");
-		geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
-
-		delete(indices);
-		delete(attributes);
-
-		for i in 0..<4 {
-			_, entity_lookup := create_entity("wheel", geometry_lookup, Inanimate_Entity);
-			car^.wheels[i].entity_lookup = entity_lookup;
-		}
-
-		car^.wheel_radius = read_f32(&bytes, &pos);
-
-		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
-	}
+	fmt.printf("Loaded level file %s\n", scene.file_path);
+	return;
 }
 
 load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {

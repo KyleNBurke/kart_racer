@@ -118,7 +118,8 @@ def register():
 		('bumper', "Bumpler", "", 8),
 		('boost_jet', "Boost jet", "", 9),
 		('ground_collision_mesh_and_inanimate', "Ground collision mesh and inanimate", "", 10),
-		('ideal_path', "Ideal path", "", 11)
+		('ideal_path', "Ideal path", "", 11),
+		('ai_spawn_point', "AI spawn point", "", 12),
 	])
 	bpy.types.Object.kg_hull_type = bpy.props.EnumProperty(items=[
 		('box', "Box", "", 0),

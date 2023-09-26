@@ -31,6 +31,7 @@ Scene :: struct {
 	file_path: string,
 	reload_file_path: string,
 	load_time: os.File_Time,
+	car_loaded_data: Car_Loaded_Data,
 	ground_grid: Ground_Grid,
 	entity_grid: Entity_Grid,
 	awake_rigid_bodies: [dynamic]Entity_Lookup,
@@ -47,9 +48,18 @@ Scene :: struct {
 	on_fire_oil_slicks: [dynamic]Entity_Lookup,
 	bumpers: [dynamic]Entity_Lookup,
 	boost_jets: [dynamic]Entity_Lookup,
-	all_players: [AI_PLAYERS_COUNT + 1]Entity_Lookup, // First item is the human player
+	all_players: [dynamic]Entity_Lookup, // First item is the human player
 	player: ^Car_Entity,
 	ai: AI,
+}
+
+Car_Loaded_Data :: struct {
+	car_geometry_lookup: Geometry_Lookup,
+	wheel_geometry_lookup: Geometry_Lookup,
+	hull_local_position: linalg.Vector3f32,
+	hull_local_orientation: linalg.Quaternionf32,
+	hull_local_size: linalg.Vector3f32,
+	wheel_radius: f32,
 }
 
 main :: proc() {
@@ -96,8 +106,8 @@ init :: proc(game: ^Game) {
 
 	ground_grid_init(&game.scene.ground_grid);
 
+	load_car_data(&game.scene);
 	init_scene(&game.scene);
-	init_players(&game.scene);
 	load_runtime_assets(&game.runtime_assets);
 
 	ai_init(&game.scene);
@@ -203,9 +213,9 @@ update :: proc(game: ^Game, dt: f32) {
 		ai_signal_update_if_ready(&game.scene.ai, dt);
 	}
 
-	ai_car := get_entity(game.scene.ai.players[0].lookup).variant.(^Car_Entity);
-	move_camera(&game.camera, &game.gamepad, game.window, ai_car, dt);
-	// move_camera(&game.camera, &game.gamepad, game.window, game.scene.player, dt);
+	// ai_car := get_entity(game.scene.ai.players[0].lookup).variant.(^Car_Entity);
+	// move_camera(&game.camera, &game.gamepad, game.window, ai_car, dt);
+	move_camera(&game.camera, &game.gamepad, game.window, game.scene.player, dt);
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
 
 	scene := &game.scene;

@@ -108,3 +108,8 @@ AI path
 	points count u32
 	point        vec3
 	...
+
+AI spawn points count: u32
+	name:        string
+	position:    vec3
+	orientation: quat

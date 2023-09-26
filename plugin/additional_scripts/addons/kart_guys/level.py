@@ -2,7 +2,7 @@ from bpy.types import Context, Depsgraph, Object, Mesh, Curve, Spline, BezierSpl
 from . import util
 from .util import WObject
 
-VERSION = 4
+VERSION = 5
 
 def export(operator, context: Context):
 	depsgraph: Depsgraph = context.evaluated_depsgraph_get()
@@ -22,6 +22,7 @@ def export(operator, context: Context):
 	export_bumpers(depsgraph, graph, file, mesh_name_to_index_max)
 	export_boost_jets(depsgraph, graph, file, mesh_name_to_index_max)
 	export_ai_paths(depsgraph, graph, file)
+	export_ai_spawn_points(depsgraph, graph, file)
 
 	file.close()
 	print("Exported", operator.filepath)
@@ -436,5 +437,29 @@ def export_ai_paths(depsgraph: Depsgraph, graph, file):
 		print(handle.co)
 	
 	util.write_cursor_check(file)
+
+	print()
+
+def export_ai_spawn_points(depsgraph: Depsgraph, graph, file):
+	print("--- AI spawn points ---")
+
+	def compare(w_object: WObject):
+		return w_object.object.kg_type == 'ai_spawn_point'
+	
+	w_objects = util.search_graph_many(graph, compare)
+
+	util.write_u32(file, len(w_objects))
+
+	for w_object in w_objects:
+		print(w_object.unique_name)
+
+		util.write_string(file, w_object.unique_name)
+
+		matrix = w_object.final_world_matrix
+		game_pos = util.blender_position_to_game_position(matrix.to_translation())
+		game_ori = util.blender_orientation_to_game_orientation(matrix.to_quaternion())
+
+		util.write_vec3(file, game_pos)
+		util.write_quat(file, game_ori)
 
 	print()
