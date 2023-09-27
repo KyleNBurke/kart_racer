@@ -86,7 +86,6 @@ Todo
 	- AI so that we can actually have other players on the track and it feels fun
 		- [done] Hull object avoidance
 		- Triangle object avoidance?
-		- Make spawn points on the main track and have them go around
 		- Smoother accel/decel (it's just 1 or -1 right now)
 		- Player vs player collisions
 			- Should not see each other as obsticals if velocity is >=
@@ -116,4 +115,6 @@ For a cool particle explosion effect do this:
 	particle.position += particle.velocity * dt;
 
 Todo now
-- Velocity check for objects >= AI car velocity
+- Car vs car collisions
+- Make some AI spawn points on the track
+- car vs rigid body collisions - make them not suck

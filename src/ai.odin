@@ -101,13 +101,13 @@ ai_update_players :: proc(scene: rawptr) {
 		sync.sema_wait(&ai.semaphore);
 		
 		for &player in ai.players {
-			update_player_new(&player, ai.path[:], &scene.entity_grid);
+			update_player(&player, ai.path[:], &scene.entity_grid);
 		}
 	}
 }
 
 @(private = "file")
-update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entity_Grid) {
+update_player :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entity_Grid) {
 	car := get_entity(player.lookup).variant.(^Car_Entity);
 
 	car_left := math2.matrix4_left(car.transform);
@@ -154,6 +154,26 @@ update_player_new :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entit
 		if player.lookup == nearby_lookup do continue;
 
 		nearby_entity := get_entity(nearby_lookup);
+
+		// Ignore object if it's velocity is relatively the same
+		// This duplicate code could get removed if I have Car's hold rigid bodies
+		VEL_DIFF :: 5;
+		#partial switch variant in nearby_entity.variant {
+		case ^Rigid_Body_Entity:
+			entity_vel := linalg.dot(surface_forward, variant.velocity);
+			car_vel := linalg.dot(surface_forward, car.velocity);
+
+			if entity_vel + VEL_DIFF >= car_vel {
+				continue;
+			}
+		case ^Car_Entity:
+			entity_vel := linalg.dot(surface_forward, variant.velocity);
+			car_vel := linalg.dot(surface_forward, car.velocity);
+
+			if entity_vel + VEL_DIFF >= car_vel {
+				continue;
+			}
+		}
 
 		for &hull in nearby_entity.collision_hulls {
 			MAX_DIST :: 20;
