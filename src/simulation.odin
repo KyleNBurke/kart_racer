@@ -247,6 +247,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 
 		if rigid_body.exploding_health > 0 {
 			old_position := rigid_body.position;
+			old_orientation := rigid_body.orientation;
 			rigid_body.position += (rigid_body.velocity + rigid_body.bias_velocity) * dt;
 
 			rigid_body.orientation = math2.integrate_angular_velocity(rigid_body.angular_velocity + rigid_body.bias_angular_velocity, rigid_body.orientation, dt);
@@ -256,7 +257,18 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 		
 			update_entity_transform(rigid_body);
 
-			if linalg.length2(rigid_body.position - old_position) < 0.00005 {
+			// Compare the previous postion and orientation to increase the sleep duration
+			// We do this at the postion level, not the velocity level because for a resting object, velocity will
+			// change from frame to frame due to gravity and contact resolution. The position and orientation should
+			// be more stable.
+			pos_diff := linalg.length(rigid_body.position - old_position);
+
+			// https://math.stackexchange.com/a/90098/825984
+			ip : linalg.Quaternionf32 = linalg.inner_product(old_orientation, rigid_body.orientation);
+			ipn := linalg.quaternion_normalize(ip);
+			ori_diff := math.acos(2 * linalg.dot(ipn, ipn) - 1);
+
+			if pos_diff < 0.0001 && ori_diff < 0.0001 {
 				rigid_body.sleep_duration += dt;
 			} else {
 				rigid_body.sleep_duration = 0;

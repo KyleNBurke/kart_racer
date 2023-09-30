@@ -21,7 +21,7 @@ Ideas
 		- Exploding rigid body barrels - leave behind a cloud of shockiness
 	- Fire
 		- Non exploding rigid body cubes - touch it and your car lights on fire
-		- Exploding rigid body barrels full of oil - leaves behind an oil slick on fire 
+		- Exploding rigid body barrels full of oil - leaves behind an oil slick on fire
 			- This would be hard to do technically, perhaps we could settle for archored barrels which are not rigid body enabled
 	- Ice
 		- Non exploding rigid body cubes - touch it and your car turns into an ice block
@@ -100,7 +100,7 @@ Todo
 - [laptop] AI framerate?
 - [laptop] Reorganize the math2 + other util stuff into subfiles/packages or something?
 - Save last get call from get_geometry, then check it in make_geometry...()?
-	
+
 - Sequential impulse solver positional corrections
 	https://www.gamedev.net/forums/topic/714397-sequential-impulse-solver-bounce-without-restitution/5457082/
 	We should be doing the positional correction by changing the positions and orientations of the bodies instead of the bias velocities. Apparently this is a better way to do it. It will probably make our simulation more stable
@@ -115,6 +115,7 @@ For a cool particle explosion effect do this:
 	particle.position += particle.velocity * dt;
 
 Todo now
+- [DONE] Box floating away collision issue
 - Car vs car collisions
 - Make some AI spawn points on the track
 - car vs rigid body collisions - make them not suck

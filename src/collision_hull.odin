@@ -152,9 +152,9 @@ update_entity_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 				continue;
 			}
 
-			entity, entity_lookup := create_entity("hull helper", geometry_lookup, Inanimate_Entity);
-			entity.transform = hull.global_transform;
-			append(&hull_helpers.hull_helpers, entity_lookup);
+			helper_entity, helper_entity_lookup := create_entity("hull helper", geometry_lookup, Inanimate_Entity);
+			helper_entity.transform = hull.global_transform;
+			append(&hull_helpers.hull_helpers, helper_entity_lookup);
 		}
 	}
 }

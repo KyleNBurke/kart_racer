@@ -136,7 +136,7 @@ sleep_islands :: proc(islands: ^Islands, awake_rigid_body_lookups: ^[dynamic]Ent
 		island := &islands.islands[island_index];
 		asleep := true;
 
-		when ODIN_DEBUG do assert(len(island.lookups) > 0);
+		assert(len(island.lookups) > 0);
 
 		for lookup in island.lookups {
 			rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
