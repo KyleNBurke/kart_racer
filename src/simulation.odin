@@ -23,6 +23,8 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 		car.tentative_transform = linalg.matrix4_from_trs(car.tentative_position, tentative_orientation, linalg.Vector3f32 {1, 1, 1});
 		
 		entity_grid_move_tentatively(&scene.entity_grid, lookup, car, tentative_orientation, car.tentative_transform);
+
+		car.checked_collision = false;
 	}
 
 	clear_islands(&scene.islands);
@@ -103,7 +105,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 					continue;
 
 				case ^Car_Entity:
-					continue; // Do want to handle this in the future.
+					if e.checked_collision do continue;
 				
 				case ^Oil_Slick_Entity:
 					unreachable();
@@ -125,7 +127,10 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 					// Maybe we could add a normal constraint if there are no spring constraints so it still rolls over when landing upside down.
 					add_car_fixed_constraint_set(&scene.constraints, car, &manifold, dt);
 
-				case ^Car_Entity, ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
+				case ^Car_Entity:
+					add_car_car_constraint_set(&scene.constraints, car, e, &manifold, dt);
+					
+				case ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
 					unreachable();
 				}
 			}
