@@ -410,32 +410,26 @@ def export_ai_paths(depsgraph: Depsgraph, graph, file):
 		curve: Curve = w_object.object.data
 		spline: Spline = curve.splines[0]
 
-		util.write_u32(file, (len(spline.bezier_points) - 1) * 3 + 1)
-		print((len(spline.bezier_points) - 1) * 3 + 1, "points")
+		count = len(spline.bezier_points) * 3
+		util.write_u32(file, count)
+		print(count, "points")
 
 		global_matrix = w_object.object.matrix_world
 
-		for i in range(len(spline.bezier_points) - 1):
+		for i in range(len(spline.bezier_points)):
 			handle_0 = spline.bezier_points[i]
-			handle_1 = spline.bezier_points[i + 1]
+			handle_1 = spline.bezier_points[(i + 1) % len(spline.bezier_points)]
 
 			pos_0 = util.blender_position_to_game_position(global_matrix @ handle_0.co)
 			pos_1 = util.blender_position_to_game_position(global_matrix @ handle_0.handle_right)
 			pos_2 = util.blender_position_to_game_position(global_matrix @ handle_1.handle_left)
-			
+
 			util.write_vec3(file, pos_0)
 			util.write_vec3(file, pos_1)
 			util.write_vec3(file, pos_2)
 
-			print(handle_0.co, handle_0.handle_right, handle_1.handle_left)
-		
-		# If the loop is closed, I don't think we need to write this end point since it's the beginning of the first curve
-		handle = spline.bezier_points[-1]
-		pos = util.blender_position_to_game_position(global_matrix @ handle.co)
-		util.write_vec3(file, pos)
+			print(handle_0.co, handle_0.handle_right, handle_1.handle_left) 
 
-		print(handle.co)
-	
 	util.write_cursor_check(file)
 
 	print()

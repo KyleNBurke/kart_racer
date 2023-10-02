@@ -428,12 +428,14 @@ load_scene :: proc(scene: ^Scene) {
 			append(&points, p);
 		}
 
-		curves := (point_count - 1) / 3;
+		// Should probably change this data structure to just an array of points because
+		// we're duplicating the start and end points within each segment
+		curves := point_count / 3;
 		for curve_index in 0..<curves {
 			p0 := points[curve_index * 3]
 			p1 := points[curve_index * 3 + 1]
 			p2 := points[curve_index * 3 + 2]
-			p3 := points[curve_index * 3 + 3]
+			p3 := points[(curve_index * 3 + 3) % point_count]
 
 			curve := Curve {
 				p0, p1, p2, p3,

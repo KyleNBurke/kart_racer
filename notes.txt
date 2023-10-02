@@ -116,6 +116,7 @@ For a cool particle explosion effect do this:
 
 Todo now
 - [DONE] Box floating away collision issue
-- Car vs car collisions
-- Make some AI spawn points on the track
-- car vs rigid body collisions - make them not suck
+- [DONE] Car vs car collisions
+- [DONE] Make some AI spawn points on the track
+- [DONE] Export AI path as closed loop
+- Continue on path when there is cross over

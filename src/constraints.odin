@@ -711,6 +711,7 @@ cleanup_constraints :: proc(using constraints: ^Constraints) {
 	delete(spring_constraint_sets);
 	delete(car_fixed_constraint_sets);
 	delete(car_movable_constraint_sets);
+	delete(car_car_constraint_sets);
 	delete(fixed_constraint_sets);
 	delete(movable_constraint_sets);
 	delete(cylinders_rolling);
