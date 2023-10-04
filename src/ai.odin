@@ -24,11 +24,13 @@ AI_Player :: struct {
 	origin,
 	closest_point,
 	extended_point,
+	tangent_1, tangent_2,
 	max_l, max_r: linalg.Vector3f32,
 	bounds: math2.Box3f32,
 	start_zone_angle, end_zone_angle: Maybe(f32),
 	surface_forward: linalg.Vector3f32,
 	target_angle: f32,
+	breaking: bool,
 }
 
 Curve :: struct {
@@ -117,8 +119,7 @@ update_player :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entity_Gr
 	player.origin = origin;
 
 	// Find extended point
-	closest_point, extended_point := find_target_point_on_path_2(origin, path);
-	player.closest_point = closest_point;
+	extended_point, sharpness := find_target_point_on_path_2(origin, path, player);
 	player.extended_point = extended_point;
 
 	MAX_ANGLE :: 0.8;
@@ -336,16 +337,15 @@ update_player :: proc(player: ^AI_Player, path: []Curve, entity_grid: ^Entity_Gr
 
 		target_speed: f32;
 
-		// if mag < 1 {
-		// 	target_speed = CAR_TOP_SPEED;
-		// } else {
-			target_speed = (1 - mag / MAX_ANGLE) * (CAR_TOP_SPEED - 5) + 5;
-		// }
+		if sharpness < 0.5 || mag > 0.6 {
+			target_speed = 15;
+			player.breaking = true;
+		} else {
+			target_speed = CAR_TOP_SPEED;
+			player.breaking = false;
+		}
 
 		curr_speed := linalg.dot(surface_forward, car.velocity);
-
-		// fmt.println(mag, target_speed);
-
 		car.input_accel_multiplier = math.sign(target_speed - curr_speed);
 	}
 }
@@ -363,6 +363,14 @@ ai_show_helpers :: proc(ai: ^AI) {
 		append(&player.helpers, geo_lookup);
 
 		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		geometry_make_line_helper_origin_vector(geo, player.closest_point, player.tangent_1 * 5, YELLOW);
+		append(&player.helpers, geo_lookup);
+
+		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		geometry_make_line_helper_origin_vector(geo, player.closest_point, player.tangent_2 * 5, YELLOW);
+		append(&player.helpers, geo_lookup);
+
+		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
 		geometry_make_line_helper_start_end(geo, player.origin, player.extended_point, BLUE);
 		append(&player.helpers, geo_lookup);
 
@@ -374,9 +382,9 @@ ai_show_helpers :: proc(ai: ^AI) {
 		geometry_make_line_helper_start_end(geo, player.origin, player.max_r);
 		append(&player.helpers, geo_lookup);
 
-		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		geometry_make_box_helper(geo, player.bounds.min, player.bounds.max, PURPLE);
-		append(&player.helpers, geo_lookup);
+		// geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+		// geometry_make_box_helper(geo, player.bounds.min, player.bounds.max, PURPLE);
+		// append(&player.helpers, geo_lookup);
 
 		car := get_entity(player.lookup).variant.(^Car_Entity);
 
@@ -400,6 +408,10 @@ ai_show_helpers :: proc(ai: ^AI) {
 		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
 		geometry_make_line_helper_origin_vector(geo, player.origin, target_dir * 10, GREEN);
 		append(&player.helpers, geo_lookup);
+
+		car_geo := get_geometry(car.geometry_lookup.?);
+		color := player.breaking ? RED : GREY;
+		geometry_set_color(car_geo, color);
 	}
 }
 
@@ -496,8 +508,9 @@ find_target_point_on_path :: proc(origin: linalg.Vector3f32, path: []Curve) -> (
 }
 
 @(private = "file")
-find_target_point_on_path_2 :: proc(origin: linalg.Vector3f32, path: []Curve) -> (closest_point, target_point: linalg.Vector3f32) {
+find_target_point_on_path_2 :: proc(origin: linalg.Vector3f32, path: []Curve, player: ^AI_Player) -> (linalg.Vector3f32, f32) {
 	// Find the cloest point on the entine path
+	closest_point: linalg.Vector3f32;
 	closest_t: f32;
 	closest_dist_sq := max(f32);
 	closest_curve_index: int;
@@ -519,6 +532,9 @@ find_target_point_on_path_2 :: proc(origin: linalg.Vector3f32, path: []Curve) ->
 			}
 		}
 	}
+
+	player.closest_point = closest_point; // For debugging
+	target_point: linalg.Vector3f32;
 	
 	{ // Move the closest point forwards along the path
 		curve := &path[closest_curve_index];
@@ -539,7 +555,67 @@ find_target_point_on_path_2 :: proc(origin: linalg.Vector3f32, path: []Curve) ->
 		}
 	}
 
-	return;
+	sharpness := measure_curve_sharpness(path, closest_curve_index, closest_t, player);
+
+	return target_point, sharpness;
+}
+
+measure_curve_sharpness :: proc(path: []Curve, closest_curve_index: int, closest_t: f32, player: ^AI_Player) -> f32 {
+	calculate_tangent :: proc(path: []Curve, curve_index: int, t: f32) -> linalg.Vector3f32 {
+		INC :: 0.01;
+		p1, p2: linalg.Vector3f32;
+		t1 := t - INC;
+		t2 := t + INC;
+
+		if t1 < 0 {
+			t1 = 1 - (INC - t);
+			ci := (curve_index - 1) %% len(path);
+			p1 = find_point_on_curve(&path[ci], t1);
+		} else {
+			p1 = find_point_on_curve(&path[curve_index], t1);
+		}
+
+		if t2 > 1 {
+			t2 = t2 - 1;
+			ci := (curve_index + 1) % len(path);
+			p2 = find_point_on_curve(&path[ci], t2);
+		} else {
+			p2 = find_point_on_curve(&path[curve_index], t2);
+		}
+
+		return linalg.normalize(p2 - p1);
+	}
+
+	tan_1 := calculate_tangent(path, closest_curve_index, closest_t);
+
+	// Move the closest point forwards along the path
+	tan_2: linalg.Vector3f32;
+	curve := &path[closest_curve_index];
+	t2 := closest_t + 20 / curve.length;
+
+	if t2 > 1 {
+		remaining_t := t2 - 1;
+		remaining_len := remaining_t * curve.length;
+
+		ci := (closest_curve_index + 1) % len(path);
+		next_curve := &path[ci];
+		next_t := remaining_len / next_curve.length;
+
+		if next_t > 1 {
+			// Moving one segment wasn't enough, if this happens we can account for it
+			unimplemented();
+		}
+
+		tan_2 = calculate_tangent(path, ci, next_t);
+	} else {
+		tan_2 = calculate_tangent(path, closest_curve_index, t2);
+	}
+
+	// Debugging
+	player.tangent_1 = tan_1;
+	player.tangent_2 = tan_2;
+
+	return linalg.dot(tan_1, tan_2);
 }
 
 @(private = "file")

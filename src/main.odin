@@ -4,11 +4,8 @@ import "core:time";
 import "core:fmt";
 import "core:math/linalg";
 import "core:os";
+import "core:mem";
 import "vendor:glfw";
-
-when ODIN_DEBUG {
-	import "core:mem";
-}
 
 MAX_FRAME_DURATION := time.Duration(33333333); // 1 / 30 seconds
 MAX_UPDATES := 5;

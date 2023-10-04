@@ -142,14 +142,14 @@ UiResources :: struct {
 }
 
 @(private)
-Frame_Data :: struct #align 4 {
+Frame_Data :: struct #align(4) {
 	projection_mat,
 	view_mat,
 	camera_mat: linalg.Matrix4f32,
 }
 
 @(private)
-Particle :: struct #align 4 {
+Particle :: struct #align(4) {
 	position: linalg.Vector3f32,
 	size: f32,
 	color: [3]f32,

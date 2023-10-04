@@ -115,8 +115,8 @@ For a cool particle explosion effect do this:
 	particle.position += particle.velocity * dt;
 
 Todo now
-- [DONE] Box floating away collision issue
-- [DONE] Car vs car collisions
-- [DONE] Make some AI spawn points on the track
-- [DONE] Export AI path as closed loop
 - Continue on path when there is cross over
+- Allow for full speed around corners
+- Space cars out horizontally when going around track
+	- Min and max lines?
+	- Desired distance from ideal path?

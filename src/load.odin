@@ -139,7 +139,7 @@ load_scene :: proc(scene: ^Scene) {
 		remove_scene_associated_entities();
 	}
 
-	REQUIRED_VERSION :: 5;
+	REQUIRED_VERSION :: 6;
 	
 	bytes, success := os.read_entire_file_from_filename(scene.file_path, context.temp_allocator);
 	assert(success, fmt.tprintf("Failed to load level file %s", scene.file_path));

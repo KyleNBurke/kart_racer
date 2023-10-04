@@ -2,7 +2,7 @@ from bpy.types import Context, Depsgraph, Object, Mesh, Curve, Spline, BezierSpl
 from . import util
 from .util import WObject
 
-VERSION = 5
+VERSION = 6
 
 def export(operator, context: Context):
 	depsgraph: Depsgraph = context.evaluated_depsgraph_get()
