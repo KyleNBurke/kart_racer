@@ -20,12 +20,8 @@ if "bpy" in locals():
 	if "car" in locals():
 		importlib.reload(car)
 
-import bpy
+from . import bpy, util, level, runtime_assets, car
 from bpy_extras.io_utils import ExportHelper
-from . import util
-from . import level
-from . import runtime_assets
-from . import car
 
 class KartGuysLevelExporter(bpy.types.Operator, ExportHelper):
 	bl_idname = "level.kgl"
@@ -118,8 +114,10 @@ def register():
 		('bumper', "Bumpler", "", 8),
 		('boost_jet', "Boost jet", "", 9),
 		('ground_collision_mesh_and_inanimate', "Ground collision mesh and inanimate", "", 10),
-		('ideal_path', "Ideal path", "", 11),
+		('removed', "REMOVED", "", 11),
 		('ai_spawn_point', "AI spawn point", "", 12),
+		('ai_path_left', "AI path left", "", 13),
+		('ai_path_right', "AI path right", "", 14),
 	])
 	bpy.types.Object.kg_hull_type = bpy.props.EnumProperty(items=[
 		('box', "Box", "", 0),

@@ -45,6 +45,19 @@ geometry_make_triangle_mesh :: proc(geo: ^Geometry, indices: []u16, attributes: 
 	geo.pipeline = pipeline;
 }
 
+geometry_make_line_mesh :: proc(geo: ^Geometry, indices: []u16, attributes: []f32) {
+	assert(len(indices) % 2 == 0);
+	assert(len(attributes) % 6 == 0);
+	
+	clear(&geo.indices);
+	clear(&geo.attributes);
+
+	append(&geo.indices, ..indices);
+	append(&geo.attributes, ..attributes);
+
+	geo.pipeline = .Line;
+}
+
 geometry_make_box :: proc(geo: ^Geometry, color: [3]f32 = GREY, pipeline: Pipeline) {
 	assert(pipeline != .Line);
 

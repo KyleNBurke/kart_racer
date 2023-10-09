@@ -104,10 +104,23 @@ Boost jets count: u32
 	position check         u32
 	...
 
-AI path
-	points count u32
-	point        vec3
+AI path left
+	curves count: u23
+	p0:           vec3
+	p1:           vec3
+	p2:           vec3
+	p3:           vec3
 	...
+
+AI path right
+	curves count: u23
+	p0:           vec3
+	p1:           vec3
+	p2:           vec3
+	p3:           vec3
+	...
+
+position check: u32
 
 AI spawn points count: u32
 	name:        string

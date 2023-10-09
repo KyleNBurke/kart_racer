@@ -112,7 +112,7 @@ init :: proc(game: ^Game) {
 	init_hull_helpers(&game.scene.hull_helpers);
 
 	if config.ai_helpers {
-		ai_show_path_helper(&game.scene.ai);
+		ai_show_path_helpers(&game.scene.ai);
 	}
 
 	free_all(context.temp_allocator);

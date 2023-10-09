@@ -2,6 +2,7 @@ package main
 
 import "core:os";
 import "core:math/linalg";
+import "core:math/rand";
 import "core:fmt";
 import "core:strings";
 import "core:slice";
@@ -139,7 +140,7 @@ load_scene :: proc(scene: ^Scene) {
 		remove_scene_associated_entities();
 	}
 
-	REQUIRED_VERSION :: 6;
+	REQUIRED_VERSION :: 7;
 	
 	bytes, success := os.read_entire_file_from_filename(scene.file_path, context.temp_allocator);
 	assert(success, fmt.tprintf("Failed to load level file %s", scene.file_path));
@@ -419,40 +420,32 @@ load_scene :: proc(scene: ^Scene) {
 	}
 
 	{ // AI paths
-		point_count := read_u32(&bytes, &pos);
+		load_path :: proc(bytes: ^[]byte, pos: ^int, path: ^[dynamic]Curve) {
+			curves_count_left := read_u32(bytes, pos);
+			
+			for _ in 0..<curves_count_left {
+				p0 := read_vec3(bytes, pos);
+				p1 := read_vec3(bytes, pos);
+				p2 := read_vec3(bytes, pos);
+				p3 := read_vec3(bytes, pos);
 
-		points := make([dynamic]linalg.Vector3f32, 0, point_count, context.temp_allocator);
-		
-		for _ in 0..<point_count {
-			p := read_vec3(&bytes, &pos);
-			append(&points, p);
+				curve := Curve {
+					p0, p1, p2, p3,
+					0,
+				};
+
+				append(path, curve);
+			}
+			
+			// #todo: Do this in exporter
+			calculate_curve_lengths(path[:])
 		}
 
-		// Should probably change this data structure to just an array of points because
-		// we're duplicating the start and end points within each segment
-		curves := point_count / 3;
-		for curve_index in 0..<curves {
-			p0 := points[curve_index * 3]
-			p1 := points[curve_index * 3 + 1]
-			p2 := points[curve_index * 3 + 2]
-			p3 := points[(curve_index * 3 + 3) % point_count]
-
-			curve := Curve {
-				p0, p1, p2, p3,
-				0, // Could be calculated during the level export
-			};
-
-			append(&scene.ai.path, curve);
-		}
-
-		calculate_curve_lengths(scene.ai.path[:])
-
-		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
+		load_path(&bytes, &pos, &scene.ai.left_path);
+		load_path(&bytes, &pos, &scene.ai.right_path);
 	}
 
-	// #todo: Update this to work with hot reloading.
-	// Need to pull this setup logic into a separate proc and when hot reloading, only
-	// reset the AI player positions?
+	assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 
 	// Save a spot for the human player
 	append(&scene.all_players, Entity_Lookup {});
@@ -484,6 +477,7 @@ load_scene :: proc(scene: ^Scene) {
 
 			ai_player: AI_Player;
 			ai_player.lookup = entity_lookup;
+			ai_player.center_multiplier = rand.float32();
 			append(&scene.ai.players, ai_player);
 		}
 	}

@@ -1,8 +1,8 @@
-from bpy.types import Context, Depsgraph, Object, Mesh, Curve, Spline, BezierSplinePoint
+from bpy.types import Context, Depsgraph, Object, Mesh, Curve, Spline
 from . import util
 from .util import WObject
 
-VERSION = 6
+VERSION = 7
 
 def export(operator, context: Context):
 	depsgraph: Depsgraph = context.evaluated_depsgraph_get()
@@ -22,6 +22,7 @@ def export(operator, context: Context):
 	export_bumpers(depsgraph, graph, file, mesh_name_to_index_max)
 	export_boost_jets(depsgraph, graph, file, mesh_name_to_index_max)
 	export_ai_paths(depsgraph, graph, file)
+	util.write_cursor_check(file)
 	export_ai_spawn_points(depsgraph, graph, file)
 
 	file.close()
@@ -395,43 +396,57 @@ def write_reload_trigger_file(filepath):
 	print("Wrote reload trigger file ", trigger_filepath)
 
 def export_ai_paths(depsgraph: Depsgraph, graph, file):
-	# #todo: Handle/error on unlinked segments
 	print("--- AI paths ---")
 
-	def compare(w_object: WObject):
-		return w_object.object.kg_type == 'ideal_path'
+	def compare_left(w_object: WObject):
+		return w_object.object.kg_type == 'ai_path_left'
 
-	w_object = util.search_graph_one(graph, compare)
+	def compare_right(w_object: WObject):
+		return w_object.object.kg_type == 'ai_path_right'
 
-	if w_object == None:
-		print("No path found")
-	else:
-		print("Found path", w_object.unique_name)
+	w_object_left = util.search_graph_one(graph, compare_left)
+	w_object_right = util.search_graph_one(graph, compare_right)
+
+	def export_path(w_object: WObject):
+		if w_object == None:
+			# Write 0 for the curves count
+			util.write_u32(file, 0)
+			return
+		
 		curve: Curve = w_object.object.data
 		spline: Spline = curve.splines[0]
 
-		count = len(spline.bezier_points) * 3
-		util.write_u32(file, count)
-		print(count, "points")
+		curves_count = len(spline.bezier_points)
+		util.write_u32(file, curves_count)
 
 		global_matrix = w_object.object.matrix_world
 
-		for i in range(len(spline.bezier_points)):
+		for i in range(curves_count):
 			handle_0 = spline.bezier_points[i]
-			handle_1 = spline.bezier_points[(i + 1) % len(spline.bezier_points)]
+			handle_1 = spline.bezier_points[(i + 1) % curves_count]
+			
+			p0 = util.blender_position_to_game_position(global_matrix @ handle_0.co)
+			p1 = util.blender_position_to_game_position(global_matrix @ handle_0.handle_right)
+			p2 = util.blender_position_to_game_position(global_matrix @ handle_1.handle_left)
+			p3 = util.blender_position_to_game_position(global_matrix @ handle_1.co)
 
-			pos_0 = util.blender_position_to_game_position(global_matrix @ handle_0.co)
-			pos_1 = util.blender_position_to_game_position(global_matrix @ handle_0.handle_right)
-			pos_2 = util.blender_position_to_game_position(global_matrix @ handle_1.handle_left)
+			util.write_vec3(file, p0)
+			util.write_vec3(file, p1)
+			util.write_vec3(file, p2)
+			util.write_vec3(file, p3)
 
-			util.write_vec3(file, pos_0)
-			util.write_vec3(file, pos_1)
-			util.write_vec3(file, pos_2)
-
-			print(handle_0.co, handle_0.handle_right, handle_1.handle_left) 
-
-	util.write_cursor_check(file)
-
+	if w_object_left == None:
+		print("AI path left not found")
+	else:
+		print("Found AI path left:", w_object_left.unique_name)
+	
+	if w_object_right == None:
+		print("AI path right not found")
+	else:
+		print("Found AI path right:", w_object_right.unique_name)
+	
+	export_path(w_object_left)
+	export_path(w_object_right)
 	print()
 
 def export_ai_spawn_points(depsgraph: Depsgraph, graph, file):
