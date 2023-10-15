@@ -13,6 +13,8 @@ SPRING_OMEGA: f32 : math.TAU * SPRING_FREQUENCY;
 
 SPRING_EQUILIBRIUM_LENGTH: f32 : 0.4;
 
+CAR_V_CAR_BOUNCE :: 30;
+
 // #cleanup It might be a better design if we just had one constraint type that contained all the variables. Then when solving,
 // only the relevent variables are used.
 
@@ -82,6 +84,7 @@ Car_Movable_Constraint :: struct {
 	bias,
 	total_impulse_n,
 	total_bias_impulse_n: f32,
+	restitution: f32,
 }
 
 Car_Car_Constraint_Set :: struct {
@@ -244,6 +247,10 @@ add_car_movable_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Enti
 
 		rb := contact.position_b - rigid_body_b.tentative_position;
 		rbxn := linalg.cross(rb, n);
+		
+		contact_velocity_a := car.velocity + linalg.cross(car.angular_velocity, ra);
+		contact_velocity_b := rigid_body_b.velocity + linalg.cross(rigid_body_b.angular_velocity, rb);
+		restitution := 1 * linalg.dot(contact_velocity_a - contact_velocity_b, n);
 
 		effective_mass_inv_n := inverse_mass_a + linalg.dot(raxn * car.tentative_inv_global_inertia_tensor, raxn) + inverse_mass_b + linalg.dot(rbxn * rigid_body_b.tentative_inv_global_inertia_tensor, rbxn);
 
@@ -256,6 +263,7 @@ add_car_movable_constraint_set :: proc(constraints: ^Constraints, car: ^Car_Enti
 			rbxn = rbxn,
 			effective_mass_inv_n = effective_mass_inv_n,
 			bias = bias,
+			restitution = restitution,
 		};
 
 		small_array.append(&constraint_set.constraints, constraint);
@@ -486,7 +494,7 @@ solve_constraints :: proc(using constraints: ^Constraints, dt: f32) {
 				contact_velocity_b := rigid_body_b.velocity + linalg.cross(rigid_body_b.angular_velocity, constraint.rb);
 
 				{ // Normal velocity correction
-					velocity_error_n := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.n);
+					velocity_error_n := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.n) + constraint.restitution;
 					lambda_n := -velocity_error_n / constraint.effective_mass_inv_n;
 
 					prev_total_impulse_n := constraint.total_impulse_n;
@@ -529,7 +537,7 @@ solve_constraints :: proc(using constraints: ^Constraints, dt: f32) {
 				contact_velocity_b := car_b.velocity + linalg.cross(car_b.angular_velocity, constraint.rb);
 
 				{ // Normal velocity correction
-					velocity_error_n := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.n);
+					velocity_error_n := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.n) - CAR_V_CAR_BOUNCE;
 					lambda_n := -velocity_error_n / constraint.effective_mass_inv_n;
 
 					prev_total_impulse_n := constraint.total_impulse_n;

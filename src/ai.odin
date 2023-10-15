@@ -38,7 +38,6 @@ AI_Player :: struct {
 	start_zone_angle, end_zone_angle: Maybe(f32),
 	surface_forward: linalg.Vector3f32,
 	target_angle: f32,
-	breaking: bool,
 }
 
 Curve :: struct {
@@ -345,10 +344,8 @@ update_player :: proc(player: ^AI_Player, left_path, right_path: []Curve, entity
 
 		if sharpness < 0.65 || mag > 0.6 {
 			target_speed = 13;
-			player.breaking = true;
 		} else {
 			target_speed = CAR_TOP_SPEED;
-			player.breaking = false;
 		}
 
 		curr_speed := linalg.dot(surface_forward, car.velocity);
@@ -436,9 +433,12 @@ ai_show_helpers :: proc(ai: ^AI) {
 		geometry_make_line_helper_origin_vector(geo, player.origin, target_dir * 10, GREEN);
 		append(&player.helpers, geo_lookup);
 
-		car_geo := get_geometry(car.geometry_lookup.?);
-		color := player.breaking ? RED : GREY;
-		geometry_set_color(car_geo, color);
+		// #cleanup: This has nothing to do with AI
+		if car.sliding {
+			geo, geo_lookup = create_geometry("car_helper_sliding", .KeepRender);
+			geometry_make_line_helper_origin_vector(geo, player.origin, linalg.VECTOR3F32_Y_AXIS * 5, GREY);
+			append(&player.helpers, geo_lookup);
+		}
 	}
 }
 

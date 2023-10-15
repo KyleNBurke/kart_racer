@@ -168,7 +168,7 @@ init_rigid_body_entity :: proc(entity: ^Rigid_Body_Entity, mass: f32, dimensions
 	entity.exploding_health = 100;
 }
 
-CAR_MASS: f32 : 300;
+CAR_MASS: f32 : 500;
 CAR_K :: CAR_MASS / 12;
 CAR_WIDTH :: 2.0;
 CAR_HEIGHT :: 1.2;

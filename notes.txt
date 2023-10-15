@@ -116,7 +116,14 @@ For a cool particle explosion effect do this:
 
 Todo now
 - Continue on path when there is cross over
-- Allow for full speed around corners
-- Space cars out horizontally when going around track
-	- Min and max lines?
-	- Desired distance from ideal path?
+- Make car vs car collisions fun and meaningful
+
+Noticing car v crate collisions
+- Parting speed of rigid body is inconsistent
+	- Sometimes it goes pretty far (when it's not spinning a lot)
+	- Sometimes it doesn't go very far (when it's spinning a lot)
+- Jitter when pushing an object continously and when object against wall
+- I think in the spirit of us making a fun fucking track, let's call this good enough for the car vs crate collisions. Let's get car v car collisions feeling good now.
+
+Noticing car v car collisions
+- The bounce you and the other car recieve just feels inconsistent. The math is probably fine but I want collisions at high speeds to even result in a bounce back and that's not happening. I think we should find a way to have the bounce back happen at all speeds, maybe it does happen more when there is a large speed difference.

@@ -20,8 +20,9 @@ if "bpy" in locals():
 	if "car" in locals():
 		importlib.reload(car)
 
-from . import bpy, util, level, runtime_assets, car
+import bpy
 from bpy_extras.io_utils import ExportHelper
+from . import util, level, runtime_assets, car
 
 class KartGuysLevelExporter(bpy.types.Operator, ExportHelper):
 	bl_idname = "level.kgl"
