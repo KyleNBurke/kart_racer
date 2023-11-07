@@ -308,9 +308,11 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 
 			// Increase the lateral deceleration when the speed is high.
 			// This is for leaving the drift. Without it, the car takes a tad too long to leave the sliding state.
+			// To prevent the super large lateral sliding when at a high speed, we could compare against the lateral
+			// velocity, not the longitudinal.
 			if vel > 25 {
 				lat_fric_multiplier := clamp(vel / CAR_TOP_SPEED, 0, 1);
-				lat_fric += 10 * lat_fric_multiplier;
+				lat_fric += 18 * lat_fric_multiplier;
 			}
 
 			surface_lat := linalg.normalize(linalg.cross(car_forward, car.surface_normal));

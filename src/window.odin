@@ -12,7 +12,7 @@ Callback_State :: struct {
 }
 
 init_window :: proc(window: ^glfw.WindowHandle) {
-	assert(glfw.Init() == 1);
+	assert(glfw.Init() == glfw.TRUE);
 
 	glfw.WindowHint(glfw.CLIENT_API, glfw.NO_API);
 

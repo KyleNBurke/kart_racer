@@ -129,6 +129,8 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 
 				case ^Car_Entity:
 					add_car_car_constraint_set(&scene.constraints, car, e, &manifold, dt);
+					car.sliding = true;
+					e.sliding = true;
 					
 				case ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
 					unreachable();

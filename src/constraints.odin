@@ -13,7 +13,7 @@ SPRING_OMEGA: f32 : math.TAU * SPRING_FREQUENCY;
 
 SPRING_EQUILIBRIUM_LENGTH: f32 : 0.4;
 
-CAR_V_CAR_BOUNCE :: 30;
+CAR_V_CAR_BOUNCE :: 20;
 
 // #cleanup It might be a better design if we just had one constraint type that contained all the variables. Then when solving,
 // only the relevent variables are used.

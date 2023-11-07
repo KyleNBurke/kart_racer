@@ -436,7 +436,7 @@ ai_show_helpers :: proc(ai: ^AI) {
 		// #cleanup: This has nothing to do with AI
 		if car.sliding {
 			geo, geo_lookup = create_geometry("car_helper_sliding", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.origin, linalg.VECTOR3F32_Y_AXIS * 5, GREY);
+			geometry_make_line_helper_origin_vector(geo, player.origin, linalg.VECTOR3F32_Y_AXIS * 5, PURPLE);
 			append(&player.helpers, geo_lookup);
 		}
 	}
