@@ -110,8 +110,23 @@ Car_Entity :: struct {
 	fire_particles: [dynamic]Game_Particle,
 	surface_type: Surface_Type,
 
+	// AI
+	center_multiplier: f32, // [0, 1]
+
+	// Helpers
 	forward_helper_geo,
 	steer_angle_helper_geo: Geometry_Lookup,
+	helpers: [dynamic]Geometry_Lookup,
+	origin,
+	closest_left, closest_right,
+	extended_left, extended_right,
+	target_point,
+	tangent_1, tangent_2,
+	max_l, max_r: linalg.Vector3f32,
+	ray_bounds: math2.Box3f32,
+	start_zone_angle, end_zone_angle: Maybe(f32),
+	surface_forward: linalg.Vector3f32,
+	target_angle: f32,
 }
 
 Wheel :: struct {

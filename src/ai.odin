@@ -15,29 +15,6 @@ AI :: struct {
 	elapsed_time: f32,
 	left_path: [dynamic]Curve,
 	right_path: [dynamic]Curve,
-	players: [dynamic]AI_Player,
-}
-
-// #todo we should really try making an AI_Player entity variant
-// Then we can remove the players field from the AI struct and just pass
-// that struct around instead of left_path, right_path: []Curve BS.
-AI_Player :: struct {
-	lookup: Entity_Lookup,
-	center_multiplier: f32, // [0, 1]
-	
-	helpers: [dynamic]Geometry_Lookup,
-	origin,
-
-	closest_left, closest_right,
-	extended_left,  extended_right,
-	target_point,
-
-	tangent_1, tangent_2,
-	max_l, max_r: linalg.Vector3f32,
-	bounds: math2.Box3f32,
-	start_zone_angle, end_zone_angle: Maybe(f32),
-	surface_forward: linalg.Vector3f32,
-	target_angle: f32,
 }
 
 Curve :: struct {
@@ -93,12 +70,6 @@ ai_debug_cleanup :: proc(ai: ^AI) {
 	
 	delete(ai.left_path);
 	delete(ai.right_path);
-
-	for &player in ai.players {
-		delete(player.helpers);
-	}
-
-	delete(ai.players);
 }
 
 ai_update_players :: proc(scene: rawptr) {
@@ -108,24 +79,24 @@ ai_update_players :: proc(scene: rawptr) {
 	for {
 		sync.sema_wait(&ai.semaphore);
 		
-		for &player in ai.players {
-			update_player(&player, ai.left_path[:], ai.right_path[:], &scene.entity_grid);
+		for lookup in scene.all_players[1:] {
+			update_player(lookup, ai.left_path[:], ai.right_path[:], &scene.entity_grid);
 		}
 	}
 }
 
 @(private = "file")
-update_player :: proc(player: ^AI_Player, left_path, right_path: []Curve, entity_grid: ^Entity_Grid) {
-	car := get_entity(player.lookup).variant.(^Car_Entity);
+update_player :: proc(player_lookup: Entity_Lookup, left_path, right_path: []Curve, entity_grid: ^Entity_Grid) {
+	car := get_entity(player_lookup).variant.(^Car_Entity);
 
 	car_left := math2.matrix4_left(car.transform);
 	surface_forward := linalg.normalize(linalg.cross(car_left, car.surface_normal)); // #todo: Do once
 	origin := car.position + surface_forward * 0.8;
-	player.surface_forward = surface_forward;
-	player.origin = origin;
+	car.surface_forward = surface_forward;
+	car.origin = origin;
 
 	// Find extended point
-	target_point, sharpness := find_target_point_on_path(origin, left_path, right_path, player);
+	target_point, sharpness := find_target_point_on_path(origin, left_path, right_path, car);
 
 	MAX_ANGLE :: 0.8;
 	
@@ -139,15 +110,15 @@ update_player :: proc(player: ^AI_Player, left_path, right_path: []Curve, entity
 		max_r_dir := math2.vector3_rotate(surface_forward, car.surface_normal, -MAX_ANGLE);
 		max_l := origin + max_l_dir * RAY_LEN;
 		max_r := origin + max_r_dir * RAY_LEN;
-		player.max_l = max_l;
-		player.max_r = max_r;
+		car.max_l = max_l;
+		car.max_r = max_r;
 
 		bounds := math2.Box3f32 {
 			math2.vector3_min(origin, forward, max_l, max_r),
 			math2.vector3_max(origin, forward, max_l, max_r),
 		};
 
-		player.bounds = bounds;
+		car.ray_bounds = bounds;
 
 		// #todo: This query is returning back the human player car at the beggining, need to look into that.
 		nearby_lookups = entity_grid_find_nearby_entities(entity_grid, bounds);
@@ -157,7 +128,7 @@ update_player :: proc(player: ^AI_Player, left_path, right_path: []Curve, entity
 	zones := make([dynamic]Zone, context.temp_allocator);
 
 	for nearby_lookup in nearby_lookups {
-		if player.lookup == nearby_lookup do continue;
+		if player_lookup == nearby_lookup do continue;
 
 		nearby_entity := get_entity(nearby_lookup);
 
@@ -262,8 +233,8 @@ update_player :: proc(player: ^AI_Player, left_path, right_path: []Curve, entity
 		target_angle = target_angle_mag * target_angle_sign;
 	}
 
-	player.start_zone_angle = nil;
-	player.end_zone_angle = nil;
+	car.start_zone_angle = nil;
+	car.end_zone_angle = nil;
 
 	// Determine if the player is in a zone so we can move the target angle
 	if len(zones) > 0 {
@@ -323,12 +294,12 @@ update_player :: proc(player: ^AI_Player, left_path, right_path: []Curve, entity
 				}
 			}
 
-			player.start_zone_angle = start_angle;
-			player.end_zone_angle = end_angle;
+			car.start_zone_angle = start_angle;
+			car.end_zone_angle = end_angle;
 		}
 	}
 
-	player.target_angle = target_angle;
+	car.target_angle = target_angle;
 
 	{ // Drive torwards the target angle
 		MAX_SMOOTH_ANGLE :: 0.3;
@@ -353,97 +324,97 @@ update_player :: proc(player: ^AI_Player, left_path, right_path: []Curve, entity
 	}
 }
 
-ai_show_helpers :: proc(ai: ^AI) {
-	for &player in ai.players {
-		for lookup in player.helpers {
+ai_show_helpers :: proc(ai_players: []Entity_Lookup) {
+	for lookup in ai_players {
+		car := get_entity(lookup).variant.(^Car_Entity);
+
+		for lookup in car.helpers {
 			remove_geometry(lookup);
 		}
 	
-		clear(&player.helpers);
+		clear(&car.helpers);
 
 		geo: ^Geometry;
 		geo_lookup: Geometry_Lookup;
 
 		if false {
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_start_end(geo, player.origin, player.closest_left, BLUE);
-			append(&player.helpers, geo_lookup);
+			geometry_make_line_helper_start_end(geo, car.origin, car.closest_left, BLUE);
+			append(&car.helpers, geo_lookup);
 
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_start_end(geo, player.origin, player.closest_right, BLUE);
-			append(&player.helpers, geo_lookup);
+			geometry_make_line_helper_start_end(geo, car.origin, car.closest_right, BLUE);
+			append(&car.helpers, geo_lookup);
 		}
 
 		if false {
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_start_end(geo, player.origin, player.extended_left, BLUE);
-			append(&player.helpers, geo_lookup);
+			geometry_make_line_helper_start_end(geo, car.origin, car.extended_left, BLUE);
+			append(&car.helpers, geo_lookup);
 	
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_start_end(geo, player.origin, player.extended_right, BLUE);
-			append(&player.helpers, geo_lookup);
+			geometry_make_line_helper_start_end(geo, car.origin, car.extended_right, BLUE);
+			append(&car.helpers, geo_lookup);
 		}
 
 		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		geometry_make_line_helper_start_end(geo, player.origin, player.target_point, BLUE);
-		append(&player.helpers, geo_lookup);
+		geometry_make_line_helper_start_end(geo, car.origin, car.target_point, BLUE);
+		append(&car.helpers, geo_lookup);
 
 		if true {
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.target_point, player.tangent_1 * 5, YELLOW);
-			append(&player.helpers, geo_lookup);
+			geometry_make_line_helper_origin_vector(geo, car.target_point, car.tangent_1 * 5, YELLOW);
+			append(&car.helpers, geo_lookup);
 
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.target_point, player.tangent_2 * 5, YELLOW);
-			append(&player.helpers, geo_lookup);
+			geometry_make_line_helper_origin_vector(geo, car.target_point, car.tangent_2 * 5, YELLOW);
+			append(&car.helpers, geo_lookup);
 		}
 
 		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		geometry_make_line_helper_start_end(geo, player.origin, player.max_l);
-		append(&player.helpers, geo_lookup);
+		geometry_make_line_helper_start_end(geo, car.origin, car.max_l);
+		append(&car.helpers, geo_lookup);
 
 		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		geometry_make_line_helper_start_end(geo, player.origin, player.max_r);
-		append(&player.helpers, geo_lookup);
+		geometry_make_line_helper_start_end(geo, car.origin, car.max_r);
+		append(&car.helpers, geo_lookup);
 
 		// geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
 		// geometry_make_box_helper(geo, player.bounds.min, player.bounds.max, PURPLE);
 		// append(&player.helpers, geo_lookup);
 
-		car := get_entity(player.lookup).variant.(^Car_Entity);
-
-		if angle, ok := player.start_zone_angle.?; ok {
-			start_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, angle);
+		if angle, ok := car.start_zone_angle.?; ok {
+			start_zone_dir := math2.vector3_rotate(car.surface_forward, car.surface_normal, angle);
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.origin, start_zone_dir * 20, RED);
-			append(&player.helpers, geo_lookup);
+			geometry_make_line_helper_origin_vector(geo, car.origin, start_zone_dir * 20, RED);
+			append(&car.helpers, geo_lookup);
 		}
 
-		if angle, ok := player.end_zone_angle.?; ok {
-			end_zone_dir := math2.vector3_rotate(player.surface_forward, car.surface_normal, angle);
+		if angle, ok := car.end_zone_angle.?; ok {
+			end_zone_dir := math2.vector3_rotate(car.surface_forward, car.surface_normal, angle);
 			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.origin, end_zone_dir * 20, RED);
-			append(&player.helpers, geo_lookup);
+			geometry_make_line_helper_origin_vector(geo, car.origin, end_zone_dir * 20, RED);
+			append(&car.helpers, geo_lookup);
 		}
 
 		car_left := math2.matrix4_left(car.transform);
 		surface_forward := linalg.normalize(linalg.cross(car_left, car.surface_normal));
-		target_dir := math2.vector3_rotate(surface_forward, car.surface_normal, player.target_angle);
+		target_dir := math2.vector3_rotate(surface_forward, car.surface_normal, car.target_angle);
 		geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
-		geometry_make_line_helper_origin_vector(geo, player.origin, target_dir * 10, GREEN);
-		append(&player.helpers, geo_lookup);
+		geometry_make_line_helper_origin_vector(geo, car.origin, target_dir * 10, GREEN);
+		append(&car.helpers, geo_lookup);
 
 		// #cleanup: This has nothing to do with AI
 		if car.sliding {
 			geo, geo_lookup = create_geometry("car_helper_sliding", .KeepRender);
-			geometry_make_line_helper_origin_vector(geo, player.origin, linalg.VECTOR3F32_Y_AXIS * 5, PURPLE);
-			append(&player.helpers, geo_lookup);
+			geometry_make_line_helper_origin_vector(geo, car.origin, linalg.VECTOR3F32_Y_AXIS * 5, PURPLE);
+			append(&car.helpers, geo_lookup);
 		}
 	}
 }
 
 @(private = "file")
-find_target_point_on_path :: proc(origin: linalg.Vector3f32, left_path, right_path: []Curve, player: ^AI_Player) -> (linalg.Vector3f32, f32) {
+find_target_point_on_path :: proc(origin: linalg.Vector3f32, left_path, right_path: []Curve, player: ^Car_Entity) -> (linalg.Vector3f32, f32) {
 	closest_left_curve_index, closest_left_t, closest_left_point := find_closest_point_on_curve(origin, left_path);
 	closest_right_curve_index, closest_right_t, closest_right_point := find_closest_point_on_curve(origin, right_path);
 

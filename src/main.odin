@@ -229,7 +229,7 @@ update :: proc(game: ^Game, dt: f32) {
 	}
 
 	if config.ai_helpers {
-		ai_show_helpers(&game.scene.ai);
+		ai_show_helpers(game.scene.all_players[1:]);
 	}
 
 	free_all(context.temp_allocator);

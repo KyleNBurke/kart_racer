@@ -473,12 +473,8 @@ load_scene :: proc(scene: ^Scene) {
 			update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
 			entity_grid_insert(&scene.entity_grid, entity_lookup, entity);
 
+			entity.center_multiplier = rand.float32();
 			append(&scene.all_players, entity_lookup);
-
-			ai_player: AI_Player;
-			ai_player.lookup = entity_lookup;
-			ai_player.center_multiplier = rand.float32();
-			append(&scene.ai.players, ai_player);
 		}
 	}
 
