@@ -89,6 +89,10 @@ ai_update_players :: proc(scene: rawptr) {
 update_player :: proc(player_lookup: Entity_Lookup, left_path, right_path: []Curve, entity_grid: ^Entity_Grid) {
 	car := get_entity(player_lookup).variant.(^Car_Entity);
 
+	if car.surface_normal == 0 {
+		return;
+	}
+
 	car_left := math2.matrix4_left(car.transform);
 	surface_forward := linalg.normalize(linalg.cross(car_left, car.surface_normal)); // #todo: Do once
 	origin := car.position + surface_forward * 0.8;
@@ -415,8 +419,11 @@ ai_show_helpers :: proc(ai_players: []Entity_Lookup) {
 
 @(private = "file")
 find_target_point_on_path :: proc(origin: linalg.Vector3f32, left_path, right_path: []Curve, player: ^Car_Entity) -> (linalg.Vector3f32, f32) {
-	closest_left_curve_index, closest_left_t, closest_left_point := find_closest_point_on_curve(origin, left_path);
-	closest_right_curve_index, closest_right_t, closest_right_point := find_closest_point_on_curve(origin, right_path);
+	closest_left_curve_index, closest_left_t, closest_left_point := find_closest_point_on_curve(origin, left_path, player.left_segment);
+	closest_right_curve_index, closest_right_t, closest_right_point := find_closest_point_on_curve(origin, right_path, player.right_segment);
+
+	player.left_segment = closest_left_curve_index;
+	player.right_segment = closest_right_curve_index;
 
 	extended_left_curve_index, extended_left_t, extended_left_point := move_point_down_path(left_path, closest_left_curve_index, closest_left_t, 15);
 	extended_right_curve_index, extended_right_t, extended_right_point := move_point_down_path(right_path, closest_right_curve_index, closest_right_t, 15);
@@ -428,8 +435,8 @@ find_target_point_on_path :: proc(origin: linalg.Vector3f32, left_path, right_pa
 	sharpness: f32;
 
 	{
-		_, _, end_left_point :=  move_point_down_path(left_path, closest_left_curve_index, closest_left_t, 30);
-		_, _, end_right_point :=  move_point_down_path(right_path, closest_right_curve_index, closest_right_t, 30);
+		_, _, end_left_point := move_point_down_path(left_path, closest_left_curve_index, closest_left_t, 30);
+		_, _, end_right_point := move_point_down_path(right_path, closest_right_curve_index, closest_right_t, 30);
 
 		closest_dir := linalg.normalize(closest_right_point - closest_left_point);
 		end_dir := linalg.normalize(end_right_point - end_left_point);
@@ -450,17 +457,20 @@ find_target_point_on_path :: proc(origin: linalg.Vector3f32, left_path, right_pa
 }
 
 // #todo: Make this more efficient
-find_closest_point_on_curve :: proc(origin: linalg.Vector3f32, path: []Curve) -> (int, f32, linalg.Vector3f32) {
+find_closest_point_on_curve :: proc(origin: linalg.Vector3f32, path: []Curve, prev_segment: int) -> (int, f32, linalg.Vector3f32) {
 	closest_curve_index: int;
 	closest_t: f32;
 	closest_point: linalg.Vector3f32;
 	closest_dist_sq := max(f32);
 	INC :: 50;
 
-	for &curve, curve_index in path {
-		for i in 0..<INC {
-			t := f32(i) * 1 / (INC - 1);
-			p := find_point_on_curve(&curve, t);
+	for i in prev_segment..<prev_segment + 3 {
+		curve_index := i % len(path);
+		curve := &path[curve_index];
+		
+		for j in 0..<INC {
+			t := f32(j) * 1 / (INC - 1);
+			p := find_point_on_curve(curve, t);
 			d_sq := linalg.length2(origin - p);
 			
 			if d_sq < closest_dist_sq {
@@ -487,7 +497,7 @@ move_point_down_path :: proc(path: []Curve, curve_index: int, t, dist: f32) -> (
 		next_curve_index := (extended_curve_index + 1) % len(path);
 		next_curve := &path[next_curve_index];
 		next_t := remaining_len / next_curve.length;
-		assert(next_t <= 1);
+		// assert(next_t <= 1); #todo
 
 		extended_curve_index = next_curve_index;
 		extended_t = next_t;

@@ -109,6 +109,8 @@ Car_Entity :: struct {
 	shock_particles: [dynamic]Game_Particle,
 	fire_particles: [dynamic]Game_Particle,
 	surface_type: Surface_Type,
+	left_segment: int,
+	right_segment: int,
 
 	// AI
 	center_multiplier: f32, // [0, 1]
