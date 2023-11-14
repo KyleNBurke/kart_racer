@@ -114,6 +114,6 @@ For a cool particle explosion effect do this:
 	particle.velocity.z += rand.float32_range(-RANGE, RANGE);
 	particle.position += particle.velocity * dt;
 
-Todo now
-- Boost?
-- Wheels
+OPERATION FUN FUCKING TRACK
+- Fix the AI, it's shit and not fun
+- Fun idea: boosting / boost jets

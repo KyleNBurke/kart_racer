@@ -473,7 +473,7 @@ load_scene :: proc(scene: ^Scene) {
 			update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
 			entity_grid_insert(&scene.entity_grid, entity_lookup, entity);
 
-			entity.center_multiplier = rand.float32();
+			entity.center_multiplier = calculate_center_multiplier(position, &scene.ai);
 			append(&scene.all_players, entity_lookup);
 		}
 	}
@@ -501,6 +501,24 @@ load_scene :: proc(scene: ^Scene) {
 
 	fmt.printf("Loaded level file %s\n", scene.file_path);
 	return;
+}
+
+// Gives a value between 0 and 1. 0 = origin on left curve, 1 = orign on right curve
+calculate_center_multiplier :: proc(origin: linalg.Vector3f32, ai: ^AI) -> f32 {
+	// Assumes the origin falls in segment 0 of both curves
+	_, _, left_point := find_closest_point_on_curve(origin, ai.left_path[:], 0);
+	_, _, right_point := find_closest_point_on_curve(origin, ai.right_path[:], 0);
+
+	line := right_point - left_point;
+	proj := linalg.projection(origin - left_point, line);
+
+	proj_len := linalg.length(proj);
+	line_len := linalg.length(line);
+
+	m := proj_len / line_len;
+	assert(m >= 0 && m <= 1);
+
+	return m;
 }
 
 load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {

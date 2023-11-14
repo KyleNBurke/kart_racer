@@ -457,6 +457,8 @@ find_target_point_on_path :: proc(origin: linalg.Vector3f32, left_path, right_pa
 }
 
 // #todo: Make this more efficient
+// We'll want to be careful with this prev_segment stuff. It makes finding the closest point no long a global search which
+// may be an issue when players get knocked out of bounds.
 find_closest_point_on_curve :: proc(origin: linalg.Vector3f32, path: []Curve, prev_segment: int) -> (int, f32, linalg.Vector3f32) {
 	closest_curve_index: int;
 	closest_t: f32;
