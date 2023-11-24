@@ -310,21 +310,12 @@ update_player :: proc(player_lookup: Entity_Lookup, left_path, right_path: []Cur
 		mag := min(abs(target_angle), MAX_ANGLE);
 
 		if car.sliding {
-			car_rot_dir := linalg.dot(car.angular_velocity, car.surface_normal);
-
-			// Check if signs are different. If they are, the car is rotating in the opposite direction
-			// we want. Meaning, for example, the car is rotating clockwise and the target angle is pointing left.
-			if car_rot_dir * target_angle < 0 {
-				// Give it the maximum value, to really slow down the rotation
+			// There is some small threshold we don't apply any input for because the car is
+			// pretty much pointing the direction of the target angle.
+			if abs(target_angle) > 0.15 {
 				car.input_steer_multiplier = math.sign(target_angle);
 			} else {
-				// In here the car is rotating towards the target angle. There is some small threshold we don't apply
-				// any input for because the car is pretty much pointing the direction of the target angle.
-				if abs(target_angle) > 0.15 {
-					car.input_steer_multiplier = math.sign(target_angle);
-				} else {
-					car.input_steer_multiplier = 0;
-				}
+				car.input_steer_multiplier = 0;
 			}
 		} else {
 			MAX_SMOOTH_ANGLE :: 0.3;
