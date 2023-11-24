@@ -306,15 +306,37 @@ update_player :: proc(player_lookup: Entity_Lookup, left_path, right_path: []Cur
 	car.target_angle = target_angle;
 
 	{ // Drive torwards the target angle
-		MAX_SMOOTH_ANGLE :: 0.3;
+		// Steer multiplier
 		mag := min(abs(target_angle), MAX_ANGLE);
 
-		if mag < MAX_SMOOTH_ANGLE {
-			car.input_steer_multiplier = target_angle / MAX_SMOOTH_ANGLE;
+		if car.sliding {
+			car_rot_dir := linalg.dot(car.angular_velocity, car.surface_normal);
+
+			// Check if signs are different. If they are, the car is rotating in the opposite direction
+			// we want. Meaning, for example, the car is rotating clockwise and the target angle is pointing left.
+			if car_rot_dir * target_angle < 0 {
+				// Give it the maximum value, to really slow down the rotation
+				car.input_steer_multiplier = math.sign(target_angle);
+			} else {
+				// In here the car is rotating towards the target angle. There is some small threshold we don't apply
+				// any input for because the car is pretty much pointing the direction of the target angle.
+				if abs(target_angle) > 0.15 {
+					car.input_steer_multiplier = math.sign(target_angle);
+				} else {
+					car.input_steer_multiplier = 0;
+				}
+			}
 		} else {
-			car.input_steer_multiplier = math.sign(target_angle);
+			MAX_SMOOTH_ANGLE :: 0.3;
+	
+			if mag < MAX_SMOOTH_ANGLE {
+				car.input_steer_multiplier = target_angle / MAX_SMOOTH_ANGLE;
+			} else {
+				car.input_steer_multiplier = math.sign(target_angle);
+			}
 		}
 
+		// Accel multiplier
 		target_speed: f32;
 
 		if sharpness < 0.65 || mag > 0.6 {
@@ -408,12 +430,20 @@ ai_show_helpers :: proc(ai_players: []Entity_Lookup) {
 		geometry_make_line_helper_origin_vector(geo, car.origin, target_dir * 10, GREEN);
 		append(&car.helpers, geo_lookup);
 
+		if true {
+			// #todo: 0.8 should be MAX_ANGLE
+			input_steer_dir := math2.vector3_rotate(surface_forward, car.surface_normal, car.input_steer_multiplier * 0.8);
+			geo, geo_lookup = create_geometry("ai_helper", .KeepRender);
+			geometry_make_line_helper_origin_vector(geo, car.origin, input_steer_dir * 10, PURPLE);
+			append(&car.helpers, geo_lookup);
+		}
+
 		// #cleanup: This has nothing to do with AI
-		if car.sliding {
+		/*if car.sliding {
 			geo, geo_lookup = create_geometry("car_helper_sliding", .KeepRender);
 			geometry_make_line_helper_origin_vector(geo, car.origin, linalg.VECTOR3F32_Y_AXIS * 5, PURPLE);
 			append(&car.helpers, geo_lookup);
-		}
+		}*/
 	}
 }
 

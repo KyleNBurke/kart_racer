@@ -27,6 +27,7 @@ Config :: struct {
 	explosion_helpers: bool,
 	verbose_logging: bool,
 	ai_helpers: bool,
+	camera_follow_first_ai: bool,
 }
 
 Config_Map :: map[string]string;

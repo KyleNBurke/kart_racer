@@ -87,6 +87,11 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 			// we should probably flip a boolean requesting the car's position be reset and do it in the main loop.
 			// This is really just some debug shit so for now I don't really care.
 			respawn_player(game.scene.player, game.scene.spawn_position, game.scene.spawn_orientation);
+		
+		case glfw.KEY_G:
+			lookup := game.scene.all_players[1];
+			car := get_entity(lookup).variant.(^Car_Entity);
+			car.sliding = true;
 		}
 
 		camera_handle_key_press(&callback_state.game.camera, key, window);

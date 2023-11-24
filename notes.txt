@@ -116,4 +116,7 @@ For a cool particle explosion effect do this:
 
 OPERATION FUN FUCKING TRACK
 - Fix the AI, it's shit and not fun
+	- [done] Center multiplier
+	- [done] Controls suck, too much drifting
+	- Collision response feel
 - Fun idea: boosting / boost jets

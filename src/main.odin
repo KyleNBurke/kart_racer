@@ -210,9 +210,18 @@ update :: proc(game: ^Game, dt: f32) {
 		ai_signal_update_if_ready(&game.scene.ai, dt);
 	}
 
-	// ai_car := get_entity(game.scene.ai.players[0].lookup).variant.(^Car_Entity);
-	// move_camera(&game.camera, &game.gamepad, game.window, ai_car, dt);
-	move_camera(&game.camera, &game.gamepad, game.window, game.scene.player, dt);
+	// Move camera
+	when ODIN_DEBUG {
+		if config.camera_follow_first_ai {
+			ai_car := get_entity(game.scene.all_players[1]).variant.(^Car_Entity);
+			move_camera(&game.camera, &game.gamepad, game.window, ai_car, dt);
+		} else {
+			move_camera(&game.camera, &game.gamepad, game.window, game.scene.player, dt);
+		}
+	} else {
+		move_camera(&game.camera, &game.gamepad, game.window, game.scene.player, dt);
+	}
+
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
 
 	scene := &game.scene;
