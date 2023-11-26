@@ -118,5 +118,5 @@ OPERATION FUN FUCKING TRACK
 - Fix the AI, it's shit and not fun
 	- [done] Center multiplier
 	- [done] Controls suck, too much drifting
-	- Collision response feel
+	- [done] Collision response feel. Try to make it more like a push rathen than a bounce back.
 - Fun idea: boosting / boost jets

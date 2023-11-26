@@ -13,8 +13,6 @@ SPRING_OMEGA: f32 : math.TAU * SPRING_FREQUENCY;
 
 SPRING_EQUILIBRIUM_LENGTH: f32 : 0.4;
 
-CAR_V_CAR_BOUNCE :: 20;
-
 // #cleanup It might be a better design if we just had one constraint type that contained all the variables. Then when solving,
 // only the relevent variables are used.
 
@@ -537,7 +535,7 @@ solve_constraints :: proc(using constraints: ^Constraints, dt: f32) {
 				contact_velocity_b := car_b.velocity + linalg.cross(car_b.angular_velocity, constraint.rb);
 
 				{ // Normal velocity correction
-					velocity_error_n := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.n) - CAR_V_CAR_BOUNCE;
+					velocity_error_n := linalg.dot(contact_velocity_a - contact_velocity_b, constraint_set.n);
 					lambda_n := -velocity_error_n / constraint.effective_mass_inv_n;
 
 					prev_total_impulse_n := constraint.total_impulse_n;
