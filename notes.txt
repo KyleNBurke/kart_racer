@@ -86,9 +86,9 @@ Todo
 	- AI so that we can actually have other players on the track and it feels fun
 		- [done] Hull object avoidance
 		- Triangle object avoidance?
-		- Smoother accel/decel (it's just 1 or -1 right now)
+		- Smoother accel/decel? (it's just 1 or -1 right now)
 		- Player vs player collisions
-			- Should not see each other as obsticals if velocity is >=
+			- [done] Should not see each other as obsticals if velocity is >=
 - Mistakes we can catch / improvements that would help dev time
 	- If the exporter finds a rigid body not part of a rigid body island, produce a warning. The rigid body will not be exported.
 	- If the spawn point is not a bit above the ground mesh, produce a warning. The car will just fall through.
@@ -119,4 +119,8 @@ OPERATION FUN FUCKING TRACK
 	- [done] Center multiplier
 	- [done] Controls suck, too much drifting
 	- [done] Collision response feel. Try to make it more like a push rathen than a bounce back.
-- Fun idea: boosting / boost jets
+- Boosting / boost jets
+	- Pickups on the track to increase boost amount
+- Visualizations to help the feel
+	- [done] Wheels that point towards steer angle
+	- Skid marks when drifting

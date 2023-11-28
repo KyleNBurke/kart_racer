@@ -439,55 +439,40 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 	}
 }
 
-// #todo: Move this inside the other proc so that we're not recalculating the surface normal stuff
-/*
-position_and_orient_wheels :: proc(car: ^Car_Entity, dt: f32) {
-	// Calculate wheel orientations
-	body_left := math2.matrix4_left(car.transform);
+// Must be done after the constraint resolution, just before rendering. If not, the wheel positions will be
+// out of sync with the body of the car.
+position_and_orient_car_wheels :: proc(player_lookups: []Entity_Lookup, dt: f32) {
+	for lookup in player_lookups {
+		car := get_entity(lookup).variant.(^Car_Entity);
+		car_left := math2.matrix4_left(car.transform);
+		car_up := math2.matrix4_up(car.transform);
 
-	front_left_contact_normal, front_left_contact_normal_ok := car.wheels[0].contact_normal.?;
-	front_right_contact_normal, front_right_contact_normal_ok := car.wheels[1].contact_normal.?;
-
-	if front_left_contact_normal_ok || front_right_contact_normal_ok {
-		surface_normal := linalg.normalize(front_left_contact_normal + front_right_contact_normal);
-		surface_forward := linalg.normalize(linalg.cross(body_left, surface_normal));
-		surface_forward_vel := linalg.dot(surface_forward, car.velocity);
-		car.front_wheel_angular_velocity = surface_forward_vel / car.wheel_radius;
-	}
-
-	car.front_wheel_orientation = math.mod(car.front_wheel_orientation + car.front_wheel_angular_velocity * dt, math.TAU);
-
-	back_left_contact_normal, back_left_contact_normal_ok := car.wheels[2].contact_normal.?;
-	back_right_contact_normal, back_right_contact_normal_ok := car.wheels[3].contact_normal.?;
-
-	if back_left_contact_normal_ok || back_right_contact_normal_ok {
-		surface_normal := linalg.normalize(back_left_contact_normal + back_right_contact_normal);
-		surface_forward := linalg.normalize(linalg.cross(body_left, surface_normal));
-		surface_forward_vel := linalg.dot(surface_forward, car.velocity);
-		car.back_wheel_angular_velocity = surface_forward_vel / car.wheel_radius;
-	}
-
-	car.back_wheel_orientation = math.mod(car.back_wheel_orientation + car.back_wheel_angular_velocity * dt, math.TAU);
-
-	// Position and orient wheels
-	body_down := -math2.matrix4_up(car.transform);
-
-	for wheel, wheel_index in &car.wheels {
-		wheel_entity := get_entity(wheel.entity_lookup);
-		wheel_entity.position = wheel.body_point + body_down * (wheel.spring_length - car.wheel_radius);
-		
-		body_euler_y, body_euler_z, _ := linalg.euler_angles_yzx_from_quaternion(car.orientation);
-
-		if wheel_index == 0 || wheel_index == 1 {
-			wheel_entity.orientation = linalg.quaternion_from_euler_angles(body_euler_y + car.current_steer_angle, body_euler_z, car.front_wheel_orientation, .YZX);
-		} else {
-			wheel_entity.orientation = linalg.quaternion_from_euler_angles(body_euler_y, body_euler_z, car.back_wheel_orientation, .YZX);
+		if car.surface_normal != 0 {
+			surface_forward := linalg.normalize(linalg.cross(car_left, car.surface_normal));
+			surface_forward_vel := linalg.dot(surface_forward, car.velocity);
+			angular_vel := surface_forward_vel / car.wheel_radius;
+			car.wheel_orientation = math.mod(car.wheel_orientation + angular_vel * dt, math.TAU);
 		}
 
-		update_entity_transform(wheel_entity); 
+		for &wheel, wheel_index in car.wheels {
+			wheel_entity := get_entity(wheel.entity_lookup);
+			wheel_entity.position = wheel.body_point - car_up * (wheel.spring_length - car.wheel_radius);
+
+			body_euler_y, body_euler_z, _ := linalg.euler_angles_yzx_from_quaternion(car.orientation);
+			wheel_euler_y: f32;
+			
+			if wheel_index == 0 || wheel_index == 1 {
+				wheel_euler_y = body_euler_y + car.current_steer_angle;
+			} else {
+				wheel_euler_y = body_euler_y;
+			}
+
+			wheel_entity.orientation = linalg.quaternion_from_euler_angles(wheel_euler_y, body_euler_z, car.wheel_orientation, .YZX);
+
+			update_entity_transform(wheel_entity);
+		}
 	}
 }
-*/
 
 respawn_player :: proc(car: ^Car_Entity, position: linalg.Vector3f32, orientation: linalg.Quaternionf32) {
 	car.position = position;

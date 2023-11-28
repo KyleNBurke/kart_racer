@@ -225,6 +225,7 @@ update :: proc(game: ^Game, dt: f32) {
 	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
 
 	scene := &game.scene;
+	position_and_orient_car_wheels(scene.all_players[:], dt);
 	update_shock_entity_particles(scene.shock_entities[:], dt);
 	update_fire_entity_particles(scene.fire_entities[:], dt);
 	update_status_effect_cloud_particles(scene.status_effect_clouds[:], dt);

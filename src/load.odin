@@ -473,6 +473,11 @@ load_scene :: proc(scene: ^Scene) {
 			update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
 			entity_grid_insert(&scene.entity_grid, entity_lookup, entity);
 
+			for &wheel in entity.wheels {
+				_, wheel_entity_lookup := create_entity("wheel", wheel_geometry_lookup, Inanimate_Entity);
+				wheel.entity_lookup = wheel_entity_lookup;
+			}
+
 			entity.center_multiplier = calculate_center_multiplier(position, &scene.ai);
 			append(&scene.all_players, entity_lookup);
 		}
@@ -494,6 +499,11 @@ load_scene :: proc(scene: ^Scene) {
 
 		update_entity_hull_transforms_and_bounds(entity, entity.orientation, entity.transform);
 		entity_grid_insert(&scene.entity_grid, entity_lookup, entity);
+
+		for &wheel in entity.wheels {
+			_, wheel_entity_lookup := create_entity("wheel", wheel_geometry_lookup, Inanimate_Entity);
+			wheel.entity_lookup = wheel_entity_lookup;
+		}
 
 		scene.player = entity;
 		scene.all_players[0] = entity_lookup;

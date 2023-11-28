@@ -647,7 +647,9 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 
 		if best_spring_contact.length == max(f32) {
 			wheel.contact_normal = 0;
-			wheel.spring_length = SPRING_MAX_LENGTH;
+
+			// This is the visual length of the spring when the wheel is not on the ground.
+			wheel.spring_length = 0.6;
 		} else {
 			small_array.append(&manifold.contacts, Spring_Contact {
 				spring_body_point,
