@@ -263,6 +263,11 @@ load_scene :: proc(scene: ^Scene) {
 				geometry_lookup := geometry_lookups[geometry_index];
 				rigid_body, entity_lookup := create_entity(name, geometry_lookup, Rigid_Body_Entity);
 				rigid_body.scene_associated = true;
+				rigid_body.status_effect = status_effect;
+
+				if status_effect != .None {
+					rigid_body.exploding_health = 5;
+				}
 
 				rigid_body.position = position;
 				rigid_body.orientation = orientation;

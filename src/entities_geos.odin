@@ -162,8 +162,7 @@ remove_entity :: proc(entity_lookup: Entity_Lookup) {
 	// Free the variant specific resources.
 	switch variant in entity.variant {
 	case ^Rigid_Body_Entity:
-		delete(variant.shock_particles);
-		delete(variant.fire_particles);
+		delete(variant.particles);
 	case ^Car_Entity:
 		delete(variant.shock_particles);
 		delete(variant.fire_particles);
@@ -203,8 +202,7 @@ cleanup_entities_geos :: proc() {
 
 		switch variant in entity.variant {
 		case ^Rigid_Body_Entity:
-			delete(variant.fire_particles);
-			delete(variant.shock_particles);
+			delete(variant.particles);
 			
 		case ^Oil_Slick_Entity:
 			delete(variant.fire_particles);

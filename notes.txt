@@ -124,3 +124,9 @@ OPERATION FUN FUCKING TRACK
 - Visualizations to help the feel
 	- [done] Wheels that point towards steer angle
 	- Skid marks when drifting
+- Shock barrel
+	- The feeling when hitting it. It's too light.
+	- Visual indication for when it's going to explode. Would like to do bloom but let's stay focused on making a fun fucking track
+	- Car control logic when shocked.
+- Crates
+	- Like the cars should be more like a push forward than a bounce back

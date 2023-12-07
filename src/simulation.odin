@@ -120,7 +120,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 				case ^Rigid_Body_Entity:
 					add_car_movable_constraint_set(&scene.constraints, car, e, &manifold, dt);
 					car_collision_maybe_wake_island(&scene.islands, &additional_awake_entities, e);
-					handle_status_effects(car, e);
+					process_car_rigid_body_collision_status_effect(car, e);
 
 				case ^Inanimate_Entity:
 					// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
@@ -153,7 +153,11 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 				nearby_triangle := ground_grid_form_triangle(&scene.ground_grid, nearby_triangle_index);
 
 				if manifold, ok := evaluate_ground_collision(scene.ground_grid.positions[:], &nearby_triangle, &provoking_hull).?; ok {
-					process_rigid_body_ground_collision(provoking_rigid_body, provoking_hull.kind, &scene.constraints, &manifold, dt, &scene.contact_helpers);
+					add_fixed_constraint_set(&scene.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
+
+					if config.contact_point_helpers {
+						add_contact_helper(&scene.contact_helpers, &manifold);
+					}
 				}
 			}
 		}
@@ -194,17 +198,6 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 					
 					case ^Inanimate_Entity:
 						add_fixed_constraint_set(&scene.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
-					
-					case ^Car_Entity:
-						// This is unreachable beacuse it would've already been handled in the car collision detection loop above.
-						// Once we process that collision we set checked_collision on the car to true.
-						unreachable();
-						
-					case ^Oil_Slick_Entity:
-						unreachable();
-					
-					case ^Cloud_Entity:
-						unimplemented();
 
 					case ^Boost_Jet_Entity:
 						dir := linalg.normalize(math2.matrix4_forward(e.transform));
@@ -216,6 +209,11 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 
 						e.animating = true;
 						e.animation_duration = 0;
+					
+					case ^Car_Entity, ^Oil_Slick_Entity, ^Cloud_Entity:
+						// The Car_Entity is unreachable beacuse it would've already been handled in the car collision detection loop above.
+						// Once we process that collision we set checked_collision on the car to true.
+						unreachable();
 					}
 				}
 			}
@@ -248,277 +246,48 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 	// of entities woken up from exploding barrels.
 	clear(&additional_awake_entities);
 
-	for i := len(scene.awake_rigid_bodies) - 1; i >= 0; i -= 1 {
-		lookup := scene.awake_rigid_bodies[i];
+	#reverse for lookup, i in scene.awake_rigid_bodies {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
-		if rigid_body.exploding_health > 0 {
-			old_position := rigid_body.position;
-			old_orientation := rigid_body.orientation;
-			rigid_body.position += (rigid_body.velocity + rigid_body.bias_velocity) * dt;
-
-			rigid_body.orientation = math2.integrate_angular_velocity(rigid_body.angular_velocity + rigid_body.bias_angular_velocity, rigid_body.orientation, dt);
-
-			rigid_body.bias_velocity = VEC3_ZERO;
-			rigid_body.bias_angular_velocity = VEC3_ZERO;
-		
-			update_entity_transform(rigid_body);
-
-			// Compare the previous postion and orientation to increase the sleep duration
-			// We do this at the postion level, not the velocity level because for a resting object, velocity will
-			// change from frame to frame due to gravity and contact resolution. The position and orientation should
-			// be more stable.
-			pos_diff := linalg.length(rigid_body.position - old_position);
-
-			// https://math.stackexchange.com/a/90098/825984
-			ip : linalg.Quaternionf32 = linalg.inner_product(old_orientation, rigid_body.orientation);
-			ipn := linalg.quaternion_normalize(ip);
-			ori_diff := math.acos(2 * linalg.dot(ipn, ipn) - 1);
-
-			if pos_diff < 0.0001 && ori_diff < 0.0001 {
-				rigid_body.sleep_duration += dt;
-			} else {
-				rigid_body.sleep_duration = 0;
-			}
-
-			rigid_body.checked_collision = false;
-		} else {
-			// Remove from entity grid
-			// remove_entity_from_grid(&game.entity_grid, lookup, rigid_body);
-			entity_grid_remove(&scene.entity_grid, lookup, rigid_body);
-
-			// Remove from islands
-			remove_rigid_body_from_island(&scene.islands, lookup, rigid_body);
-
-			// Remove from awake rigid body lookups
+		if rigid_body.status_effect != .None && rigid_body.exploding_health <= 0 {
+			explode_rigid_body(scene, lookup, rigid_body, runtime_assets, &additional_awake_entities);
 			unordered_remove(&scene.awake_rigid_bodies, i);
-
-			// Remove from status effects entities list
-			switch rigid_body.status_effect {
-			case .ExplodingShock:
-				i, ok := slice.linear_search(scene.shock_entities[:], lookup);
-				assert(ok);
-				unordered_remove(&scene.shock_entities, i);
-			case .ExplodingFire:
-				i, ok := slice.linear_search(scene.fire_entities[:], lookup);
-				assert(ok);
-				unordered_remove(&scene.fire_entities, i);
-			case .None, .Shock, .Fire:
-				unreachable();
-			}
-
-			// Create explosion bounds
-			center := math2.box_center(rigid_body.bounds);
-			bounds := math2.Box3f32 { center - EXPLOSION_RADIUS, center + EXPLOSION_RADIUS };
-			
-			// Appy explosion impulse to car if nearby
-			if math2.box_intersects(bounds, scene.player.bounds) {
-				dir := linalg.normalize(scene.player.position - rigid_body.position);
-				scene.player.velocity += dir * 30;
-			}
-			
-			// Apply explosion impulse to nearby rigid bodies
-			// nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, bounds);
-			nearby_lookups := entity_grid_find_nearby_entities(&scene.entity_grid, bounds);
-
-			for lookup in nearby_lookups {
-				nearby_rigid_body, ok := get_entity(lookup).variant.(^Rigid_Body_Entity);
-				if !ok do continue;
-
-				dir := linalg.normalize(nearby_rigid_body.position - rigid_body.position);
-				nearby_rigid_body.velocity += dir * 30;
-
-				maybe_wake_island_post_solve(&scene.islands, nearby_rigid_body, &additional_awake_entities)
-			}
-
-			// Spawn shrapnel pieces
-			for shrapnel in &runtime_assets.shock_barrel_shrapnel {
-				shrapnel_rigid_body, shrapnel_lookup := create_entity("shrapnel", shrapnel.geometry_lookup, Rigid_Body_Entity);
-				shrapnel_rigid_body.scene_associated = true;
-
-				shrapnel_rigid_body.position = math2.matrix4_transform_point(rigid_body.transform, shrapnel.position);
-				shrapnel_rigid_body.orientation = rigid_body.orientation * shrapnel.orientation;
-				shrapnel_rigid_body.size = rigid_body.size * shrapnel.size;
-				shrapnel_rigid_body.collision_exclude = true;
-
-				init_rigid_body_entity(shrapnel_rigid_body, 1, shrapnel.dimensions);
-				update_entity_transform(shrapnel_rigid_body);
-
-				hull := init_collision_hull(shrapnel.hull_local_position, shrapnel.hull_local_orientation, shrapnel.hull_local_size, .Box);
-				append(&shrapnel_rigid_body.collision_hulls, hull);
-				update_entity_hull_transforms_and_bounds(shrapnel_rigid_body, shrapnel_rigid_body.orientation, shrapnel_rigid_body.transform);
-				entity_grid_insert(&scene.entity_grid, shrapnel_lookup, shrapnel_rigid_body);
-
-				append(&additional_awake_entities, shrapnel_lookup);
-				
-				dir := linalg.normalize(shrapnel_rigid_body.position - rigid_body.position);
-				shrapnel_rigid_body.velocity = dir * 30;
-			}
-			
-			switch rigid_body.status_effect {
-			case .ExplodingShock:
-				cloud, cloud_lookup := create_entity("shock cloud", nil, Cloud_Entity);
-				cloud.scene_associated = true;
-				cloud.position = rigid_body.position;
-				cloud.status_effect =.Shock;
-				update_entity_transform(cloud);
-
-
-				HULL_POSITION :: linalg.Vector3f32 {0, 0.5, 0};
-				HULL_SIZE :: linalg.Vector3f32 {4, 2, 4};
-
-				hull := init_collision_hull(HULL_POSITION, linalg.QUATERNIONF32_IDENTITY, HULL_SIZE, .Sphere);
-				append(&cloud.collision_hulls, hull);
-				update_entity_hull_transforms_and_bounds(cloud, cloud.orientation, cloud.transform);
-				entity_grid_insert(&scene.entity_grid, cloud_lookup, cloud);
-
-				append(&scene.status_effect_clouds, cloud_lookup);
-			
-			case .ExplodingFire:
-				// #performance: There is some code in here that iterates over all the oil slicks. We could use some spatial partitioning
-				// data structure to make that more efficient. All or most of this could also be done in a separate thread. The types of
-				// things in here don't need to be done all in a frame. They could finish in some time and they we display the results. It
-				// takes time for oil slick blobs to hit the floor so I think it would be fine.
-
-				{ // Light nearby oil slicks on fire
-					center := math2.box_center(rigid_body.bounds);
-					explosion_bounds := math2.Box3f32 { center - EXPLOSION_RADIUS, center + EXPLOSION_RADIUS };
-
-					for oil_slick_lookup in scene.oil_slicks {
-						oil_slick := get_entity(oil_slick_lookup).variant.(^Oil_Slick_Entity);
-
-						if math2.box_intersects(oil_slick.bounds, explosion_bounds) {
-							oil_slick.on_fire = true;
-							append(&scene.on_fire_oil_slicks, oil_slick_lookup);
-						}
-					}
-				}
-
-				origin := rigid_body.position + linalg.Vector3f32 {0, 3, 0};
-
-				HEIGHT :: 10;
-				RADIUS :: 8;
-
-				bounds := math2.Box3f32 {
-					origin - linalg.Vector3f32 { RADIUS, HEIGHT, RADIUS },
-					origin + linalg.Vector3f32 { RADIUS, 0, RADIUS },
-				};
-
-				if config.explosion_helpers {
-					geometry, _ := create_geometry("explosion helper", .KeepRender);
-					geometry_make_box_helper(geometry, bounds.min, bounds.max);
-				}
-
-				ground_triangle_indices := ground_grid_find_nearby_triangles(&scene.ground_grid, bounds);
-
-				SQUARES :: 4;
-				for x in 0..<SQUARES {
-					for z in 0..<SQUARES {
-						SQUARE_SIZE: f32 : f32(RADIUS * 2) / f32(SQUARES);
-
-						// Skip the squares whos centers are oustide the circle
-						square_center_x := -RADIUS + (SQUARE_SIZE / 2) + SQUARE_SIZE * f32(x);
-						square_center_z := -RADIUS + (SQUARE_SIZE / 2) + SQUARE_SIZE * f32(z);
-						if square_center_x * square_center_x + square_center_z * square_center_z > RADIUS * RADIUS {
-							continue;
-						}
-
-						x := rand.float32() * SQUARE_SIZE + bounds.min.x + f32(x) * SQUARE_SIZE;
-						z := rand.float32() * SQUARE_SIZE + bounds.min.z + f32(z) * SQUARE_SIZE;
-						y := bounds.min.y
-						p := linalg.Vector3f32 { x, y, z };
-
-						for ground_triangle_index in ground_triangle_indices {
-							segment := p - origin;
-							ray_direction := linalg.normalize(p - origin);
-							ray_length := linalg.length(segment);
-
-							ground_triangle := ground_grid_form_triangle(&scene.ground_grid, ground_triangle_index);
-
-							intersection_length := math2.ray_intersects_triangle(origin, ray_direction, ground_triangle.a, ground_triangle.b, ground_triangle.c);
-							if intersection_length <= 0 || intersection_length > ray_length {
-								continue;
-							}
-							
-							if config.explosion_helpers {
-								geometry, _ := create_geometry("explosion helper", .KeepRender);
-								geometry_make_line_helper_origin_vector(geometry, origin, segment);
-							}
-
-							intersection_point := origin + ray_direction * intersection_length;
-							i := rand.int_max(len(runtime_assets.oil_slicks));
-							oil_slick_asset := &runtime_assets.oil_slicks[i];
-
-							oil_slick_entity, oil_slick_entity_lookup := create_entity("oil slick", oil_slick_asset.geometry_lookup, Oil_Slick_Entity);
-							oil_slick_entity.scene_associated = true;
-							
-							orientation := linalg.quaternion_between_two_vector3(linalg.VECTOR3F32_Y_AXIS, ground_triangle.normal);
-
-							oil_slick_entity.position = intersection_point;
-							oil_slick_entity.orientation = orientation;
-							oil_slick_entity.on_fire = true;
-							oil_slick_entity.desired_fire_particles = 13;
-							update_entity_transform(oil_slick_entity);
-							
-							hull_indices_copy := slice.clone_to_dynamic(oil_slick_asset.hull_indices[:]);
-							hull_positions_copy := slice.clone_to_dynamic(oil_slick_asset.hull_positions[:]);
-							hull := init_collision_hull(oil_slick_asset.hull_local_position, oil_slick_asset.hull_local_orientation, oil_slick_asset.hull_local_size, .Mesh, hull_indices_copy, hull_positions_copy);
-							append(&oil_slick_entity.collision_hulls, hull);
-
-							update_entity_hull_transforms_and_bounds(oil_slick_entity, oil_slick_entity.orientation, oil_slick_entity.transform);
-							append(&scene.oil_slicks, oil_slick_entity_lookup);
-							append(&scene.on_fire_oil_slicks, oil_slick_entity_lookup);
-
-							break;
-						}
-					}
-				}
-
-			case .None, .Shock, .Fire:
-				unreachable();
-			}
-
-			// Rmove from entity geos
-			remove_entity(lookup);
+			continue;
 		}
+
+		old_position := rigid_body.position;
+		old_orientation := rigid_body.orientation;
+		rigid_body.position += (rigid_body.velocity + rigid_body.bias_velocity) * dt;
+
+		rigid_body.orientation = math2.integrate_angular_velocity(rigid_body.angular_velocity + rigid_body.bias_angular_velocity, rigid_body.orientation, dt);
+
+		rigid_body.bias_velocity = VEC3_ZERO;
+		rigid_body.bias_angular_velocity = VEC3_ZERO;
+	
+		update_entity_transform(rigid_body);
+
+		// Compare the previous postion and orientation to increase the sleep duration
+		// We do this at the postion level, not the velocity level because for a resting object, velocity will
+		// change from frame to frame due to gravity and contact resolution. The position and orientation should
+		// be more stable.
+		pos_diff := linalg.length(rigid_body.position - old_position);
+
+		// https://math.stackexchange.com/a/90098/825984
+		ip : linalg.Quaternionf32 = linalg.inner_product(old_orientation, rigid_body.orientation);
+		ipn := linalg.quaternion_normalize(ip);
+		ori_diff := math.acos(2 * linalg.dot(ipn, ipn) - 1);
+
+		if pos_diff < 0.0001 && ori_diff < 0.0001 {
+			rigid_body.sleep_duration += dt;
+		} else {
+			rigid_body.sleep_duration = 0;
+		}
+
+		rigid_body.checked_collision = false;
 	}
 
 	sleep_islands(&scene.islands, &scene.awake_rigid_bodies);
 	append(&scene.awake_rigid_bodies, ..additional_awake_entities[:]);
-}
-
-process_rigid_body_ground_collision :: proc(
-	provoking_rigid_body: ^Rigid_Body_Entity,
-	provoking_hull_kind: Hull_Kind,
-	constraints: ^Constraints,
-	manifold: ^Contact_Manifold,
-	dt: f32,
-	contact_helpers: ^[dynamic]Geometry_Lookup,
-) {
-	status_effect := provoking_rigid_body.status_effect;
-	if status_effect == .ExplodingShock || status_effect == .ExplodingFire {
-		// Check if we already exploded the barrel so we don't try to do it twice
-		if provoking_rigid_body.exploding_health <= 0 {
-			return;
-		}
-
-		velocity_diff := abs(linalg.dot(manifold.normal, provoking_rigid_body.velocity));
-		provoking_rigid_body.exploding_health -= velocity_diff;
-
-		if provoking_rigid_body.exploding_health > 0 {
-			add_fixed_constraint_set(constraints, provoking_rigid_body, provoking_hull_kind, manifold, dt);
-			
-			if config.contact_point_helpers {
-				add_contact_helper(contact_helpers, manifold);
-			}
-		}
-	} else {
-		add_fixed_constraint_set(constraints, provoking_rigid_body, provoking_hull_kind, manifold, dt);
-
-		if config.contact_point_helpers {
-			add_contact_helper(contact_helpers, manifold);
-		}
-	}
 }
 
 Spring_Contact_Manifold :: struct {
@@ -857,14 +626,18 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 	}
 }
 
-@(private="file")
-handle_status_effects :: proc(car: ^Car_Entity, rigid_body: ^Rigid_Body_Entity) {
+process_car_rigid_body_collision_status_effect :: proc(car: ^Car_Entity, rigid_body: ^Rigid_Body_Entity) {
 	switch rigid_body.status_effect {
+	case .None:
+		return;
 	case .Shock, .ExplodingShock:
 		shock_car(car);
 	case .Fire, .ExplodingFire:
 		light_car_on_fire(car);
-	case .None:
+	}
+
+	if rigid_body.status_effect == .ExplodingShock || rigid_body.status_effect == .ExplodingFire {
+		rigid_body.exploding_health -= 1;
 	}
 }
 
@@ -882,4 +655,200 @@ add_contact_helper :: proc(contact_helpers: ^[dynamic]Geometry_Lookup, manifold:
 		geometry_make_line_helper_origin_vector(geometry, contact.position_b, manifold.normal * 3);
 		append(contact_helpers, geometry_lookup);
 	}
+}
+
+explode_rigid_body :: proc(scene: ^Scene, lookup: Entity_Lookup, rigid_body: ^Rigid_Body_Entity, runtime_assets: ^Runtime_Assets, additional_awake_entities: ^[dynamic]Entity_Lookup) {
+	// Remove from entity grid
+	entity_grid_remove(&scene.entity_grid, lookup, rigid_body);
+
+	// Remove from islands
+	remove_rigid_body_from_island(&scene.islands, lookup, rigid_body);
+
+	// Remove from status effects entities list
+	switch rigid_body.status_effect {
+	case .ExplodingShock:
+		i, ok := slice.linear_search(scene.shock_entities[:], lookup);
+		assert(ok);
+		unordered_remove(&scene.shock_entities, i);
+	case .ExplodingFire:
+		i, ok := slice.linear_search(scene.fire_entities[:], lookup);
+		assert(ok);
+		unordered_remove(&scene.fire_entities, i);
+	case .None, .Shock, .Fire:
+		unreachable();
+	}
+
+	// Create explosion bounds
+	center := math2.box_center(rigid_body.bounds);
+	bounds := math2.Box3f32 { center - EXPLOSION_RADIUS, center + EXPLOSION_RADIUS };
+
+	// Appy explosion impulse to car if nearby
+	if math2.box_intersects(bounds, scene.player.bounds) {
+		dir := linalg.normalize(scene.player.position - rigid_body.position);
+		scene.player.velocity += dir * 30;
+	}
+
+	// Apply explosion impulse to nearby rigid bodies
+	// nearby_lookups := find_nearby_entities_in_grid(&game.entity_grid, bounds);
+	nearby_lookups := entity_grid_find_nearby_entities(&scene.entity_grid, bounds);
+
+	for lookup in nearby_lookups {
+		nearby_rigid_body, ok := get_entity(lookup).variant.(^Rigid_Body_Entity);
+		if !ok do continue;
+
+		dir := linalg.normalize(nearby_rigid_body.position - rigid_body.position);
+		nearby_rigid_body.velocity += dir * 30;
+
+		maybe_wake_island_post_solve(&scene.islands, nearby_rigid_body, additional_awake_entities)
+	}
+
+	// Spawn shrapnel pieces
+	for shrapnel in &runtime_assets.shock_barrel_shrapnel {
+		shrapnel_rigid_body, shrapnel_lookup := create_entity("shrapnel", shrapnel.geometry_lookup, Rigid_Body_Entity);
+		shrapnel_rigid_body.scene_associated = true;
+
+		shrapnel_rigid_body.position = math2.matrix4_transform_point(rigid_body.transform, shrapnel.position);
+		shrapnel_rigid_body.orientation = rigid_body.orientation * shrapnel.orientation;
+		shrapnel_rigid_body.size = rigid_body.size * shrapnel.size;
+		shrapnel_rigid_body.collision_exclude = true;
+
+		init_rigid_body_entity(shrapnel_rigid_body, 1, shrapnel.dimensions);
+		update_entity_transform(shrapnel_rigid_body);
+
+		hull := init_collision_hull(shrapnel.hull_local_position, shrapnel.hull_local_orientation, shrapnel.hull_local_size, .Box);
+		append(&shrapnel_rigid_body.collision_hulls, hull);
+		update_entity_hull_transforms_and_bounds(shrapnel_rigid_body, shrapnel_rigid_body.orientation, shrapnel_rigid_body.transform);
+		entity_grid_insert(&scene.entity_grid, shrapnel_lookup, shrapnel_rigid_body);
+
+		append(additional_awake_entities, shrapnel_lookup);
+		
+		dir := linalg.normalize(shrapnel_rigid_body.position - rigid_body.position);
+		shrapnel_rigid_body.velocity = dir * 30;
+	}
+
+	switch rigid_body.status_effect {
+	case .ExplodingShock:
+		cloud, cloud_lookup := create_entity("shock cloud", nil, Cloud_Entity);
+		cloud.scene_associated = true;
+		cloud.position = rigid_body.position;
+		cloud.status_effect =.Shock;
+		update_entity_transform(cloud);
+
+
+		HULL_POSITION :: linalg.Vector3f32 {0, 0.5, 0};
+		HULL_SIZE :: linalg.Vector3f32 {4, 2, 4};
+
+		hull := init_collision_hull(HULL_POSITION, linalg.QUATERNIONF32_IDENTITY, HULL_SIZE, .Sphere);
+		append(&cloud.collision_hulls, hull);
+		update_entity_hull_transforms_and_bounds(cloud, cloud.orientation, cloud.transform);
+		entity_grid_insert(&scene.entity_grid, cloud_lookup, cloud);
+
+		append(&scene.status_effect_clouds, cloud_lookup);
+
+	case .ExplodingFire:
+		// #performance: There is some code in here that iterates over all the oil slicks. We could use some spatial partitioning
+		// data structure to make that more efficient. All or most of this could also be done in a separate thread. The types of
+		// things in here don't need to be done all in a frame. They could finish in some time and they we display the results. It
+		// takes time for oil slick blobs to hit the floor so I think it would be fine.
+
+		{ // Light nearby oil slicks on fire
+			center := math2.box_center(rigid_body.bounds);
+			explosion_bounds := math2.Box3f32 { center - EXPLOSION_RADIUS, center + EXPLOSION_RADIUS };
+
+			for oil_slick_lookup in scene.oil_slicks {
+				oil_slick := get_entity(oil_slick_lookup).variant.(^Oil_Slick_Entity);
+
+				if math2.box_intersects(oil_slick.bounds, explosion_bounds) {
+					oil_slick.on_fire = true;
+					append(&scene.on_fire_oil_slicks, oil_slick_lookup);
+				}
+			}
+		}
+
+		origin := rigid_body.position + linalg.Vector3f32 {0, 3, 0};
+
+		HEIGHT :: 10;
+		RADIUS :: 8;
+
+		bounds := math2.Box3f32 {
+			origin - linalg.Vector3f32 { RADIUS, HEIGHT, RADIUS },
+			origin + linalg.Vector3f32 { RADIUS, 0, RADIUS },
+		};
+
+		if config.explosion_helpers {
+			geometry, _ := create_geometry("explosion helper", .KeepRender);
+			geometry_make_box_helper(geometry, bounds.min, bounds.max);
+		}
+
+		ground_triangle_indices := ground_grid_find_nearby_triangles(&scene.ground_grid, bounds);
+
+		SQUARES :: 4;
+		for x in 0..<SQUARES {
+			for z in 0..<SQUARES {
+				SQUARE_SIZE: f32 : f32(RADIUS * 2) / f32(SQUARES);
+
+				// Skip the squares whos centers are oustide the circle
+				square_center_x := -RADIUS + (SQUARE_SIZE / 2) + SQUARE_SIZE * f32(x);
+				square_center_z := -RADIUS + (SQUARE_SIZE / 2) + SQUARE_SIZE * f32(z);
+				if square_center_x * square_center_x + square_center_z * square_center_z > RADIUS * RADIUS {
+					continue;
+				}
+
+				x := rand.float32() * SQUARE_SIZE + bounds.min.x + f32(x) * SQUARE_SIZE;
+				z := rand.float32() * SQUARE_SIZE + bounds.min.z + f32(z) * SQUARE_SIZE;
+				y := bounds.min.y
+				p := linalg.Vector3f32 { x, y, z };
+
+				for ground_triangle_index in ground_triangle_indices {
+					segment := p - origin;
+					ray_direction := linalg.normalize(p - origin);
+					ray_length := linalg.length(segment);
+
+					ground_triangle := ground_grid_form_triangle(&scene.ground_grid, ground_triangle_index);
+
+					intersection_length := math2.ray_intersects_triangle(origin, ray_direction, ground_triangle.a, ground_triangle.b, ground_triangle.c);
+					if intersection_length <= 0 || intersection_length > ray_length {
+						continue;
+					}
+					
+					if config.explosion_helpers {
+						geometry, _ := create_geometry("explosion helper", .KeepRender);
+						geometry_make_line_helper_origin_vector(geometry, origin, segment);
+					}
+
+					intersection_point := origin + ray_direction * intersection_length;
+					i := rand.int_max(len(runtime_assets.oil_slicks));
+					oil_slick_asset := &runtime_assets.oil_slicks[i];
+
+					oil_slick_entity, oil_slick_entity_lookup := create_entity("oil slick", oil_slick_asset.geometry_lookup, Oil_Slick_Entity);
+					oil_slick_entity.scene_associated = true;
+					
+					orientation := linalg.quaternion_between_two_vector3(linalg.VECTOR3F32_Y_AXIS, ground_triangle.normal);
+
+					oil_slick_entity.position = intersection_point;
+					oil_slick_entity.orientation = orientation;
+					oil_slick_entity.on_fire = true;
+					oil_slick_entity.desired_fire_particles = 13;
+					update_entity_transform(oil_slick_entity);
+					
+					hull_indices_copy := slice.clone_to_dynamic(oil_slick_asset.hull_indices[:]);
+					hull_positions_copy := slice.clone_to_dynamic(oil_slick_asset.hull_positions[:]);
+					hull := init_collision_hull(oil_slick_asset.hull_local_position, oil_slick_asset.hull_local_orientation, oil_slick_asset.hull_local_size, .Mesh, hull_indices_copy, hull_positions_copy);
+					append(&oil_slick_entity.collision_hulls, hull);
+
+					update_entity_hull_transforms_and_bounds(oil_slick_entity, oil_slick_entity.orientation, oil_slick_entity.transform);
+					append(&scene.oil_slicks, oil_slick_entity_lookup);
+					append(&scene.on_fire_oil_slicks, oil_slick_entity_lookup);
+
+					break;
+				}
+			}
+		}
+
+	case .None, .Shock, .Fire:
+		unreachable();
+	}
+
+	// Rmove from entity geos
+	remove_entity(lookup);
 }

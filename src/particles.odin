@@ -15,18 +15,18 @@ Game_Particle :: struct {
 }
 
 init_shock_particles :: proc(rigid_body: ^Rigid_Body_Entity) {
-	for _ in 0..<150 {
+	for _ in 0..<50 {
 		particle: Game_Particle;
 		particle.size = SHOCK_PARTICLE_SIZE;
 		
-		append(&rigid_body.shock_particles, particle);
+		append(&rigid_body.particles, particle);
 	}
 }
 
 init_fire_particles :: proc(rigid_body: ^Rigid_Body_Entity) {
 	for _ in 0..<200 {
 		particle: Game_Particle;
-		append(&rigid_body.fire_particles, particle);
+		append(&rigid_body.particles, particle);
 	}
 }
 
@@ -34,7 +34,7 @@ update_shock_entity_particles :: proc(shock_entities: []Entity_Lookup, dt: f32) 
 	for lookup in shock_entities {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
-		for particle in &rigid_body.shock_particles {
+		for particle in &rigid_body.particles {
 			dist := linalg.abs(particle.position - rigid_body.position);
 
 			if dist.x > SHOCK_PARTICLE_MAX_OFFSET || dist.y > SHOCK_PARTICLE_MAX_OFFSET || dist.z > SHOCK_PARTICLE_MAX_OFFSET {
@@ -97,7 +97,7 @@ update_fire_entity_particles :: proc(fire_entities: []Entity_Lookup, dt: f32) {
 	for lookup in fire_entities {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
-		for particle in &rigid_body.fire_particles {
+		for particle in &rigid_body.particles {
 			if particle.time_alive >= particle.life_time {
 				reset_fire_particle(rigid_body, &particle);
 			}
@@ -141,7 +141,7 @@ draw_shock_entity_particles ::  proc(vulkan: ^Vulkan, shock_entities: []Entity_L
 	for lookup in shock_entities {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
-		for particle in &rigid_body.shock_particles {
+		for particle in &rigid_body.particles {
 			draw_particle(vulkan, &particle);
 		}
 	}
@@ -151,7 +151,7 @@ draw_fire_entity_particles :: proc(vulkan: ^Vulkan, fire_entities: []Entity_Look
 	for lookup in fire_entities {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
-		for particle in &rigid_body.fire_particles {
+		for particle in &rigid_body.particles {
 			draw_particle(vulkan, &particle);
 		}
 	}

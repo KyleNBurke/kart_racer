@@ -57,12 +57,9 @@ Rigid_Body_Entity :: struct {
 	island_index: int,
 	sleep_duration: f32,
 
-	// I get not wanting to separate shock cubes from shock barrels due to the [dynamic]particle needed to be in both but what if I pull out the things below this into Rigid_Body_Status_Effect_Entity?
-	// We should hold off on this because we may want status effects for inanimate entities which would mean putting these things into the Entity anyway.
 	status_effect: Status_Effect,
-	shock_particles: [dynamic]Game_Particle,
-	fire_particles: [dynamic]Game_Particle,
-	exploding_health: f32,
+	particles: [dynamic]Game_Particle,
+	exploding_health: int,
 }
 
 Status_Effect :: enum {
@@ -179,7 +176,6 @@ init_rigid_body_entity :: proc(entity: ^Rigid_Body_Entity, mass: f32, dimensions
 	entity.inv_local_inertia_tensor = inv_local_inertia_tensor;
 	entity.tentative_inv_global_inertia_tensor = linalg.MATRIX3F32_IDENTITY;
 	entity.island_index = -1;
-	entity.exploding_health = 100;
 }
 
 CAR_MASS: f32 : 500;
