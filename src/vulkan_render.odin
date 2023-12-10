@@ -182,7 +182,7 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, camera: ^Camera, texts: ^[dyna
 				instance_count = cast(u32) len(geometry.entity_lookups);
 			}
 
-			// Record draw commandcd
+			// Record draw command
 			offset := cast(vk.DeviceSize) attribute_array_offset;
 
 			secondary_command_buffer: vk.CommandBuffer;

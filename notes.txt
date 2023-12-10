@@ -130,3 +130,33 @@ OPERATION FUN FUCKING TRACK
 	- Car control logic when shocked.
 - Crates
 	- Like the cars should be more like a push forward than a bounce back
+
+Rendering redo:
+rend.begin_render();
+
+for geometry in geometies {
+	rend.bind_pipeline(geometry.pipeline, geometry.indices, geometry.attributes);
+
+	for entity in geometry.entities {
+		rend.include_entity(entity.global_matrix);
+	}
+
+	rend.draw();
+
+	if emissive, ok := geometry.emissive.? ok {
+		rend.bind_pipeline(.Emissive, emissive.indices, emissive.attributes);
+
+		for entity in geometry.entities {
+			color := ... entity.exploding_health ..;
+			rend.include_entity_emissive(color);
+		}
+
+		rend.draw();
+	}
+}
+
+rend.draw_particle(pos, size, color);
+
+rend.draw_text(...);
+
+rend.end_render();
