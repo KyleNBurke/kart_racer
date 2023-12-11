@@ -4,16 +4,6 @@ import "core:math";
 import "core:math/linalg";
 import "core:testing";
 
-align_forward :: proc(unaligned_offset: int, alignment: int) -> int {
-	under := (alignment - unaligned_offset % alignment) % alignment;
-	return unaligned_offset + under;
-}
-
-align_backward :: proc(unaligned_offset: int, alignment: int) -> int {
-	over := unaligned_offset % alignment;
-	return unaligned_offset - over;
-}
-
 vector2_rotate :: proc(v: linalg.Vector2f32, angle: f32) -> linalg.Vector2f32 {
 	return linalg.Vector2f32 {
 		v.x * math.cos(angle) - v.y * math.sin(angle),

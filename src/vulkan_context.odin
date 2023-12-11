@@ -1,4 +1,3 @@
-//+private file
 package main;
 
 import "core:fmt";
@@ -11,13 +10,22 @@ REQUIRED_DEBUG_INSTANCE_EXTENSIONS := [?]cstring {"VK_EXT_debug_utils"};
 REQUIRED_DEBUG_LAYERS := [?]cstring {"VK_LAYER_KHRONOS_validation"};
 REQUIRED_DEVICE_EXTENSIONS := [?]cstring {"VK_KHR_swapchain"};
 
-@(private)
-init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
-	vulkan_context: VulkanContext;
-	using vulkan_context;
+Vulkan_Context :: struct {
+	instance: vk.Instance,
+	debug_messenger_ext: vk.DebugUtilsMessengerEXT,
+	window_surface: vk.SurfaceKHR,
+	physical_device: vk.PhysicalDevice,
+	graphics_queue_family: u32,
+	present_queue_family: u32,
+	logical_device: vk.Device,
+	graphics_queue: vk.Queue,
+	present_queue: vk.Queue,
+}
 
-	// Load the the Vulkan instance proc addresses
-	{
+init_vulkan_context :: proc(window: glfw.WindowHandle) -> Vulkan_Context {
+	using vulkan_context: Vulkan_Context;
+
+	{ // Load the the Vulkan instance proc addresses
 		context.user_ptr = &instance;
 		set_proc_address : vk.SetProcAddressType : proc(p: rawptr, name: cstring) {
 			(cast(^rawptr)p)^ = glfw.GetInstanceProcAddress((^vk.Instance)(context.user_ptr)^, name);
@@ -62,8 +70,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 
 	debug_messenger_create_info: vk.DebugUtilsMessengerCreateInfoEXT;
 
-	// Create instance
-	{
+	{ // Create instance
 		required_extensions: [dynamic]cstring;
 		defer delete(required_extensions);
 
@@ -118,11 +125,10 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 	}
 
 	// Create surface
-	r :=  glfw.CreateWindowSurface(instance, window, nil, &window_surface);
+	r := glfw.CreateWindowSurface(instance, window, nil, &window_surface);
 	assert(r == .SUCCESS);
 
-	// Find suitable physical device
-	{
+	{ // Find suitable physical device
 		devices_count: u32;
 		vk.EnumeratePhysicalDevices(instance, &devices_count, nil);
 		devices := make([]vk.PhysicalDevice, devices_count);
@@ -201,8 +207,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> VulkanContext {
 		assert(physical_device != nil);
 	}
 
-	// Create logical device
-	{
+	{ // Create logical device
 		queue_create_infos: [dynamic]vk.DeviceQueueCreateInfo;
 		defer delete(queue_create_infos);
 
@@ -285,8 +290,7 @@ debug_message_callback : vk.ProcDebugUtilsMessengerCallbackEXT : proc "system" (
 	return false;
 }
 
-@(private)
-cleanup_vulkan_context :: proc(using vulkan_context: ^VulkanContext) {
+cleanup_vulkan_context :: proc(using vulkan_context: ^Vulkan_Context) {
 	vk.DestroyDevice(logical_device, nil);
 	vk.DestroySurfaceKHR(instance, window_surface, nil);
 

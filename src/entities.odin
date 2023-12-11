@@ -35,7 +35,7 @@ Inanimate_Entity :: struct {
 Cloud_Entity :: struct {
 	using entity: Entity,
 	status_effect: Cloud_Status_Effect,
-	particles: [dynamic]Game_Particle,
+	particles: [dynamic]Particle,
 	ramp_up_duration: f32,
 }
 
@@ -58,7 +58,7 @@ Rigid_Body_Entity :: struct {
 	sleep_duration: f32,
 
 	status_effect: Status_Effect,
-	particles: [dynamic]Game_Particle,
+	particles: [dynamic]Particle,
 	exploding_health: int,
 }
 
@@ -100,8 +100,8 @@ Car_Entity :: struct {
 	finished_slide: bool,
 	current_steer_angle: f32,
 	wheel_orientation: f32,
-	shock_particles: [dynamic]Game_Particle,
-	fire_particles: [dynamic]Game_Particle,
+	shock_particles: [dynamic]Particle,
+	fire_particles: [dynamic]Particle,
 	surface_type: Surface_Type,
 	left_segment: int,
 	right_segment: int,
@@ -135,7 +135,7 @@ Wheel :: struct {
 Oil_Slick_Entity :: struct {
 	using entity: Entity,
 	on_fire: bool,
-	fire_particles: [dynamic]Game_Particle,
+	fire_particles: [dynamic]Particle,
 	ramp_up_duration: f32,
 	desired_fire_particles: int,
 }
@@ -148,7 +148,7 @@ Bumper_Entity :: struct {
 
 Boost_Jet_Entity :: struct {
 	using entity: Entity,
-	particles: [dynamic]Game_Particle,
+	particles: [dynamic]Particle,
 }
 
 update_entity_transform :: proc(using entity: ^Entity) {

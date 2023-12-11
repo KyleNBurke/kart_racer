@@ -10,9 +10,7 @@ create_pipelines :: proc(
 	logical_device: vk.Device,
 	render_pass: vk.RenderPass,
 	extent: vk.Extent2D,
-	mesh_pipeline_layout,
-	particle_pipeline_layout,
-	text_pipeline_layout: vk.PipelineLayout,
+	mesh_pipeline_layout, particle_pipeline_layout: vk.PipelineLayout,
 ) -> [PIPELINES_COUNT]vk.Pipeline {
 	// Shared
 	create_shader_module :: proc(logical_device: vk.Device, file_name: string) -> vk.ShaderModule {
@@ -395,98 +393,6 @@ create_pipelines :: proc(
 		subpass = 0,
 	};
 
-	// Text
-	text_vert_module := create_shader_module(logical_device, "text.vert");
-	defer vk.DestroyShaderModule(logical_device, text_vert_module, nil);
-	text_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.VERTEX},
-		module = text_vert_module,
-		pName = shader_entry_point,
-	};
-
-	text_frag_module := create_shader_module(logical_device, "text.frag");
-	defer vk.DestroyShaderModule(logical_device, text_frag_module, nil);
-	text_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
-		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.FRAGMENT},
-		module = text_frag_module,
-		pName = shader_entry_point,
-	};
-
-	text_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo {text_vert_stage_create_info, text_frag_stage_create_info};
-
-	text_input_binding_description := vk.VertexInputBindingDescription {
-		binding = 0,
-		stride = 16,
-		inputRate = .VERTEX,
-	};
-
-	text_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
-		vk.VertexInputAttributeDescription { // Position
-			binding = 0,
-			location = 0,
-			format = .R32G32_SFLOAT,
-			offset = 0,
-		},
-		vk.VertexInputAttributeDescription { // Texture position
-			binding = 0,
-			location = 1,
-			format = .R32G32_SFLOAT,
-			offset = 8,
-		},
-	};
-
-	text_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
-		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-		pVertexBindingDescriptions = &text_input_binding_description,
-		vertexBindingDescriptionCount = 1,
-		pVertexAttributeDescriptions = &text_input_attribute_descriptions[0],
-		vertexAttributeDescriptionCount = len(text_input_attribute_descriptions),
-	};
-
-	text_depth_stencil_state_create_info := vk.PipelineDepthStencilStateCreateInfo {
-		sType = .PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-		depthTestEnable = false,
-		depthWriteEnable = false,
-		depthBoundsTestEnable = false,
-		stencilTestEnable = false,
-	};
-
-	text_color_blend_attachment_state := vk.PipelineColorBlendAttachmentState {
-		colorWriteMask = {.R, .G, .B, .A},
-		blendEnable = true,
-		srcColorBlendFactor = .SRC_ALPHA,
-		dstColorBlendFactor = .ONE_MINUS_SRC_ALPHA,
-		colorBlendOp = .ADD,
-		srcAlphaBlendFactor = .ONE,
-		dstAlphaBlendFactor = .ZERO,
-		alphaBlendOp = .ADD,
-	};
-
-	text_color_blend_state_create_info := vk.PipelineColorBlendStateCreateInfo {
-		sType = .PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		logicOpEnable = false,
-		pAttachments = &text_color_blend_attachment_state,
-		attachmentCount = 1,
-	};
-
-	text_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
-		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
-		pStages = &text_stage_create_infos[0],
-		stageCount = len(text_stage_create_infos),
-		pVertexInputState = &text_vertex_input_state_create_info,
-		pInputAssemblyState = &triangle_input_assembly_state_create_info,
-		pViewportState = &viewport_state_create_info,
-		pRasterizationState = &triangle_rasterization_state_create_info,
-		pMultisampleState = &multisample_state_create_info,
-		pDepthStencilState = &text_depth_stencil_state_create_info,
-		pColorBlendState = &text_color_blend_state_create_info,
-		layout = text_pipeline_layout,
-		renderPass = render_pass,
-		subpass = 0,
-	};
-
 	// Create pipelines
 	pipeline_create_infos := [PIPELINES_COUNT]vk.GraphicsPipelineCreateInfo {
 		line_pipeline_create_info,
@@ -494,7 +400,6 @@ create_pipelines :: proc(
 		lambert_pipeline_create_info,
 		lambert_two_sided_pipeline_create_info,
 		particle_pipeline_create_info,
-		text_pipeline_create_info,
 	};
 
 	pipelines: [PIPELINES_COUNT]vk.Pipeline;

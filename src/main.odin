@@ -15,10 +15,7 @@ Game :: struct {
 	gamepad: Gamepad,
 	vulkan: Vulkan,
 	camera: Camera,
-	font: Font,
-	texts: [dynamic]Text,
 	runtime_assets: Runtime_Assets,
-	frame_metrics: Frame_Metrics,
 	single_stepping: bool,
 	step: bool,
 	scene: Scene,
@@ -93,13 +90,7 @@ init :: proc(game: ^Game) {
 	
 	camera_aspect := f32(game.vulkan.extent.width) / f32(game.vulkan.extent.height);
 	game.camera = init_camera(camera_aspect, 75.0, game.window);
-
-	content_scale_x, _ := glfw.GetWindowContentScale(game.window);
-	game.font = init_font("roboto", 20, content_scale_x);
-	submit_font(&game.vulkan, &game.font);
-
 	game.gamepad.deadzone_radius = 0.25;
-	game.frame_metrics = init_frame_metrics(&game.font, &game.texts);
 
 	ground_grid_init(&game.scene.ground_grid);
 
@@ -173,12 +164,13 @@ run :: proc(game: ^Game) {
 			updates += 1;
 		}
 
-		suboptimal_swapchain = begin_render_frame(&game.vulkan, &game.camera, &game.texts);
-
-		if !suboptimal_swapchain {
-			immediate_mode_render_game(game);
-			suboptimal_swapchain = end_render_frame(&game.vulkan);
+		camera := &game.camera;
+		if begin_render_frame(&game.vulkan, camera.projection, camera.transform) {
+			continue;
 		}
+
+		render_game(game);
+		suboptimal_swapchain = end_render_frame(&game.vulkan);
 	}
 }
 
@@ -222,8 +214,6 @@ update :: proc(game: ^Game, dt: f32) {
 		move_camera(&game.camera, &game.gamepad, game.window, game.scene.player, dt);
 	}
 
-	update_frame_metrics(&game.frame_metrics, &game.font, game.texts[:], dt);
-
 	scene := &game.scene;
 	position_and_orient_car_wheels(scene.all_players[:], dt);
 	update_shock_entity_particles(scene.shock_entities[:], dt);
@@ -245,10 +235,12 @@ update :: proc(game: ^Game, dt: f32) {
 	free_all(context.temp_allocator);
 }
 
-immediate_mode_render_game :: proc(game: ^Game) {
+render_game :: proc(game: ^Game) {
 	vulkan := &game.vulkan;
-	scene := &game.scene;
 
+	draw_entities(vulkan);
+
+	scene := &game.scene;
 	draw_shock_entity_particles(vulkan, scene.shock_entities[:]);
 	draw_fire_entity_particles(vulkan, scene.fire_entities[:]);
 	draw_car_status_effects(vulkan, game.scene.player);
@@ -258,14 +250,12 @@ immediate_mode_render_game :: proc(game: ^Game) {
 }
 
 cleanup :: proc(game: ^Game) {
-	cleanup_vulkan(&game.vulkan);
+	vulkan_cleanup(&game.vulkan);
 	glfw.DestroyWindow(game.window);
 	glfw.Terminate();
 }
 
 debug_cleanup :: proc(game: ^Game) {
-	cleanup_font(&game.font);
-
 	scene := &game.scene;
 	ground_grid_cleanup(&scene.ground_grid);
 	entity_grid_cleanup(&scene.entity_grid);
@@ -274,10 +264,6 @@ debug_cleanup :: proc(game: ^Game) {
 	cleanup_islands(&scene.islands);
 	cleanup_runtime_assets(&game.runtime_assets);
 	ai_debug_cleanup(&scene.ai);
-
-	for &text in game.texts {
-		cleanup_text(&text);
-	}
 	
 	cleanup_entities_geos();
 
@@ -288,7 +274,6 @@ debug_cleanup :: proc(game: ^Game) {
 	delete(scene.status_effect_clouds);
 	delete(scene.shock_entities);
 	delete(scene.fire_entities);
-	delete(game.texts);
 	delete(scene.awake_rigid_bodies);
 	delete(scene.contact_helpers);
 	delete(scene.bumpers);
