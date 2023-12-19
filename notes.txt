@@ -1,6 +1,5 @@
-Git commands
-- Remove last commit but keep changes: `git reset HEAD~1`
-- Checkout to remote branch: `git fetch` then `git switch <branch>`
+Documentation
+- #todo: Vulkan bloom explanation
 
 Ideas
 - Boost
@@ -97,6 +96,9 @@ Todo
 - Immediate mode rendering for the helpers?
 	- Would allow us to remove the .KeepRender shit I think?
 	- Would really cleanup the AI helper rendering, there is state we must transition over the main thread so we can do the entity/geometry creation there.
+	- For the helpers at least, we could totally make immediate mode procs like draw_line(start, end), draw_box_helper(pos, size), etc...
+- Immediate mode particle rendering
+	- Why did I design the particle rendering system so that each particle is an individual draw call? We should 100% instance those. I guess I just wanted to do what was easy, with push constants.
 - [laptop] AI framerate?
 - [laptop] Reorganize the math2 + other util stuff into subfiles/packages or something?
 - Save last get call from get_geometry, then check it in make_geometry...()?
@@ -126,37 +128,7 @@ OPERATION FUN FUCKING TRACK
 	- Skid marks when drifting
 - Shock barrel
 	- The feeling when hitting it. It's too light.
-	- Visual indication for when it's going to explode. Would like to do bloom but let's stay focused on making a fun fucking track
+	- [done] Visual indication for when it's going to explode. Would like to do bloom but let's stay focused on making a fun fucking track.
 	- Car control logic when shocked.
 - Crates
 	- Like the cars should be more like a push forward than a bounce back
-
-Rendering redo:
-rend.begin_render();
-
-for geometry in geometies {
-	rend.bind_pipeline(geometry.pipeline, geometry.indices, geometry.attributes);
-
-	for entity in geometry.entities {
-		rend.include_entity(entity.global_matrix);
-	}
-
-	rend.draw();
-
-	if emissive, ok := geometry.emissive.? ok {
-		rend.bind_pipeline(.Emissive, emissive.indices, emissive.attributes);
-
-		for entity in geometry.entities {
-			color := ... entity.exploding_health ..;
-			rend.include_entity_emissive(color);
-		}
-
-		rend.draw();
-	}
-}
-
-rend.draw_particle(pos, size, color);
-
-rend.draw_text(...);
-
-rend.end_render();

@@ -6,6 +6,7 @@ import "core:math/rand";
 import "math2";
 
 SHOCK_PARTICLE_MAX_OFFSET :: 1.4;
+SHOCK_BARREL_EMISSIVE_PULSE_FREQ :: 0.4;
 
 Particle :: struct {
 	using render_particle: Render_Particle,
@@ -30,9 +31,25 @@ init_fire_particles :: proc(rigid_body: ^Rigid_Body_Entity) {
 	}
 }
 
+import "core:fmt";
+
 update_shock_entity_particles :: proc(shock_entities: []Entity_Lookup, dt: f32) {
 	for lookup in shock_entities {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
+
+		// todo: This is not related to particles. We may want to rename some stuff.
+		if rigid_body.status_effect == .ExplodingShock && rigid_body.exploding_health == 1 {
+			color: [3]f32;
+
+			if rigid_body.emissive_pulse_duration < SHOCK_BARREL_EMISSIVE_PULSE_FREQ / 2 {
+				color = { 1, 0.2, 0.2 };
+			} else {
+				color = { 0.5, 0.2, 0.2 };
+			}
+
+			rigid_body.emissive_color = color;
+			rigid_body.emissive_pulse_duration = math.mod_f32(rigid_body.emissive_pulse_duration + dt, SHOCK_BARREL_EMISSIVE_PULSE_FREQ);
+		}
 
 		for particle in &rigid_body.particles {
 			dist := linalg.abs(particle.position - rigid_body.position);

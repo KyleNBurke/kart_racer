@@ -60,6 +60,8 @@ Rigid_Body_Entity :: struct {
 	status_effect: Status_Effect,
 	particles: [dynamic]Particle,
 	exploding_health: int,
+	emissive_color: [3]f32,
+	emissive_pulse_duration: f32,
 }
 
 Status_Effect :: enum {

@@ -185,6 +185,11 @@ cleanup_entities_geos :: proc() {
 		delete(geometry.entity_lookups);
 		delete(geometry.indices);
 		delete(geometry.attributes);
+
+		if emissive, ok := geometry.emissive.?; ok {
+			delete(emissive.indices);
+			delete(emissive.attributes);
+		}
 	}
 
 	delete(entities_geos.geometries);

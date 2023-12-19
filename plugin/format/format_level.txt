@@ -15,10 +15,15 @@ Ground collision meshes count: u32
 
 Geometries count: u32
 	name:              string
-	indices count:     u32
-	indices:          [u16]
-	attributes count:  u32
-	attributes        [f32]
+	non emissive indices count:     u32
+	non emissive indices:          [u16]
+	non emissive attributes count:  u32
+	non emissive attributes        [f32]
+	emissive indices count:         u32
+	emissive indices:              [u16]
+	emissive attributes count:      u23
+	emissive attributes:           [f32]
+	position check:                 u32
 	...
 
 Inanimate entities count:  u32

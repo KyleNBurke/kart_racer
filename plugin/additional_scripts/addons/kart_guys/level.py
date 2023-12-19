@@ -2,7 +2,7 @@ from bpy.types import Context, Depsgraph, Object, Mesh, Curve, Spline
 from . import util
 from .util import WObject
 
-VERSION = 7
+VERSION = 8
 
 def export(operator, context: Context):
 	depsgraph: Depsgraph = context.evaluated_depsgraph_get()
@@ -144,8 +144,9 @@ def export_geometries(depsgraph: Depsgraph, graph, file):
 	for w_object in w_objects:
 		object: Object = w_object.object
 		util.write_string(file, object.data.name_full)
-		indices, attributes = util.calculate_indices_local_positions_normals_colors(depsgraph, object)
+		indices, attributes, emissive_indices, emissive_attributes = util.calculate_indices_local_positions_normals_colors_new_2(depsgraph, object)
 		util.write_indices_attributes(file, indices, attributes)
+		util.write_indices_attributes(file, emissive_indices, emissive_attributes)
 		util.write_cursor_check(file)
 
 	return mesh_name_to_index_map

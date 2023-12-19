@@ -6,57 +6,59 @@ import "core:strings";
 import "core:c/libc";
 import vk "vendor:vulkan";
 
-create_pipelines :: proc(
-	logical_device: vk.Device,
-	render_pass: vk.RenderPass,
-	extent: vk.Extent2D,
-	mesh_pipeline_layout, particle_pipeline_layout: vk.PipelineLayout,
-) -> [PIPELINES_COUNT]vk.Pipeline {
-	// Shared
-	create_shader_module :: proc(logical_device: vk.Device, file_name: string) -> vk.ShaderModule {
-		cmp_path := fmt.tprintf("build/shaders/%v.spv", file_name);
-		
-		when ODIN_DEBUG {
-			src_path := fmt.tprintf("src/shaders/%v", file_name);
-			src_time, src_error := os.last_write_time_by_name(src_path);
-			assert(src_error == os.ERROR_NONE);
+create_shader_module :: proc(logical_device: vk.Device, file_name: string) -> vk.ShaderModule {
+	cmp_path := fmt.tprintf("build/shaders/%v.spv", file_name);
+	
+	when ODIN_DEBUG {
+		src_path := fmt.tprintf("src/shaders/%v", file_name);
+		src_time, src_error := os.last_write_time_by_name(src_path);
+		assert(src_error == os.ERROR_NONE);
 
-			cmp_time, cmp_error := os.last_write_time_by_name(cmp_path);
+		cmp_time, cmp_error := os.last_write_time_by_name(cmp_path);
 
-			if cmp_error == os.ERROR_PATH_NOT_FOUND {
-				e := os.make_directory("build/shaders");
-				assert(e == os.ERROR_NONE);
-			}
-
-			if cmp_error == os.ERROR_PATH_NOT_FOUND || cmp_error == os.ERROR_FILE_NOT_FOUND || src_time > cmp_time {
-				command := fmt.tprintf("glslc %v -o %v", src_path, cmp_path);
-				command_cstring := strings.clone_to_cstring(command);
-				defer delete(command_cstring);
-			
-				r := libc.system(command_cstring);
-				assert(r == 0);
-			
-				fmt.printf("Compiled shader %v\n", cmp_path);
-			}
+		if cmp_error == os.ERROR_PATH_NOT_FOUND {
+			e := os.make_directory("build/shaders");
+			assert(e == os.ERROR_NONE);
 		}
 
-		code, success := os.read_entire_file_from_filename(cmp_path);
-		defer delete(code);
-		assert(success);
+		if cmp_error == os.ERROR_PATH_NOT_FOUND || cmp_error == os.ERROR_FILE_NOT_FOUND || src_time > cmp_time {
+			command := fmt.tprintf("glslc %v -o %v", src_path, cmp_path);
+			command_cstring := strings.clone_to_cstring(command);
+			defer delete(command_cstring);
 		
-		create_info := vk.ShaderModuleCreateInfo {
-			sType = .SHADER_MODULE_CREATE_INFO,
-			pCode = cast(^u32) raw_data(code),
-			codeSize = len(code),
-		};
-
-		shader_module: vk.ShaderModule;
-		r := vk.CreateShaderModule(logical_device, &create_info, nil, &shader_module);
-		assert(r == .SUCCESS);
-
-		return shader_module;
+			assert(libc.system(command_cstring) == 0);
+		
+			fmt.printf("Compiled shader %v\n", cmp_path);
+		}
 	}
+
+	code, success := os.read_entire_file_from_filename(cmp_path);
+	defer delete(code);
+	assert(success);
 	
+	create_info := vk.ShaderModuleCreateInfo {
+		sType = .SHADER_MODULE_CREATE_INFO,
+		pCode = cast(^u32) raw_data(code),
+		codeSize = len(code),
+	};
+
+	shader_module: vk.ShaderModule;
+	assert(vk.CreateShaderModule(logical_device, &create_info, nil, &shader_module) == .SUCCESS);
+
+	return shader_module;
+}
+
+Pipelines :: struct {
+	line, basic, lambert, lambert_two_sided, bloom_onscreen_color, bloom_offscreen_color, particle: vk.Pipeline
+};
+
+create_pipelines :: proc(
+	logical_device: vk.Device,
+	render_pass, bloom_offscreen_render_pass: vk.RenderPass,
+	extent: vk.Extent2D,
+	mesh_pipeline_layout, particle_pipeline_layout, bloom_color_pipeline_layout: vk.PipelineLayout,
+) -> Pipelines {
+	// Shared
 	shader_entry_point: cstring = "main";
 
 	viewport := vk.Viewport {
@@ -352,12 +354,88 @@ create_pipelines :: proc(
 		subpass = 0,
 	};
 
+	// Bloom color
+	bloom_color_vert_module := create_shader_module(logical_device, "bloom_color.vert");
+	defer vk.DestroyShaderModule(logical_device, bloom_color_vert_module, nil);
+	bloom_color_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
+		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage = { .VERTEX },
+		module = bloom_color_vert_module,
+		pName = shader_entry_point,
+	};
+
+	bloom_color_frag_module := create_shader_module(logical_device, "bloom_color.frag");
+	defer vk.DestroyShaderModule(logical_device, bloom_color_frag_module, nil);
+	bloom_color_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
+		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
+		stage = { .FRAGMENT },
+		module = bloom_color_frag_module,
+		pName = shader_entry_point,
+	};
+
+	bloom_color_stage_create_infos := [?]vk.PipelineShaderStageCreateInfo { bloom_color_vert_stage_create_info, bloom_color_frag_stage_create_info };
+
+	bloom_color_input_binding_description := vk.VertexInputBindingDescription {
+		binding = 0,
+		stride = 12,
+		inputRate = .VERTEX,
+	};
+
+	bloom_color_input_attribute_descriptions := [?]vk.VertexInputAttributeDescription {
+		vk.VertexInputAttributeDescription { // Position
+			binding = 0,
+			location = 0,
+			format = .R32G32B32_SFLOAT,
+			offset = 0,
+		},
+	};
+
+	bloom_color_vertex_input_state_create_info := vk.PipelineVertexInputStateCreateInfo {
+		sType = .PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+		pVertexBindingDescriptions = &bloom_color_input_binding_description,
+		vertexBindingDescriptionCount = 1,
+		pVertexAttributeDescriptions = &bloom_color_input_attribute_descriptions[0],
+		vertexAttributeDescriptionCount = len(bloom_color_input_attribute_descriptions),
+	};
+
+	bloom_onscreen_color_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
+		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
+		pStages = &bloom_color_stage_create_infos[0],
+		stageCount = len(bloom_color_stage_create_infos),
+		pVertexInputState = &bloom_color_vertex_input_state_create_info,
+		pInputAssemblyState = &triangle_input_assembly_state_create_info,
+		pViewportState = &viewport_state_create_info,
+		pRasterizationState = &triangle_rasterization_state_create_info,
+		pMultisampleState = &multisample_state_create_info,
+		pDepthStencilState = &depth_stencil_state_create_info,
+		pColorBlendState = &color_blend_state_create_info,
+		layout = bloom_color_pipeline_layout,
+		renderPass = render_pass,
+		subpass = 0,
+	};
+
+	bloom_offscreen_color_pipeline_create_info := vk.GraphicsPipelineCreateInfo {
+		sType = .GRAPHICS_PIPELINE_CREATE_INFO,
+		pStages = &bloom_color_stage_create_infos[0],
+		stageCount = len(bloom_color_stage_create_infos),
+		pVertexInputState = &bloom_color_vertex_input_state_create_info,
+		pInputAssemblyState = &triangle_input_assembly_state_create_info,
+		pViewportState = &viewport_state_create_info,
+		pRasterizationState = &triangle_rasterization_state_create_info,
+		pMultisampleState = &multisample_state_create_info,
+		pDepthStencilState = &depth_stencil_state_create_info,
+		pColorBlendState = &color_blend_state_create_info,
+		layout = bloom_color_pipeline_layout,
+		renderPass = bloom_offscreen_render_pass,
+		subpass = 0,
+	};
+
 	// Particle
 	particle_vert_module := create_shader_module(logical_device, "particle.vert");
 	defer vk.DestroyShaderModule(logical_device, particle_vert_module, nil);
 	particle_vert_stage_create_info := vk.PipelineShaderStageCreateInfo {
 		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.VERTEX},
+		stage = { .VERTEX },
 		module = particle_vert_module,
 		pName = shader_entry_point,
 	};
@@ -366,7 +444,7 @@ create_pipelines :: proc(
 	defer vk.DestroyShaderModule(logical_device, particle_frag_module, nil);
 	particle_frag_stage_create_info := vk.PipelineShaderStageCreateInfo {
 		sType = .PIPELINE_SHADER_STAGE_CREATE_INFO,
-		stage = {.FRAGMENT},
+		stage = { .FRAGMENT },
 		module = particle_frag_module,
 		pName = shader_entry_point,
 	};
@@ -394,17 +472,22 @@ create_pipelines :: proc(
 	};
 
 	// Create pipelines
+	// This must match the number of fields in the Pipelines struct for the transmute to work. The order of the pipeline create infos
+	// must also be in the same order as the struct fields.
+	PIPELINES_COUNT :: 7;
+
 	pipeline_create_infos := [PIPELINES_COUNT]vk.GraphicsPipelineCreateInfo {
 		line_pipeline_create_info,
 		basic_pipeline_create_info,
 		lambert_pipeline_create_info,
 		lambert_two_sided_pipeline_create_info,
+		bloom_onscreen_color_pipeline_create_info,
+		bloom_offscreen_color_pipeline_create_info,
 		particle_pipeline_create_info,
 	};
 
 	pipelines: [PIPELINES_COUNT]vk.Pipeline;
-	r := vk.CreateGraphicsPipelines(logical_device, {}, len(pipeline_create_infos), &pipeline_create_infos[0], nil, &pipelines[0]);
-	assert(r == .SUCCESS);
+	assert(vk.CreateGraphicsPipelines(logical_device, {}, len(pipeline_create_infos), &pipeline_create_infos[0], nil, &pipelines[0]) == .SUCCESS);
 
-	return pipelines;
+	return transmute(Pipelines) pipelines;
 }

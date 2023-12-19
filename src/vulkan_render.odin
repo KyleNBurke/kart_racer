@@ -50,6 +50,49 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, projection_mat, transform_mat:
 		vk.UnmapMemory(logical_device, per_frame_buffer_memory);
 	}
 
+	primary_command_buffer := primary_command_buffers[logical_frame_index];
+
+	{ // Begin primary command buffer
+		command_buffer_begin_info := vk.CommandBufferBeginInfo {
+			sType = .COMMAND_BUFFER_BEGIN_INFO,
+			flags = {.ONE_TIME_SUBMIT},
+		};
+
+		assert(vk.BeginCommandBuffer(primary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
+	}
+
+	{ // Begin the offscreen bloom render pass
+		/*
+		clear_values := [2]vk.ClearValue {
+			vk.ClearValue {
+				color = vk.ClearColorValue {
+					float32 = [4]f32 { 0, 0, 0, 1 },
+				},
+			},
+			vk.ClearValue {
+				depthStencil = vk.ClearDepthStencilValue {
+					depth = 1,
+					stencil = 0,
+				},
+			},
+		};
+
+		render_pass_begin_info := vk.RenderPassBeginInfo {
+			sType = .RENDER_PASS_BEGIN_INFO,
+			renderPass = mesh_resources.bloom_render_pass,
+			framebuffer = bloom_resources.frame_buffers[0].framebuffer,
+			renderArea = vk.Rect2D {
+				vk.Offset2D { 0, 0 },
+				vk.Extent2D { extent.width, extent.height },
+			},
+			pClearValues = &clear_values[0],
+			clearValueCount = len(clear_values),
+		};
+
+		vk.CmdBeginRenderPass(primary_command_buffer, &render_pass_begin_info, .SECONDARY_COMMAND_BUFFERS);
+		*/
+	}
+
 	{ // Begin secondary command buffers and bind rendering resources
 		command_buffer_inheritance_info := vk.CommandBufferInheritanceInfo {
 			sType = .COMMAND_BUFFER_INHERITANCE_INFO,
@@ -66,42 +109,51 @@ begin_render_frame :: proc(using vulkan: ^Vulkan, projection_mat, transform_mat:
 
 		frame_descriptor_set := frame_resources.descriptor_sets[logical_frame_index];
 		mesh_instance_descriptor_set := mesh_resources.instance_descriptor_sets[logical_frame_index];
+		bloom_emissive_color_descriptor_set := bloom_resources.descriptor_sets[logical_frame_index];
 		particle_instance_descriptor_set := particle_resources.instance_descriptor_sets[logical_frame_index];
 
 		// Line
-		line_secondary_command_buffer := mesh_resources.line_secondary_command_buffers[logical_frame_index];
-		assert(vk.BeginCommandBuffer(line_secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
-		vk.CmdBindPipeline(line_secondary_command_buffer, .GRAPHICS, mesh_resources.line_pipeline);
-		vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
-		vk.CmdBindDescriptorSets(line_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
+		secondary_command_buffer := mesh_resources.line_secondary_command_buffers[logical_frame_index];
+		assert(vk.BeginCommandBuffer(secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
+		vk.CmdBindPipeline(secondary_command_buffer, .GRAPHICS, mesh_resources.line_pipeline);
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
 
 		// Basic
-		basic_secondary_command_buffer := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
-		assert(vk.BeginCommandBuffer(basic_secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
-		vk.CmdBindPipeline(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.basic_pipeline);
-		vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
-		vk.CmdBindDescriptorSets(basic_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
+		secondary_command_buffer = mesh_resources.basic_secondary_command_buffers[logical_frame_index];
+		assert(vk.BeginCommandBuffer(secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
+		vk.CmdBindPipeline(secondary_command_buffer, .GRAPHICS, mesh_resources.basic_pipeline);
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
 
 		// Lambert
-		lambert_secondary_command_buffer := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
-		assert(vk.BeginCommandBuffer(lambert_secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
-		vk.CmdBindPipeline(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.lambert_pipeline);
-		vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
-		vk.CmdBindDescriptorSets(lambert_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
+		secondary_command_buffer = mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
+		assert(vk.BeginCommandBuffer(secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
+		vk.CmdBindPipeline(secondary_command_buffer, .GRAPHICS, mesh_resources.lambert_pipeline);
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
 
 		// Lambert two sided
-		lambert_two_sided_secondary_command_buffer := mesh_resources.lambert_two_sided_secondary_command_buffers[logical_frame_index];
-		assert(vk.BeginCommandBuffer(lambert_two_sided_secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
-		vk.CmdBindPipeline(lambert_two_sided_secondary_command_buffer, .GRAPHICS, mesh_resources.lambert_two_sided_pipeline);
-		vk.CmdBindDescriptorSets(lambert_two_sided_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
-		vk.CmdBindDescriptorSets(lambert_two_sided_secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
+		secondary_command_buffer = mesh_resources.lambert_two_sided_secondary_command_buffers[logical_frame_index];
+		assert(vk.BeginCommandBuffer(secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
+		vk.CmdBindPipeline(secondary_command_buffer, .GRAPHICS, mesh_resources.lambert_two_sided_pipeline);
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, mesh_resources.pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
+
+		// Bloom onscreen color
+		secondary_command_buffer = bloom_resources.onscreen_color_secondary_command_buffers[logical_frame_index];
+		assert(vk.BeginCommandBuffer(secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
+		vk.CmdBindPipeline(secondary_command_buffer, .GRAPHICS, bloom_resources.onscreen_color_pipeline);
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, bloom_resources.color_pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, bloom_resources.color_pipeline_layout, 1, 1, &mesh_instance_descriptor_set, 0, {});
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, bloom_resources.color_pipeline_layout, 2, 1, &bloom_emissive_color_descriptor_set, 0, {});
 
 		// Particle
-		particle_secondary_command_buffer := particle_resources.secondary_command_buffers[logical_frame_index];
-		assert(vk.BeginCommandBuffer(particle_secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
-		vk.CmdBindPipeline(particle_secondary_command_buffer, .GRAPHICS, particle_resources.pipeline);
-		vk.CmdBindDescriptorSets(particle_secondary_command_buffer, .GRAPHICS, particle_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
-		vk.CmdBindDescriptorSets(particle_secondary_command_buffer, .GRAPHICS, particle_resources.pipeline_layout, 1, 1, &particle_instance_descriptor_set, 0, {});
+		secondary_command_buffer = particle_resources.secondary_command_buffers[logical_frame_index];
+		assert(vk.BeginCommandBuffer(secondary_command_buffer, &command_buffer_begin_info) == .SUCCESS);
+		vk.CmdBindPipeline(secondary_command_buffer, .GRAPHICS, particle_resources.pipeline);
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, particle_resources.pipeline_layout, 0, 1, &frame_descriptor_set, 0, {});
+		vk.CmdBindDescriptorSets(secondary_command_buffer, .GRAPHICS, particle_resources.pipeline_layout, 1, 1, &particle_instance_descriptor_set, 0, {});
 	}
 
 	{ // Reset particle running variables
@@ -116,17 +168,81 @@ end_render_frame :: proc(using vulkan: ^Vulkan) -> bool {
 	logical_device := vulkan_context.logical_device;
 
 	{ // End secondary command buffers
-		line_secondary_command_buffer              := mesh_resources.line_secondary_command_buffers[logical_frame_index];
-		basic_secondary_command_buffer             := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
-		lambert_secondary_command_buffer           := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
-		lambert_two_sided_secondary_command_buffer := mesh_resources.lambert_two_sided_secondary_command_buffers[logical_frame_index];
-		particle_secondary_command_buffer          := particle_resources.secondary_command_buffers[logical_frame_index];
+		line_sbc                 := mesh_resources.line_secondary_command_buffers[logical_frame_index];
+		basic_sbc                := mesh_resources.basic_secondary_command_buffers[logical_frame_index];
+		lambert_sbc              := mesh_resources.lambert_secondary_command_buffers[logical_frame_index];
+		lambert_two_sided_sbc    := mesh_resources.lambert_two_sided_secondary_command_buffers[logical_frame_index];
+		bloom_onscreen_color_sbc := bloom_resources.onscreen_color_secondary_command_buffers[logical_frame_index];
+		particle_sbc             := particle_resources.secondary_command_buffers[logical_frame_index];
 
-		assert(vk.EndCommandBuffer(line_secondary_command_buffer) == .SUCCESS);
-		assert(vk.EndCommandBuffer(basic_secondary_command_buffer) == .SUCCESS);
-		assert(vk.EndCommandBuffer(lambert_secondary_command_buffer) == .SUCCESS);
-		assert(vk.EndCommandBuffer(lambert_two_sided_secondary_command_buffer) == .SUCCESS);
-		assert(vk.EndCommandBuffer(particle_secondary_command_buffer) == .SUCCESS);
+		assert(vk.EndCommandBuffer(line_sbc)                 == .SUCCESS);
+		assert(vk.EndCommandBuffer(basic_sbc)                == .SUCCESS);
+		assert(vk.EndCommandBuffer(lambert_sbc)              == .SUCCESS);
+		assert(vk.EndCommandBuffer(lambert_two_sided_sbc)    == .SUCCESS);
+		assert(vk.EndCommandBuffer(bloom_onscreen_color_sbc) == .SUCCESS);
+		assert(vk.EndCommandBuffer(particle_sbc)             == .SUCCESS);
+	}
+
+	{ // End render pass for the offscreen bloom color
+
+	}
+
+	{ // Record another render pass for the first blur
+
+	}
+	
+	primary_command_buffer := primary_command_buffers[logical_frame_index];
+
+	{ // Start main render pass
+		clear_values := [2]vk.ClearValue {
+			vk.ClearValue {
+				color = vk.ClearColorValue {
+					float32 = [4]f32 { 0, 0, 0, 1 },
+				},
+			},
+			vk.ClearValue {
+				depthStencil = vk.ClearDepthStencilValue {
+					depth = 1,
+					stencil = 0,
+				},
+			},
+		};
+
+		render_pass_begin_info := vk.RenderPassBeginInfo {
+			sType = .RENDER_PASS_BEGIN_INFO,
+			renderPass = render_pass,
+			framebuffer = swapchain_frames[image_index].framebuffer,
+			renderArea = vk.Rect2D {
+				vk.Offset2D { 0, 0 },
+				vk.Extent2D { extent.width, extent.height },
+			},
+			pClearValues = &clear_values[0],
+			clearValueCount = len(clear_values),
+		};
+
+		vk.CmdBeginRenderPass(primary_command_buffer, &render_pass_begin_info, .SECONDARY_COMMAND_BUFFERS);
+	}
+
+	{ // Execute secondary command buffers
+		secondary_command_buffers := [?]vk.CommandBuffer {
+			mesh_resources.line_secondary_command_buffers[logical_frame_index],
+			mesh_resources.basic_secondary_command_buffers[logical_frame_index],
+			mesh_resources.lambert_secondary_command_buffers[logical_frame_index],
+			mesh_resources.lambert_two_sided_secondary_command_buffers[logical_frame_index],
+			bloom_resources.onscreen_color_secondary_command_buffers[logical_frame_index],
+			particle_resources.secondary_command_buffers[logical_frame_index],
+		};
+
+		vk.CmdExecuteCommands(primary_command_buffer, cast(u32) len(secondary_command_buffers), &secondary_command_buffers[0]);
+	}
+
+	{ // Second blur
+	
+	}
+
+	{ // End main render pass
+		vk.CmdEndRenderPass(primary_command_buffer);
+		assert(vk.EndCommandBuffer(primary_command_buffer) == .SUCCESS);
 	}
 
 	{ // Flush and unmap per instance buffer
@@ -141,57 +257,6 @@ end_render_frame :: proc(using vulkan: ^Vulkan) -> bool {
 	
 		assert(vk.FlushMappedMemoryRanges(logical_device, 1, &range) == .SUCCESS);
 		vk.UnmapMemory(logical_device, per_instance_buffer_memory);
-	}
-	
-	primary_command_buffer := primary_command_buffers[logical_frame_index];
-
-	{ // Record primary command buffer
-		command_buffer_begin_info := vk.CommandBufferBeginInfo {
-			sType = .COMMAND_BUFFER_BEGIN_INFO,
-			flags = {.ONE_TIME_SUBMIT},
-		};
-
-		clear_values := [2]vk.ClearValue {
-			vk.ClearValue {
-				color = vk.ClearColorValue {
-					float32 = [4]f32 {0.0, 0.0, 0.0, 1.0},
-				},
-			},
-			vk.ClearValue {
-				depthStencil = vk.ClearDepthStencilValue {
-					depth = 1.0,
-					stencil = 0,
-				},
-			},
-		};
-
-		framebuffer := swapchain_frames[image_index].framebuffer;
-
-		render_pass_begin_info := vk.RenderPassBeginInfo {
-			sType = .RENDER_PASS_BEGIN_INFO,
-			renderPass = render_pass,
-			framebuffer = framebuffer,
-			renderArea = vk.Rect2D {
-				vk.Offset2D { 0, 0 },
-				vk.Extent2D { extent.width, extent.height },
-			},
-			pClearValues = &clear_values[0],
-			clearValueCount = len(clear_values),
-		};
-
-		secondary_command_buffers := [?]vk.CommandBuffer {
-			mesh_resources.line_secondary_command_buffers[logical_frame_index],
-			mesh_resources.basic_secondary_command_buffers[logical_frame_index],
-			mesh_resources.lambert_secondary_command_buffers[logical_frame_index],
-			mesh_resources.lambert_two_sided_secondary_command_buffers[logical_frame_index],
-			particle_resources.secondary_command_buffers[logical_frame_index],
-		};
-
-		assert(vk.BeginCommandBuffer(primary_command_buffers[logical_frame_index], &command_buffer_begin_info) == .SUCCESS);
-		vk.CmdBeginRenderPass(primary_command_buffer, &render_pass_begin_info, .SECONDARY_COMMAND_BUFFERS);
-		vk.CmdExecuteCommands(primary_command_buffer, cast(u32) len(secondary_command_buffers), &secondary_command_buffers[0]);
-		vk.CmdEndRenderPass(primary_command_buffer);
-		assert(vk.EndCommandBuffer(primary_command_buffer) == .SUCCESS);
 	}
 
 	{ // Wait for image to be available then submit primary command buffer
@@ -239,14 +304,20 @@ end_render_frame :: proc(using vulkan: ^Vulkan) -> bool {
 draw_entities :: proc(using vulkan: ^Vulkan) {
 	geometry_offset := 0;
 	instance_offset := mesh_resources.per_instance_buffer_instance_block_offset;
+	emissive_instance_offset := bloom_resources.array_offset;
 	per_instance_buffer := frame_resources.per_instance_buffers[logical_frame_index];
 	per_instance_buffer_ptr := frame_resources.per_instance_buffer_ptr;
 
 	first_instance: u32 = 0;
+	emissive_first_instance: u32 = 0;
 
 	for &geometry in entities_geos.geometries {
 		if geometry.free || (len(geometry.entity_lookups) == 0 && geometry.on_no_entities == .Keep) {
 			continue;
+		}
+
+		when ODIN_DEBUG {
+			fmt.assertf(len(geometry.indices) > 0, "Could not render geometry '%s', it has no indices", geometry.name);
 		}
 
 		index_array_size := size_of(u16) * len(geometry.indices);
@@ -255,13 +326,6 @@ draw_entities :: proc(using vulkan: ^Vulkan) {
 		index_array_offset := geometry_offset;
 		attribute_array_offset := mem.align_forward_int(index_array_offset + index_array_size, 4);
 		geometry_offset = attribute_array_offset + attribute_array_size;
-
-		when ODIN_DEBUG {
-			assert(geometry_offset <= instance_offset);
-			assert(first_instance <= MAX_ENTITIES);
-
-			assert(len(geometry.indices) > 0, fmt.tprintf("Could not render geometry '%s', it has no indices", geometry.name));
-		}
 
 		// Copy geometry data
 		mem.copy_non_overlapping(mem.ptr_offset(per_instance_buffer_ptr, index_array_offset), raw_data(geometry.indices), index_array_size);
@@ -287,7 +351,7 @@ draw_entities :: proc(using vulkan: ^Vulkan) {
 		}
 
 		// Record draw command
-		offset := cast(vk.DeviceSize) attribute_array_offset;
+		attribute_array_offset_device_size := cast(vk.DeviceSize) attribute_array_offset;
 
 		secondary_command_buffer: vk.CommandBuffer;
 		switch geometry.pipeline {
@@ -302,15 +366,63 @@ draw_entities :: proc(using vulkan: ^Vulkan) {
 		}
 
 		vk.CmdBindIndexBuffer(secondary_command_buffer, per_instance_buffer, cast(vk.DeviceSize) index_array_offset, .UINT16);
-		vk.CmdBindVertexBuffers(secondary_command_buffer, 0, 1, &per_instance_buffer, &offset);
+		vk.CmdBindVertexBuffers(secondary_command_buffer, 0, 1, &per_instance_buffer, &attribute_array_offset_device_size);
 		vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(geometry.indices), instance_count, 0, 0, first_instance);
 
 		first_instance += instance_count;
+
+		if emissive, ok := geometry.emissive.?; ok {
+			when ODIN_DEBUG {
+				assert(len(emissive.indices) > 0);
+			}
+
+			index_array_size = size_of(u16) * len(emissive.indices);
+			attribute_array_size = size_of(f32) * len(emissive.attributes);
+
+			index_array_offset = geometry_offset;
+			attribute_array_offset = mem.align_forward_int(index_array_offset + index_array_size, 4);
+			geometry_offset = attribute_array_offset + attribute_array_size;
+
+			index_array_dst := mem.ptr_offset(per_instance_buffer_ptr, index_array_offset);
+			attribute_array_dst := mem.ptr_offset(per_instance_buffer_ptr, attribute_array_offset);
+
+			mem.copy_non_overlapping(index_array_dst, raw_data(emissive.indices), index_array_size);
+			mem.copy_non_overlapping(attribute_array_dst, raw_data(emissive.attributes), attribute_array_size);
+
+			for entity_lookup in geometry.entity_lookups {
+				rigid_body := get_entity(entity_lookup).variant.(^Rigid_Body_Entity);
+
+				transform_dst := mem.ptr_offset(per_instance_buffer_ptr, emissive_instance_offset); // #todo: Rename emissive_color_offset fo sho
+				mem.copy_non_overlapping(transform_dst, &rigid_body.transform, size_of(la.Matrix4f32));
+
+				emissive_color_dst := mem.ptr_offset(per_instance_buffer_ptr, emissive_instance_offset + size_of(la.Matrix4f32));
+				mem.copy_non_overlapping(emissive_color_dst, &rigid_body.emissive_color, 12);
+
+				emissive_instance_offset += EMISSIVE_INSTANCE_ELEMENT_SIZE;
+			}
+
+			instance_count = cast(u32) len(geometry.entity_lookups);
+
+			secondary_command_buffer = bloom_resources.onscreen_color_secondary_command_buffers[logical_frame_index];
+			attribute_array_offset_device_size := cast(vk.DeviceSize) attribute_array_offset;
+
+			vk.CmdBindIndexBuffer(secondary_command_buffer, per_instance_buffer, cast(vk.DeviceSize) index_array_offset, .UINT16);
+			vk.CmdBindVertexBuffers(secondary_command_buffer, 0, 1, &per_instance_buffer, &attribute_array_offset_device_size);
+			vk.CmdDrawIndexed(secondary_command_buffer, cast(u32) len(emissive.indices), instance_count, 0, 0, emissive_first_instance);
+
+			emissive_first_instance += instance_count;
+		}
+	}
+
+	when ODIN_DEBUG {
+		assert(geometry_offset <= INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE);
+		assert(instance_offset -  mesh_resources.per_instance_buffer_instance_block_offset <= INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE);
+		assert(emissive_instance_offset - bloom_resources.array_offset <= INSTANCE_BUFFER_EMISSIVE_COLOR_ARRAY_SIZE);
 	}
 }
 
 draw_particle :: proc(using vulkan: ^Vulkan, particle: ^Particle) {
-	assert(particle_resources.first_instance < MAX_PARTICLES, fmt.tprintf("Too many particles, max is %v", MAX_PARTICLES));
+	assert(particle_resources.instance_offset - particle_resources.per_instance_buffer_instance_block_offset <= INSTANCE_BUFFER_PARTICLE_INSTANCE_BLOCK_SIZE);
 
 	mem.copy_non_overlapping(mem.ptr_offset(frame_resources.per_instance_buffer_ptr, particle_resources.instance_offset), particle, size_of(Particle));
 	particle_resources.instance_offset += PARTICLE_INSTANCE_ELEMENT_SIZE;

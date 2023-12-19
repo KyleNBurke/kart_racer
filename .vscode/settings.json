@@ -4,6 +4,6 @@
 	"editor.autoClosingBrackets": "never",
 	"editor.bracketPairColorization.enabled": false,
 	"python.analysis.extraPaths": [
-		"C:/Users/kylen/Development/fake_bpy_modules_3.3-20221006"
+		"C:/Users/kylen/Development/fake-bpy-module-4.0-20231118"
 	]
 }

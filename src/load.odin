@@ -140,7 +140,7 @@ load_scene :: proc(scene: ^Scene) {
 		remove_scene_associated_entities();
 	}
 
-	REQUIRED_VERSION :: 7;
+	REQUIRED_VERSION :: 8;
 	
 	bytes, success := os.read_entire_file_from_filename(scene.file_path, context.temp_allocator);
 	assert(success, fmt.tprintf("Failed to load level file %s", scene.file_path));
@@ -181,16 +181,23 @@ load_scene :: proc(scene: ^Scene) {
 	for i in 0..<geometries_count {
 		name := read_string(&bytes, &pos);
 		indices, attributes := read_indices_attributes(&bytes, &pos);
+		emissive_indices, emissive_attributes := read_indices_attributes(&bytes, &pos);
+		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 
 		geometry, geometry_lookup := create_geometry(name);
-		geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert);
+		geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .Lambert); // #todo: should just remove this or take in optional emissive args?
+
+		if len(emissive_indices) > 0 {
+			geometry.emissive = Emissive {
+				emissive_indices,
+				emissive_attributes,
+			};
+		}
 
 		delete(indices);
 		delete(attributes);
 
 		append(&geometry_lookups, geometry_lookup);
-
-		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 	}
 
 	{ // Inanimate entities
@@ -266,7 +273,8 @@ load_scene :: proc(scene: ^Scene) {
 				rigid_body.status_effect = status_effect;
 
 				if status_effect != .None {
-					rigid_body.exploding_health = 5;
+					rigid_body.exploding_health = 3;
+					rigid_body.emissive_color = { 0.5, 0.2, 0.2 };
 				}
 
 				rigid_body.position = position;

@@ -120,7 +120,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 				case ^Rigid_Body_Entity:
 					add_car_movable_constraint_set(&scene.constraints, car, e, &manifold, dt);
 					car_collision_maybe_wake_island(&scene.islands, &additional_awake_entities, e);
-					process_car_rigid_body_collision_status_effect(car, e);
+					process_car_rigid_body_collision_status_effect(car, e, manifold.normal);
 
 				case ^Inanimate_Entity:
 					// This could be a fixed constraint that doesn't rotate the car. We'd just have to keep in mind what would happen when the car lands upside down on an inanimate entity.
@@ -626,7 +626,8 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 	}
 }
 
-process_car_rigid_body_collision_status_effect :: proc(car: ^Car_Entity, rigid_body: ^Rigid_Body_Entity) {
+// #todo: I feel like I should move this into a file call status_effect or something
+process_car_rigid_body_collision_status_effect :: proc(car: ^Car_Entity, rigid_body: ^Rigid_Body_Entity, collision_normal: linalg.Vector3f32) {
 	switch rigid_body.status_effect {
 	case .None:
 		return;
@@ -637,7 +638,11 @@ process_car_rigid_body_collision_status_effect :: proc(car: ^Car_Entity, rigid_b
 	}
 
 	if rigid_body.status_effect == .ExplodingShock || rigid_body.status_effect == .ExplodingFire {
-		rigid_body.exploding_health -= 1;
+		vel_diff := linalg.dot(rigid_body.velocity - car.velocity, collision_normal);
+
+		if abs(vel_diff) > 10 {
+			rigid_body.exploding_health -= 1;
+		}
 	}
 }
 

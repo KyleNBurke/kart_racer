@@ -262,6 +262,178 @@ def calculate_indices_local_positions(depsgraph: Depsgraph, object: Object):
 	
 	return indices, positions
 
+def calculate_indices_local_positions_normals_colors_new_2(depsgraph: Depsgraph, object: Object):
+	print(object.name_full)
+	eval_object = object.evaluated_get(depsgraph)
+	eval_mesh: Mesh = bpy.data.meshes.new_from_object(eval_object)
+	eval_mesh.calc_loop_triangles()
+
+	emissive_attribute = None
+
+	for attribute in eval_mesh.attributes:
+		if attribute.name == "kg_emissive":
+			assert attribute.domain == 'FACE'
+			assert attribute.data_type == 'BOOLEAN'
+
+			emissive_attribute = attribute
+			break
+	
+	vertex_colors = None
+	color_attribute = eval_mesh.color_attributes.active_color
+	if color_attribute is not None:
+		assert color_attribute.domain == 'CORNER', "Cannot export vertex colors of color attribute " + color_attribute.name + " for mesh " + eval_mesh.name_full + " because it is not a face corner color attribute"
+
+		vertex_colors = color_attribute.data
+	
+	emissive_vertex_map = {}
+	emissive_next_index = 0
+	emissive_indices = []
+
+	non_emissive_vertex_map = {}
+	non_emissive_next_index = 0
+	non_emissive_indices = []
+	
+	for triangle in eval_mesh.loop_triangles:
+		emissive = False
+
+		if emissive_attribute is not None:
+			face_index = triangle.polygon_index
+			emissive = emissive_attribute.data[face_index].value
+
+		norm = triangle.normal
+		norm_game = [norm[0], norm[2], -norm[1]]
+
+		for i in range(3):
+			vertex_index = triangle.vertices[i]
+			vertex = eval_mesh.vertices[vertex_index]
+			pos = vertex.co
+			pos_game = [pos[0], pos[2], -pos[1]]
+
+			if emissive:
+				v = (pos_game[0], pos_game[1], pos_game[2])
+
+				if v in emissive_vertex_map:
+					index = emissive_vertex_map[v]
+					emissive_indices.append(index)
+				else:
+					emissive_vertex_map[v] = emissive_next_index
+					emissive_indices.append(emissive_next_index)
+					emissive_next_index += 1
+				
+			else:
+				col = [0.2, 0.2, 0.2]
+				if vertex_colors is not None:
+					col_index = triangle.loops[i]
+					col = vertex_colors[col_index].color
+
+				v = (pos_game[0], pos_game[1], pos_game[2], norm_game[0], norm_game[1], norm_game[2], col[0], col[1], col[2])
+
+				if v in non_emissive_vertex_map:
+					index = non_emissive_vertex_map[v]
+					non_emissive_indices.append(index)
+				else:
+					non_emissive_vertex_map[v] = non_emissive_next_index
+					non_emissive_indices.append(non_emissive_next_index)
+					non_emissive_next_index += 1
+
+	emissive_attributes = []
+	non_emissive_attributes = []
+
+	for v in emissive_vertex_map.keys():
+		for attribute in v:
+			emissive_attributes.append(attribute)
+
+	for v in non_emissive_vertex_map.keys():
+		for attribute in v:
+			non_emissive_attributes.append(attribute)
+
+	return non_emissive_indices, non_emissive_attributes, emissive_indices, emissive_attributes
+
+def calculate_indices_local_positions_normals_colors_new(depsgraph: Depsgraph, object: Object):
+	print(object.name_full)
+	eval_object = object.evaluated_get(depsgraph)
+	eval_mesh: Mesh = bpy.data.meshes.new_from_object(eval_object)
+	eval_mesh.calc_loop_triangles()
+
+	emissive_group_index = None
+	non_emissive_group_index = None
+
+	for group in eval_object.vertex_groups:
+		if group.name == "emissive":
+			emissive_group_index = group.index
+			break
+	
+	if emissive_group_index is not None:
+		for group in eval_object.vertex_groups:
+			if group.name == "non_emissive":
+				non_emissive_group_index = group.index
+				break
+		
+		assert non_emissive_group_index is not None
+	
+	vertex_colors = None
+	color_attribute = eval_mesh.color_attributes.active_color
+	if color_attribute is not None:
+		assert color_attribute.domain == 'CORNER', "Cannot export vertex colors of color attribute " + color_attribute.name + " for mesh " + eval_mesh.name_full + " because it is not a face corner color attribute"
+		vertex_colors = color_attribute.data
+	
+	emissive_vertex_map = {}
+	emissive_next_index = 0
+	emissive_indices = []
+
+	non_emissive_vertex_map = {}
+	non_emissive_next_index = 0
+	non_emissive_indices = []
+
+	for triangle in eval_mesh.loop_triangles:
+		for i in range(3):
+			vertex_index = triangle.vertices[i]
+			vertex = eval_mesh.vertices[vertex_index]
+			pos = vertex.co
+			pos_game = [pos[0], pos[2], -pos[1]]
+
+			if emissive_group_index is not None and vertex.groups.group == emissive_group_index:
+				v = (pos_game[0], pos_game[1], pos_game[2])
+
+				if v in non_emissive_vertex_map:
+					index = non_emissive_vertex_map[v]
+					non_emissive_indices.append(index)
+				else:
+					non_emissive_vertex_map[v] = non_emissive_next_index
+					non_emissive_indices.append(non_emissive_next_index)
+					non_emissive_next_index += 1
+			else:
+				norm = triangle.normal
+				norm_game = [norm[0], norm[2], -norm[1]]
+
+				col_index = triangle.loops[i]
+				col = [0.2, 0.2, 0.2]
+				if vertex_colors is not None:
+					col = vertex_colors[col_index].color
+
+				v = (pos_game[0], pos_game[1], pos_game[2], norm_game[0], norm_game[1], norm_game[2], col[0], col[1], col[2])
+
+				if v in emissive_vertex_map:
+					index = emissive_vertex_map[v]
+					emissive_indices.append(index)
+				else:
+					emissive_vertex_map[v] = emissive_next_index
+					emissive_indices.append(emissive_next_index)
+					emissive_next_index += 1
+	
+	emissive_attributes = []
+	non_emissive_attributes = []
+
+	for v in emissive_vertex_map.keys():
+		for attribute in v:
+			emissive_attributes.append(attribute)
+
+	for v in non_emissive_vertex_map.keys():
+		for attribute in v:
+			non_emissive_attributes.append(attribute)
+
+	return non_emissive_indices, non_emissive_attributes, emissive_indices, emissive_attributes
+
 def calculate_indices_local_positions_normals_colors(depsgraph: Depsgraph, object: Object):
 	eval_object = object.evaluated_get(depsgraph)
 	eval_mesh: Mesh = bpy.data.meshes.new_from_object(eval_object)

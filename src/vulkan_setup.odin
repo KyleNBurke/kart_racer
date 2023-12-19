@@ -10,15 +10,14 @@ import vk "vendor:vulkan";
 import "vendor:glfw";
 
 IFFC :: 2; // In flight frames count
-PIPELINES_COUNT :: 5;
 MESH_INSTANCE_ELEMENT_SIZE :: 64;
+EMISSIVE_INSTANCE_ELEMENT_SIZE :: 64 + 16;
 PARTICLE_INSTANCE_ELEMENT_SIZE :: 32;
-MAX_ENTITIES :: 1000;
-MAX_PARTICLES :: 5000;
 
 INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE :: 5_000_000;
-INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE :: MESH_INSTANCE_ELEMENT_SIZE * MAX_ENTITIES;
-INSTANCE_BUFFER_PARTICLE_INSTANCE_BLOCK_SIZE :: PARTICLE_INSTANCE_ELEMENT_SIZE * MAX_PARTICLES; 
+INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE :: MESH_INSTANCE_ELEMENT_SIZE * 1_000;
+INSTANCE_BUFFER_EMISSIVE_COLOR_ARRAY_SIZE :: 2000;
+INSTANCE_BUFFER_PARTICLE_INSTANCE_BLOCK_SIZE :: PARTICLE_INSTANCE_ELEMENT_SIZE * 1_000; 
 
 TEXT_PUSH_CONSTANTS_SIZE :: 16;
 
@@ -39,6 +38,7 @@ Vulkan :: struct {
 	primary_command_buffers: [IFFC]vk.CommandBuffer,
 	frame_resources: Frame_Resources,
 	mesh_resources: Mesh_Resources,
+	bloom_resources: Bloom_Resources,
 	particle_resources: Particle_Resources,
 	ui_resources: UI_Resources,
 	logical_frame_index: int,
@@ -87,6 +87,30 @@ Mesh_Resources :: struct {
 	lambert_two_sided_pipeline: vk.Pipeline,
 }
 
+Bloom_Frame_Buffer :: struct {
+	color_image: vk.Image,
+	color_memory: vk.DeviceMemory,
+	color_image_view: vk.ImageView,
+	
+	depth_image: vk.Image,
+	depth_memory: vk.DeviceMemory,
+	depth_image_view: vk.ImageView,
+	
+	framebuffer: vk.Framebuffer,
+}
+
+Bloom_Resources :: struct {
+	onscreen_color_secondary_command_buffers: [IFFC]vk.CommandBuffer,
+	offscreen_render_pass: vk.RenderPass,
+	frame_buffers: [2]Bloom_Frame_Buffer,
+	array_offset: int,
+	descriptor_set_layout: vk.DescriptorSetLayout,
+	descriptor_sets: [IFFC]vk.DescriptorSet,
+	color_pipeline_layout: vk.PipelineLayout,
+	onscreen_color_pipeline: vk.Pipeline,
+	offscreen_color_pipeline: vk.Pipeline,
+}
+
 Particle_Resources :: struct {
 	per_instance_buffer_instance_block_offset: int,
 	secondary_command_buffers: [IFFC]vk.CommandBuffer,
@@ -123,6 +147,7 @@ init_vulkan :: proc(using vulkan: ^Vulkan, window: glfw.WindowHandle) {
 	surface_format = find_color_surface_format(physical_device, vulkan_context.window_surface);
 	depth_format = find_depth_format(physical_device);
 	render_pass = create_render_pass(logical_device, surface_format.format, depth_format);
+	bloom_offscreen_render_pass := create_bloom_offscreen_render_pass(logical_device, depth_format);
 	extent = create_extent(physical_device, window_surface, u32(framebuffer_width), u32(framebuffer_height));
 	depth_image = create_depth_image(logical_device, physical_device, depth_format, extent);
 	swapchain, swapchain_frames = create_swapchain(&vulkan_context, surface_format, extent, render_pass, depth_image.image_view);
@@ -151,29 +176,59 @@ init_vulkan :: proc(using vulkan: ^Vulkan, window: glfw.WindowHandle) {
 
 	mesh_instance_descriptor_set_layout, mesh_instance_descriptor_sets := create_mesh_descriptor_sets(logical_device, descriptor_pool);
 	update_mesh_instance_descriptor_sets(logical_device, mesh_instance_descriptor_sets, per_instance_buffers, per_instance_buffer_info.mesh_instance_block_offset);
-	mesh_descriptor_set_layouts := [2]vk.DescriptorSetLayout {frame_descriptor_set_layout, mesh_instance_descriptor_set_layout};
-	mesh_pipeline_layout := create_mesh_pipeline_layout(logical_device, &mesh_descriptor_set_layouts);
+	mesh_descriptor_set_layouts := [2]vk.DescriptorSetLayout { frame_descriptor_set_layout, mesh_instance_descriptor_set_layout };
+	mesh_pipeline_layout := create_pipeline_layout(logical_device, mesh_descriptor_set_layouts[:]);
+
+	bloom_frame_buffers := [2]Bloom_Frame_Buffer {
+		// create_bloom_frame_buffer(logical_device, physical_device, extent, depth_format),
+		// create_bloom_frame_buffer(logical_device, physical_device, extent, depth_format),
+	};
+	emissive_color_descriptor_set_layout, emissive_color_descriptor_sets := create_emissive_color_descriptor_sets(logical_device, descriptor_pool);
+	update_emissive_color_descriptor_sets(logical_device, emissive_color_descriptor_sets, per_instance_buffers, per_instance_buffer_info.emissive_color_array_offset);
+	descriptor_set_layouts := [3]vk.DescriptorSetLayout {
+		frame_descriptor_set_layout,
+		mesh_instance_descriptor_set_layout,
+		emissive_color_descriptor_set_layout,
+	};
+	bloom_color_pipeline_layout := create_pipeline_layout(logical_device, descriptor_set_layouts[:]);
 
 	particle_instance_descriptor_set_layout, particle_instance_descriptor_sets := create_particle_descriptor_sets(logical_device, descriptor_pool);
 	update_particle_descriptor_sets(logical_device, particle_instance_descriptor_sets, per_instance_buffers, per_instance_buffer_info.particle_instance_block_offset);
-	particle_descriptor_set_layouts := [2]vk.DescriptorSetLayout {frame_descriptor_set_layout, particle_instance_descriptor_set_layout};
-	particle_pipeline_layout := create_particle_pipeline_layout(logical_device, &particle_descriptor_set_layouts);
+	particle_descriptor_set_layouts := [2]vk.DescriptorSetLayout { frame_descriptor_set_layout, particle_instance_descriptor_set_layout };
+	particle_pipeline_layout := create_pipeline_layout(logical_device, particle_descriptor_set_layouts[:]);
 	
-	pipelines := create_pipelines(logical_device, render_pass, extent, mesh_pipeline_layout, particle_pipeline_layout);
+	pipelines := create_pipelines(
+		logical_device,
+		render_pass, bloom_offscreen_render_pass,
+		extent,
+		mesh_pipeline_layout, particle_pipeline_layout, bloom_color_pipeline_layout,
+	);
 
 	mesh_resources = Mesh_Resources {
-		per_instance_buffer_instance_block_offset = per_instance_buffer_info.mesh_instance_block_offset,
-		line_secondary_command_buffers = secondary_command_buffers.line,
-		basic_secondary_command_buffers = secondary_command_buffers.basic,
-		lambert_secondary_command_buffers = secondary_command_buffers.lambert,
-		lambert_two_sided_secondary_command_buffers = secondary_command_buffers.lambert_two_sided,
-		instance_descriptor_set_layout = mesh_instance_descriptor_set_layout,
-		instance_descriptor_sets = mesh_instance_descriptor_sets,
-		pipeline_layout = mesh_pipeline_layout,
-		line_pipeline = pipelines[0],
-		basic_pipeline = pipelines[1],
-		lambert_pipeline = pipelines[2],
-		lambert_two_sided_pipeline = pipelines[3],
+		per_instance_buffer_info.mesh_instance_block_offset,
+		secondary_command_buffers.line,
+		secondary_command_buffers.basic,
+		secondary_command_buffers.lambert,
+		secondary_command_buffers.lambert_two_sided,
+		mesh_instance_descriptor_set_layout,
+		mesh_instance_descriptor_sets,
+		mesh_pipeline_layout,
+		pipelines.line,
+		pipelines.basic,
+		pipelines.lambert,
+		pipelines.lambert_two_sided,
+	};
+
+	bloom_resources = Bloom_Resources {
+		secondary_command_buffers.bloom_onscreen_color,
+		bloom_offscreen_render_pass,
+		bloom_frame_buffers,
+		per_instance_buffer_info.emissive_color_array_offset,
+		emissive_color_descriptor_set_layout,
+		emissive_color_descriptor_sets,
+		bloom_color_pipeline_layout,
+		pipelines.bloom_onscreen_color,
+		pipelines.bloom_offscreen_color,
 	};
 
 	particle_resources = Particle_Resources {
@@ -182,7 +237,7 @@ init_vulkan :: proc(using vulkan: ^Vulkan, window: glfw.WindowHandle) {
 		instance_descriptor_set_layout = particle_instance_descriptor_set_layout,
 		instance_descriptor_sets = particle_instance_descriptor_sets,
 		pipeline_layout = particle_pipeline_layout,
-		pipeline = pipelines[4],
+		pipeline = pipelines.particle,
 	}
 }
 
@@ -193,6 +248,12 @@ vulkan_cleanup :: proc(using vulkan: ^Vulkan) {
 	vk.DestroyPipeline(logical_device, particle_resources.pipeline, nil);
 	vk.DestroyPipelineLayout(logical_device, particle_resources.pipeline_layout, nil);
 	vk.DestroyDescriptorSetLayout(logical_device, particle_resources.instance_descriptor_set_layout, nil);
+
+	vk.DestroyPipeline(logical_device, bloom_resources.onscreen_color_pipeline, nil);
+	vk.DestroyPipeline(logical_device, bloom_resources.offscreen_color_pipeline, nil);
+	vk.DestroyPipelineLayout(logical_device, bloom_resources.color_pipeline_layout, nil);
+	vk.DestroyDescriptorSetLayout(logical_device, bloom_resources.descriptor_set_layout, nil);
+	vk.DestroyRenderPass(logical_device, bloom_resources.offscreen_render_pass, nil);
 	
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_two_sided_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
@@ -236,6 +297,8 @@ recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer
 
 	vk.DeviceWaitIdle(logical_device);
 	vk.DestroyPipeline(logical_device, particle_resources.pipeline, nil);
+	vk.DestroyPipeline(logical_device, bloom_resources.offscreen_color_pipeline, nil);
+	vk.DestroyPipeline(logical_device, bloom_resources.onscreen_color_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_two_sided_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
@@ -259,15 +322,20 @@ recreate_swapchain :: proc(using vulkan: ^Vulkan, framebuffer_width, framebuffer
 	pipelines := create_pipelines(
 		logical_device,
 		render_pass,
+		bloom_resources.offscreen_render_pass,
 		extent,
 		mesh_resources.pipeline_layout,
-		particle_resources.pipeline_layout);
-	
-	mesh_resources.line_pipeline = pipelines[0];
-	mesh_resources.basic_pipeline = pipelines[1];
-	mesh_resources.lambert_pipeline = pipelines[2];
-	mesh_resources.lambert_two_sided_pipeline = pipelines[3];
-	particle_resources.pipeline = pipelines[4];
+		particle_resources.pipeline_layout,
+		bloom_resources.color_pipeline_layout,
+	);
+
+	mesh_resources.line_pipeline = pipelines.line;
+	mesh_resources.basic_pipeline = pipelines.basic;
+	mesh_resources.lambert_pipeline = pipelines.lambert;
+	mesh_resources.lambert_two_sided_pipeline = pipelines.lambert_two_sided;
+	bloom_resources.onscreen_color_pipeline = pipelines.bloom_onscreen_color
+	bloom_resources.offscreen_color_pipeline = pipelines.bloom_offscreen_color;
+	particle_resources.pipeline = pipelines.particle;
 
 	fmt.println("Swapchain recreated");
 }
@@ -302,7 +370,7 @@ find_color_surface_format :: proc(physical_device: vk.PhysicalDevice, surface: v
 }
 
 find_depth_format :: proc(physical_device: vk.PhysicalDevice) -> vk.Format {
-	suitable_formats := [?]vk.Format{vk.Format.D32_SFLOAT, vk.Format.D32_SFLOAT_S8_UINT, vk.Format.D24_UNORM_S8_UINT};
+	suitable_formats := [?]vk.Format { vk.Format.D32_SFLOAT, vk.Format.D32_SFLOAT_S8_UINT, vk.Format.D24_UNORM_S8_UINT };
 
 	for format in suitable_formats {
 		properties: vk.FormatProperties;
@@ -339,7 +407,7 @@ create_render_pass :: proc(logical_device: vk.Device, color_format: vk.Format, d
 		finalLayout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
 	};
 
-	attachments := [?]vk.AttachmentDescription{color_attachment_description, depth_attachment_description};
+	attachments := [2]vk.AttachmentDescription { color_attachment_description, depth_attachment_description };
 
 	color_attachment_reference := vk.AttachmentReference {
 		attachment = 0,
@@ -357,8 +425,6 @@ create_render_pass :: proc(logical_device: vk.Device, color_format: vk.Format, d
 		colorAttachmentCount = 1,
 		pDepthStencilAttachment = &depth_attachment_reference,
 	};
-	
-	subpass_dependency: vk.SubpassDependency;
 
 	create_info := vk.RenderPassCreateInfo {
 		sType = .RENDER_PASS_CREATE_INFO,
@@ -366,12 +432,90 @@ create_render_pass :: proc(logical_device: vk.Device, color_format: vk.Format, d
 		attachmentCount = cast(u32) len(attachments),
 		pSubpasses = &subpass_description,
 		subpassCount = 1,
-		pDependencies = &subpass_dependency,
 	};
 
 	render_pass: vk.RenderPass;
-	r := vk.CreateRenderPass(logical_device, &create_info, nil, &render_pass);
-	assert(r == .SUCCESS);
+	assert(vk.CreateRenderPass(logical_device, &create_info, nil, &render_pass) == .SUCCESS);
+
+	return render_pass;
+}
+
+create_bloom_offscreen_render_pass :: proc(ld: vk.Device, depth_format: vk.Format) -> vk.RenderPass {
+	color_attachment_description := vk.AttachmentDescription {
+		format = .R8G8B8A8_UNORM,
+		samples = { ._1 },
+		loadOp = .CLEAR,
+		storeOp = .STORE,
+		stencilLoadOp = .DONT_CARE,
+		stencilStoreOp = .DONT_CARE,
+		initialLayout = .UNDEFINED,
+		finalLayout = .SHADER_READ_ONLY_OPTIMAL,
+	};
+
+	depth_attachment_description := vk.AttachmentDescription {
+		format = depth_format,
+		samples = { ._1 },
+		loadOp = .CLEAR,
+		storeOp = .DONT_CARE,
+		stencilLoadOp = .DONT_CARE,
+		stencilStoreOp = .DONT_CARE,
+		initialLayout = .UNDEFINED,
+		finalLayout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+	};
+
+	attachments := [2]vk.AttachmentDescription { color_attachment_description, depth_attachment_description };
+
+	color_attachment_reference := vk.AttachmentReference {
+		attachment = 0,
+		layout = .COLOR_ATTACHMENT_OPTIMAL,
+	};
+
+	depth_attachment_reference := vk.AttachmentReference {
+		attachment = 1,
+		layout = .DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+	};
+
+	subpass_description := vk.SubpassDescription {
+		pipelineBindPoint = .GRAPHICS,
+		pColorAttachments = &color_attachment_reference,
+		colorAttachmentCount = 1,
+		pDepthStencilAttachment = &depth_attachment_reference,
+	};
+
+	color_subpass_dependency := vk.SubpassDependency {
+		srcSubpass = vk.SUBPASS_EXTERNAL,
+		dstSubpass = 0,
+		srcStageMask = { .FRAGMENT_SHADER },
+		dstStageMask = { .COLOR_ATTACHMENT_OUTPUT },
+		srcAccessMask = { .SHADER_READ },
+		dstAccessMask = { .COLOR_ATTACHMENT_WRITE },
+		dependencyFlags = { .BY_REGION },
+	};
+
+	first_blur_subpass_dependency := vk.SubpassDependency {
+		srcSubpass = 0,
+		dstSubpass = vk.SUBPASS_EXTERNAL,
+		srcStageMask = { .COLOR_ATTACHMENT_OUTPUT },
+		dstStageMask = { .FRAGMENT_SHADER },
+		srcAccessMask = { .COLOR_ATTACHMENT_WRITE },
+		dstAccessMask = { .SHADER_READ },
+		dependencyFlags = { .BY_REGION },
+	};
+
+	subpass_dependencies := [2]vk.SubpassDependency { color_subpass_dependency, first_blur_subpass_dependency };
+
+	create_info := vk.RenderPassCreateInfo {
+		sType = .RENDER_PASS_CREATE_INFO,
+		pAttachments = &attachments[0],
+		attachmentCount = len(attachments),
+		pSubpasses = &subpass_description,
+		subpassCount = 1,
+		pDependencies = &subpass_dependencies[0],
+		dependencyCount = len(subpass_dependencies),
+	};
+
+	render_pass: vk.RenderPass;
+	assert(vk.CreateRenderPass(ld, &create_info, nil, &render_pass) == .SUCCESS);
 
 	return render_pass;
 }
@@ -673,34 +817,26 @@ create_primary_command_buffers :: proc(logical_device: vk.Device, command_pool: 
 	return command_buffers;
 }
 
-SecondaryCommandBuffers :: struct {
-	line, basic, lambert, lambert_two_sided, particle: [IFFC]vk.CommandBuffer,
+Secondary_Command_Buffers :: struct {
+	line, basic, lambert, lambert_two_sided, bloom_onscreen_color, particle: [IFFC]vk.CommandBuffer,
 }
 
-create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool: vk.CommandPool) -> SecondaryCommandBuffers {
-	COUNT :: IFFC * PIPELINES_COUNT;
+create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool: vk.CommandPool) -> Secondary_Command_Buffers {
+	// This is the number of pipelines we need to create secondary command buffers for. It must match the number of
+	// fields in the Secondary_Command_Buffers struct for the transmute to work.
+	COUNT :: 6;
 	
 	allocate_info := vk.CommandBufferAllocateInfo {
 		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
 		commandPool = command_pool,
 		level = .SECONDARY,
-		commandBufferCount = COUNT,
+		commandBufferCount = IFFC * COUNT,
 	};
 
-	command_buffers_array: [COUNT]vk.CommandBuffer;
-	assert(vk.AllocateCommandBuffers(logical_device, &allocate_info, &command_buffers_array[0]) == .SUCCESS);
+	command_buffers: [IFFC * COUNT]vk.CommandBuffer;
+	assert(vk.AllocateCommandBuffers(logical_device, &allocate_info, &command_buffers[0]) == .SUCCESS);
 
-	line, basic, lambert, lambert_two_sided, particle: [IFFC]vk.CommandBuffer;
-	
-	for i in 0..<IFFC {
-		line[i]              = command_buffers_array[PIPELINES_COUNT * i];
-		basic[i]             = command_buffers_array[PIPELINES_COUNT * i + 1];
-		lambert[i]           = command_buffers_array[PIPELINES_COUNT * i + 2];
-		lambert_two_sided[i] = command_buffers_array[PIPELINES_COUNT * i + 3];
-		particle[i]          = command_buffers_array[PIPELINES_COUNT * i + 4];
-	}
-
-	return SecondaryCommandBuffers { line, basic, lambert, lambert_two_sided, particle };
+	return transmute(Secondary_Command_Buffers) command_buffers;
 }
 
 create_frame_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool: vk.DescriptorPool) -> (vk.DescriptorSetLayout, [IFFC]vk.DescriptorSet) {
@@ -823,7 +959,8 @@ create_per_instance_buffers :: proc(physical_device: vk.PhysicalDevice, logical_
 }
 
 Per_Instance_Buffer_Info :: struct {
-	mesh_instance_block_offset,
+	mesh_instance_block_offset, // Rename? Make more simple, array?
+	emissive_color_array_offset,
 	particle_instance_block_offset,
 	total_size: int,
 }
@@ -834,19 +971,21 @@ calculate_per_instance_buffer_info :: proc(physical_device: vk.PhysicalDevice) -
 	alignment := cast(int) physical_device_properties.limits.minStorageBufferOffsetAlignment;
 
 	unaligned_mesh_instance_block_offset := INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE;
-	// aligned_mesh_instance_block_offset := math2.align_forward(unaligned_mesh_instance_block_offset, alignment);
 	aligned_mesh_instance_block_offset := mem.align_forward_int(unaligned_mesh_instance_block_offset, alignment);
 
-	unaligned_particle_instance_block_offset := aligned_mesh_instance_block_offset + INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE;
-	// aligned_particle_instance_block_offset := math2.align_forward(unaligned_particle_instance_block_offset, alignment);
+	unaligned_emissive_color_array_offset := aligned_mesh_instance_block_offset + INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE;
+	aligned_emissive_color_array_offset := mem.align_forward_int(unaligned_emissive_color_array_offset, alignment);
+
+	unaligned_particle_instance_block_offset := aligned_emissive_color_array_offset + INSTANCE_BUFFER_EMISSIVE_COLOR_ARRAY_SIZE;
 	aligned_particle_instance_block_offset := mem.align_forward_int(unaligned_particle_instance_block_offset, alignment);
 
 	total_size := aligned_particle_instance_block_offset + INSTANCE_BUFFER_PARTICLE_INSTANCE_BLOCK_SIZE;
 
 	return Per_Instance_Buffer_Info {
-		mesh_instance_block_offset = aligned_mesh_instance_block_offset,
-		particle_instance_block_offset = aligned_particle_instance_block_offset,
-		total_size = total_size,
+		aligned_mesh_instance_block_offset,
+		aligned_emissive_color_array_offset,
+		aligned_particle_instance_block_offset,
+		total_size,
 	};
 }
 
@@ -910,18 +1049,149 @@ update_mesh_instance_descriptor_sets :: proc(logical_device: vk.Device, descript
 	vk.UpdateDescriptorSets(logical_device, IFFC, &write_descriptor_sets[0], 0, nil);
 }
 
-create_mesh_pipeline_layout :: proc(logical_device: vk.Device, descriptor_set_layouts: ^[2]vk.DescriptorSetLayout) -> vk.PipelineLayout {
+create_pipeline_layout :: proc(logical_device: vk.Device, descriptor_set_layouts: []vk.DescriptorSetLayout) -> vk.PipelineLayout {
 	create_info := vk.PipelineLayoutCreateInfo {
 		sType = .PIPELINE_LAYOUT_CREATE_INFO,
 		pSetLayouts = &descriptor_set_layouts[0],
-		setLayoutCount = len(descriptor_set_layouts),
+		setLayoutCount = cast(u32) len(descriptor_set_layouts),
 	};
 
 	pipeline_layout: vk.PipelineLayout;
-	r := vk.CreatePipelineLayout(logical_device, &create_info, nil, &pipeline_layout);
-	assert(r == .SUCCESS);
+	assert(vk.CreatePipelineLayout(logical_device, &create_info, nil, &pipeline_layout) == .SUCCESS);
 
 	return pipeline_layout;
+}
+
+create_bloom_frame_buffer :: proc(ld: vk.Device, physical_device: vk.PhysicalDevice, extent: vk.Extent2D, depth_format: vk.Format) -> Bloom_Frame_Buffer {
+	color_image_create_info := vk.ImageCreateInfo {
+		sType = .IMAGE_CREATE_INFO,
+		imageType = .D2,
+		format = .R8G8B8A8_UNORM,
+		extent = vk.Extent3D { extent.width, extent.height, 1 },
+		mipLevels = 1,
+		arrayLayers = 1,
+		samples = { ._1 },
+		tiling = .OPTIMAL,
+		usage = { .COLOR_ATTACHMENT | .SAMPLED },
+	};
+
+	color_image: vk.Image;
+	assert(vk.CreateImage(ld, &color_image_create_info, nil, &color_image) == .SUCCESS);
+
+	memory_requirements: vk.MemoryRequirements;
+	vk.GetImageMemoryRequirements(ld, color_image, &memory_requirements);
+	memory_type_index := find_memory_type_index(physical_device, memory_requirements, { .DEVICE_LOCAL });
+
+	memory_allocate_info := vk.MemoryAllocateInfo {
+		sType = .MEMORY_ALLOCATE_INFO,
+		allocationSize = memory_requirements.size,
+		memoryTypeIndex = memory_type_index,
+	};
+
+	color_memory: vk.DeviceMemory;
+	assert(vk.AllocateMemory(ld, &memory_allocate_info, nil, &color_memory) == .SUCCESS);
+
+	assert(vk.BindImageMemory(ld, color_image, color_memory, 0) == .SUCCESS);
+
+	color_image_view_create_info := vk.ImageViewCreateInfo {
+		sType = .IMAGE_VIEW_CREATE_INFO,
+		image = color_image,
+		viewType = .D2,
+		format = .R8G8B8A8_UNORM,
+		subresourceRange = vk.ImageSubresourceRange {
+			aspectMask = { .COLOR },
+			baseMipLevel = 0,
+			levelCount = 1,
+			baseArrayLayer = 0,
+			layerCount = 1,
+		},
+	};
+
+	color_image_view: vk.ImageView;
+	assert(vk.CreateImageView(ld, &color_image_view_create_info, nil, &color_image_view) == .SUCCESS);
+
+	depth_image_create_info := vk.ImageCreateInfo {
+		sType = .IMAGE_CREATE_INFO,
+		imageType = .D2,
+		format = depth_format,
+		extent = vk.Extent3D { extent.width, extent.height, 1 },
+		mipLevels = 1,
+		arrayLayers = 1,
+		samples = { ._1 },
+		tiling = .OPTIMAL,
+		usage = { .DEPTH_STENCIL_ATTACHMENT },
+	};
+
+	depth_image: vk.Image;
+	assert(vk.CreateImage(ld, &depth_image_create_info, nil, &depth_image) == .SUCCESS);
+
+	// More...
+
+	return Bloom_Frame_Buffer {
+		// color_image,
+		// color_memory,
+		// color_image_view,
+		// depth_image,
+	};
+}
+
+create_emissive_color_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool: vk.DescriptorPool) -> (vk.DescriptorSetLayout, [IFFC]vk.DescriptorSet) {
+	// Shouldn't the normal mesh have 2 sets?
+	layout_binding := vk.DescriptorSetLayoutBinding {
+		binding = 0,
+		descriptorType = .STORAGE_BUFFER,
+		descriptorCount = 1,
+		stageFlags = { .VERTEX },
+	};
+
+	layout_create_info := vk.DescriptorSetLayoutCreateInfo {
+		sType = .DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+		pBindings = &layout_binding,
+		bindingCount = 1,
+	};
+
+	descriptor_set_layout: vk.DescriptorSetLayout;
+	assert(vk.CreateDescriptorSetLayout(logical_device, &layout_create_info, nil, &descriptor_set_layout) == .SUCCESS);
+
+	descriptor_set_layouts: [IFFC]vk.DescriptorSetLayout;
+	slice.fill(descriptor_set_layouts[:], descriptor_set_layout);
+
+	allocate_info := vk.DescriptorSetAllocateInfo {
+		sType = .DESCRIPTOR_SET_ALLOCATE_INFO,
+		descriptorPool = descriptor_pool,
+		pSetLayouts = &descriptor_set_layouts[0],
+		descriptorSetCount = len(descriptor_set_layouts),
+	};
+
+	descriptor_sets: [IFFC]vk.DescriptorSet;
+	assert(vk.AllocateDescriptorSets(logical_device, &allocate_info, &descriptor_sets[0]) == .SUCCESS);
+
+	return descriptor_set_layout, descriptor_sets;
+}
+
+update_emissive_color_descriptor_sets :: proc(ld: vk.Device, descriptor_sets: [IFFC]vk.DescriptorSet, buffers: [IFFC]vk.Buffer, array_offset: int) {
+	descriptor_buffer_infos: [IFFC]vk.DescriptorBufferInfo;
+	write_descriptor_sets: [IFFC]vk.WriteDescriptorSet;
+	
+	for i in 0..<IFFC {
+		descriptor_buffer_infos[i] = vk.DescriptorBufferInfo {
+			buffer = buffers[i],
+			offset = cast(vk.DeviceSize) array_offset,
+			range = cast(vk.DeviceSize) vk.WHOLE_SIZE,
+		};
+
+		write_descriptor_sets[i] = vk.WriteDescriptorSet {
+			sType = .WRITE_DESCRIPTOR_SET,
+			dstSet = descriptor_sets[i],
+			dstBinding = 0,
+			dstArrayElement = 0,
+			descriptorCount = 1,
+			descriptorType = .STORAGE_BUFFER,
+			pBufferInfo = &descriptor_buffer_infos[i],
+		};
+	}
+
+	vk.UpdateDescriptorSets(ld, IFFC, &write_descriptor_sets[0], 0, nil);
 }
 
 create_particle_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool: vk.DescriptorPool) -> (vk.DescriptorSetLayout, [IFFC]vk.DescriptorSet) {
@@ -982,18 +1252,4 @@ update_particle_descriptor_sets :: proc(logical_device: vk.Device, descriptor_se
 	}
 
 	vk.UpdateDescriptorSets(logical_device, IFFC, &write_descriptor_sets[0], 0, nil);
-}
-
-create_particle_pipeline_layout :: proc(logical_device: vk.Device, descriptor_set_layouts: ^[2]vk.DescriptorSetLayout) -> vk.PipelineLayout {
-	create_info := vk.PipelineLayoutCreateInfo {
-		sType = .PIPELINE_LAYOUT_CREATE_INFO,
-		pSetLayouts = &descriptor_set_layouts[0],
-		setLayoutCount = len(descriptor_set_layouts),
-	};
-
-	pipeline_layout: vk.PipelineLayout;
-	r := vk.CreatePipelineLayout(logical_device, &create_info, nil, &pipeline_layout);
-	assert(r == .SUCCESS);
-
-	return pipeline_layout;
 }

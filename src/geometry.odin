@@ -21,6 +21,7 @@ Geometry :: struct {
 	indices: [dynamic]u16,
 	attributes: [dynamic]f32,
 	pipeline: Pipeline,
+	emissive: Maybe(Emissive),
 }
 
 On_No_Entities :: enum {
@@ -30,6 +31,11 @@ On_No_Entities :: enum {
 }
 
 Pipeline :: enum { Line, Basic, Lambert, LambertTwoSided }
+
+Emissive :: struct {
+	indices: [dynamic]u16,
+	attributes: [dynamic]f32,
+}
 
 geometry_make_triangle_mesh :: proc(geo: ^Geometry, indices: []u16, attributes: []f32, pipeline: Pipeline) {
 	assert(len(indices) % 3 == 0);
