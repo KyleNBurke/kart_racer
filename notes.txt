@@ -57,15 +57,9 @@ Todo
 	- Fire barrel shrapnel pieces
 - Cylinder bumper
 	- Should we use a collision resolution constraint with restitution? Should we use a constraint that just tries to give it a target velocity? Should we just assign to the velocity?
-- Slow the car down when you hit a rigid body
 - Boost jets
 	- Need to decide whether we should be using a constraint instead of applying impulses/accelerations. Like should it be a motor constraint?
-- Improve car wheel helpers
-	- Render them up to date
-	- Make config setting
 - [laptop] Clean up the -vet things
-- Wireframe triangle geometry for mesh hull helpers.
-- Hull bounds helpers - this is different than the hull helpers, it would show you the axis aligned bounding boxes of the hulls.
 - Shader hot reloading?
 - Versioning for font file
 - If you push a box using your car. It scoots away orthogonally. Maybe the friction direction could be in the direction the thing is moving in?
@@ -89,7 +83,7 @@ Todo
 		- Player vs player collisions
 			- [done] Should not see each other as obsticals if velocity is >=
 - Mistakes we can catch / improvements that would help dev time
-	- If the exporter finds a rigid body not part of a rigid body island, produce a warning. The rigid body will not be exported.
+	- If the exporter finds a rigid body not part of a rigid body island, produce a warning. The rigid body will not be exported. Or just export it as if it were it's own island. It's annoyying to use that parent thing when there is one object.
 	- If the spawn point is not a bit above the ground mesh, produce a warning. The car will just fall through.
 	- [BUG] You can export a rigid body without a collision hull.
 - Immediate mode UI rendering.
@@ -127,8 +121,9 @@ OPERATION FUN FUCKING TRACK
 	- [done] Wheels that point towards steer angle
 	- Skid marks when drifting
 - Shock barrel
-	- The feeling when hitting it. It's too light.
+	- [done] The feeling when hitting it. It's too light.
 	- [done] Visual indication for when it's going to explode. Would like to do bloom but let's stay focused on making a fun fucking track.
 	- Car control logic when shocked.
+	- [done] Explosion knock back needs to be stronger
 - Crates
 	- Like the cars should be more like a push forward than a bounce back

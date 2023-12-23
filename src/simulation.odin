@@ -690,7 +690,7 @@ explode_rigid_body :: proc(scene: ^Scene, lookup: Entity_Lookup, rigid_body: ^Ri
 	// Appy explosion impulse to car if nearby
 	if math2.box_intersects(bounds, scene.player.bounds) {
 		dir := linalg.normalize(scene.player.position - rigid_body.position);
-		scene.player.velocity += dir * 30;
+		scene.player.velocity += dir * 60;
 	}
 
 	// Apply explosion impulse to nearby rigid bodies
