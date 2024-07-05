@@ -48,7 +48,7 @@ ground_grid_reset :: proc(using ground_grid: ^Ground_Grid, half_size: f32) {
 	}
 
 	delete(grid);
-	
+
 	cell_count := half_cell_count * 2;
 
 	grid = make([dynamic][dynamic][dynamic]int, cell_count);
@@ -190,8 +190,8 @@ ground_grid_cleanup :: proc(using ground_grid: ^Ground_Grid) {
 	delete(triangles);
 	delete(query_flags);
 
-	for col in &grid {
-		for row in &col {
+	for &col in grid {
+		for &row in col {
 			delete(row);
 		}
 

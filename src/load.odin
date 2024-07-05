@@ -52,7 +52,7 @@ read_quat :: proc(bytes: ^[]byte, pos: ^int) -> linalg.Quaternionf32 {
 
 	pos^ += 16;
 
-	return cast(linalg.Quaternionf32) quaternion(w, x, y, z);
+	return cast(linalg.Quaternionf32) quaternion(w = w, x = x, y = y, z = z);
 }
 
 read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dynamic]f32) {
@@ -79,11 +79,11 @@ read_indices_attributes :: proc(bytes: ^[]byte, pos: ^int) -> ([dynamic]u16, [dy
 
 load_car_data:: proc(scene: ^Scene) {
 	REQUIRED_VERSION :: 2;
-	
+
 	bytes, success := os.read_entire_file_from_filename("res/car.kgc");
 	assert(success);
 	defer delete(bytes);
-	
+
 	pos := 0;
 	car_loaded_data := &scene.car_loaded_data;
 
@@ -121,7 +121,7 @@ load_car_data:: proc(scene: ^Scene) {
 		delete(attributes);
 
 		car_loaded_data.wheel_radius = read_f32(&bytes, &pos);
-		
+
 		assert(read_u32(&bytes, &pos) == POSITION_CHECK_VALUE);
 	}
 }
@@ -141,10 +141,10 @@ load_scene :: proc(scene: ^Scene) {
 	}
 
 	REQUIRED_VERSION :: 8;
-	
+
 	bytes, success := os.read_entire_file_from_filename(scene.file_path, context.temp_allocator);
 	assert(success, fmt.tprintf("Failed to load level file %s", scene.file_path));
-	
+
 	pos := 0;
 
 	version := read_u32(&bytes, &pos);
@@ -159,7 +159,7 @@ load_scene :: proc(scene: ^Scene) {
 	grid_half_size := read_f32(&bytes, &pos);
 	ground_grid_reset(&scene.ground_grid, grid_half_size);
 	entity_grid_reset(&scene.entity_grid, grid_half_size);
-	
+
 	{ // Ground grid
 		meshes_count := read_u32(&bytes, &pos);
 
@@ -243,10 +243,10 @@ load_scene :: proc(scene: ^Scene) {
 	{ // Rigid body islands
 		island_count := read_u32(&bytes, &pos);
 		islands_reset(&scene.islands, island_count);
-		
+
 		for island_index in 0..<island_count {
 			bodies_count := read_u32(&bytes, &pos);
-			
+
 			for _ in 0..<bodies_count {
 				name := read_string(&bytes, &pos);
 				position := read_vec3(&bytes, &pos);
@@ -304,7 +304,7 @@ load_scene :: proc(scene: ^Scene) {
 				} else {
 					append(&scene.awake_rigid_bodies, entity_lookup);
 				}
-				
+
 				switch status_effect {
 				case .None:
 				case .Shock, .ExplodingShock:
@@ -363,7 +363,7 @@ load_scene :: proc(scene: ^Scene) {
 			geometry_lookup := geometry_lookups[geometry_index];
 			entity, entity_lookup := create_entity(name, geometry_lookup, Bumper_Entity);
 			entity.scene_associated = true;
-			
+
 			entity.position = position;
 			entity.orientation = orientation;
 			entity.size = size;
@@ -425,7 +425,7 @@ load_scene :: proc(scene: ^Scene) {
 	when ODIN_DEBUG {
 		for geometry_lookup in geometry_lookups {
 			geometry := get_geometry(geometry_lookup);
-			
+
 			if len(geometry.entity_lookups) == 0 {
 				fmt.printf("[level loading] No entities were added to geometry '%s'.\n", geometry.name);
 			}
@@ -435,7 +435,7 @@ load_scene :: proc(scene: ^Scene) {
 	{ // AI paths
 		load_path :: proc(bytes: ^[]byte, pos: ^int, path: ^[dynamic]Curve) {
 			curves_count_left := read_u32(bytes, pos);
-			
+
 			for _ in 0..<curves_count_left {
 				p0 := read_vec3(bytes, pos);
 				p1 := read_vec3(bytes, pos);
@@ -449,7 +449,7 @@ load_scene :: proc(scene: ^Scene) {
 
 				append(path, curve);
 			}
-			
+
 			// #todo: Do this in exporter
 			calculate_curve_lengths(path[:])
 		}
@@ -502,7 +502,7 @@ load_scene :: proc(scene: ^Scene) {
 		entity, entity_lookup := create_entity("ai_player", car_geometry_lookup, Car_Entity);
 		init_car_entity(entity);
 		entity.wheel_radius = wheel_radius;
-		
+
 		entity.position = scene.spawn_position;
 		entity.orientation = scene.spawn_orientation;
 		update_entity_transform(entity);
@@ -546,7 +546,7 @@ calculate_center_multiplier :: proc(origin: linalg.Vector3f32, ai: ^AI) -> f32 {
 
 load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 	REQUIRED_VERSION :: 1;
-	
+
 	bytes, success := os.read_entire_file_from_filename("res/runtime_assets.kga");
 	defer delete(bytes);
 	assert(success);
@@ -567,7 +567,7 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 			hull_position := read_vec3(&bytes, &pos);
 			hull_orientation := read_quat(&bytes, &pos);
 			hull_size := read_vec3(&bytes, &pos);
-			
+
 			geometry, geometry_lookup := create_geometry("shrapnel", .Keep);
 			geometry_make_triangle_mesh(geometry, indices[:], attributes[:], .LambertTwoSided);
 
@@ -608,7 +608,7 @@ load_runtime_assets :: proc(runtime_assets: ^Runtime_Assets) {
 
 			delete(indices);
 			delete(attributes);
-			
+
 			// #todo Should this be used? Is all we need for the oil slick asset this transform?
 			hull_local_transform := linalg.matrix4_from_trs(hull_position, hull_orientation, hull_size);
 
@@ -636,7 +636,7 @@ init_scene :: proc(scene: ^Scene) {
 
 	time, error := os.last_write_time_by_name(scene.reload_file_path);
 	assert(error == os.ERROR_NONE || error == os.ERROR_FILE_NOT_FOUND);
-	
+
 	if error == os.ERROR_NONE {
 		scene.load_time = time;
 	}
@@ -651,7 +651,7 @@ cleanup_scene :: proc(scene: ^Scene) {
 
 hot_reload_scene_if_needed :: proc(game: ^Game) {
 	scene := &game.scene;
-	
+
 	time, error := os.last_write_time_by_name(scene.reload_file_path);
 	assert(error == os.ERROR_NONE || error == os.ERROR_FILE_NOT_FOUND);
 

@@ -21,7 +21,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 		tentative_orientation := math2.integrate_angular_velocity(car.angular_velocity, car.orientation, dt);
 		car.tentative_inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(tentative_orientation, CAR_INV_LOCAL_INERTIA_TENSOR);
 		car.tentative_transform = linalg.matrix4_from_trs(car.tentative_position, tentative_orientation, linalg.Vector3f32 {1, 1, 1});
-		
+
 		entity_grid_move_tentatively(&scene.entity_grid, lookup, car, tentative_orientation, car.tentative_transform);
 
 		car.checked_collision = false;
@@ -39,7 +39,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 		tentative_orientation := math2.integrate_angular_velocity(rigid_body.angular_velocity, rigid_body.orientation, dt);
 		rigid_body.tentative_inv_global_inertia_tensor = math2.calculate_inv_global_inertia_tensor(tentative_orientation, rigid_body.inv_local_inertia_tensor);
 		rigid_body.tentative_transform = linalg.matrix4_from_trs(rigid_body.tentative_position, tentative_orientation, rigid_body.size);
-		
+
 		entity_grid_move_tentatively(&scene.entity_grid, lookup, rigid_body, tentative_orientation, rigid_body.tentative_transform);
 
 		rigid_body.checked_collision = false;
@@ -49,9 +49,9 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 	if config.contact_point_helpers {
 		clear_contact_helpers(&scene.contact_helpers);
 	}
-	
+
 	clear_constraints(&scene.constraints);
-	
+
 	additional_awake_entities := make([dynamic]Entity_Lookup, context.temp_allocator);
 
 	// Car collisions
@@ -81,7 +81,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 		for nearby_lookup in nearby_lookups {
 			nearby_entity := get_entity(nearby_lookup);
 
-			for nearby_hull in &nearby_entity.collision_hulls {
+			for &nearby_hull in nearby_entity.collision_hulls {
 				simplex, colliding := hulls_colliding(provoking_hull, &nearby_hull).?;
 				if !colliding do continue;
 
@@ -98,7 +98,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 					e.animating = true;
 					e.animation_duration = 0;
 					continue;
-				
+
 				case ^Boost_Jet_Entity:
 					dir := linalg.normalize(math2.matrix4_forward(e.transform));
 					car.velocity += dir * 150 * dt;
@@ -106,7 +106,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 
 				case ^Car_Entity:
 					if e.checked_collision do continue;
-				
+
 				case ^Oil_Slick_Entity:
 					unreachable();
 
@@ -131,7 +131,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 					add_car_car_constraint_set(&scene.constraints, car, e, &manifold, dt);
 					car.sliding = true;
 					e.sliding = true;
-					
+
 				case ^Cloud_Entity, ^Oil_Slick_Entity, ^Bumper_Entity, ^Boost_Jet_Entity:
 					unreachable();
 				}
@@ -148,7 +148,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 		// Collisions with the ground
 		nearby_triangle_indices := ground_grid_find_nearby_triangles(&scene.ground_grid, provoking_rigid_body.bounds);
 
-		for provoking_hull in &provoking_rigid_body.collision_hulls {
+		for &provoking_hull in provoking_rigid_body.collision_hulls {
 			for nearby_triangle_index in nearby_triangle_indices {
 				nearby_triangle := ground_grid_form_triangle(&scene.ground_grid, nearby_triangle_index);
 
@@ -165,7 +165,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 		// Collisions with other hulls
 		nearby_lookups := entity_grid_find_nearby_entities(&scene.entity_grid, provoking_rigid_body.bounds);
 
-		for provoking_hull in &provoking_rigid_body.collision_hulls {
+		for &provoking_hull in provoking_rigid_body.collision_hulls {
 			for nearby_lookup in nearby_lookups {
 				if provoking_lookup == nearby_lookup do continue;
 
@@ -175,12 +175,12 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 				case ^Rigid_Body_Entity:
 					if nearby_entity_variant.checked_collision do continue;
 					if nearby_entity_variant.collision_exclude && nearby_entity_variant.collision_exclude do continue;
-				
+
 				case ^Car_Entity:
 					if nearby_entity_variant.checked_collision do continue;
 				}
 
-				for nearby_hull in &nearby_entity.collision_hulls {
+				for &nearby_hull in&nearby_entity.collision_hulls {
 					simplex, colliding := hulls_colliding(&provoking_hull, &nearby_hull).?;
 					if !colliding do continue;
 
@@ -195,7 +195,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 					case ^Rigid_Body_Entity:
 						add_movable_constraint_set(&scene.constraints, provoking_rigid_body, e, &manifold, dt);
 						rigid_body_collision_merge_islands(&scene.islands, &additional_awake_entities, provoking_lookup, provoking_rigid_body, e);
-					
+
 					case ^Inanimate_Entity:
 						add_fixed_constraint_set(&scene.constraints, provoking_rigid_body, provoking_hull.kind, &manifold, dt);
 
@@ -209,7 +209,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 
 						e.animating = true;
 						e.animation_duration = 0;
-					
+
 					case ^Car_Entity, ^Oil_Slick_Entity, ^Cloud_Entity:
 						// The Car_Entity is unreachable beacuse it would've already been handled in the car collision detection loop above.
 						// Once we process that collision we set checked_collision on the car to true.
@@ -225,12 +225,12 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 	if config.island_helpers {
 		update_island_helpers(&scene.islands);
 	}
-	
+
 	solve_constraints(&scene.constraints, dt);
 
 	for lookup in scene.all_players {
 		car := get_entity(lookup).variant.(^Car_Entity);
-		
+
 		car.position += (car.velocity + car.bias_velocity) * dt;
 		car.orientation = math2.integrate_angular_velocity(car.angular_velocity + car.bias_angular_velocity, car.orientation, dt);
 
@@ -239,9 +239,9 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 
 		update_entity_transform(car);
 	}
-	
+
 	append(&scene.awake_rigid_bodies, ..additional_awake_entities[:]);
-	
+
 	// Clear the entities woken up from awake islands colliding with asleep islands. We'll reuse this array to keep track
 	// of entities woken up from exploding barrels.
 	clear(&additional_awake_entities);
@@ -263,7 +263,7 @@ simulate :: proc(scene: ^Scene, runtime_assets: ^Runtime_Assets, dt: f32) {
 
 		rigid_body.bias_velocity = VEC3_ZERO;
 		rigid_body.bias_angular_velocity = VEC3_ZERO;
-	
+
 		update_entity_transform(rigid_body);
 
 		// Compare the previous postion and orientation to increase the sleep duration
@@ -317,7 +317,7 @@ SPRING_MAX_LENGTH: f32 : 0.8;
 
 find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, entity_grid: ^Entity_Grid, constraints: ^Constraints, car: ^Car_Entity, dt: f32, oil_slicks: []Entity_Lookup) {
 	extension_dir := -math2.matrix4_up(car.tentative_transform);
-	
+
 	SPRING_BODY_POINT_LOCAL_BL :: linalg.Vector3f32 { SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
 	SPRING_BODY_POINT_LOCAL_BR :: linalg.Vector3f32 {-SPRING_BODY_POINT_X, -SPRING_BODY_POINT_Y, -SPRING_BODY_POINT_Z};
 
@@ -391,7 +391,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 			case ^Inanimate_Entity:
 			}
 
-			for nearby_hull in &nearby_entity.collision_hulls {
+			for &nearby_hull in nearby_entity.collision_hulls {
 				if !math2.box_intersects(spring_bounds, nearby_hull.global_bounds) {
 					continue;
 				}
@@ -444,7 +444,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 		// Check if car is on an oil slick
 		probe_start := car.position + extension_dir * SPRING_BODY_POINT_Y;
 		probe_end := probe_start + extension_dir * SPRING_MAX_LENGTH;
-		
+
 		probe_bounds_min := linalg.min(probe_start, probe_end);
 		probe_bounds_max := linalg.max(probe_start, probe_end);
 		probe_bounds := math2.Box3f32 { probe_bounds_min, probe_bounds_max };
@@ -477,7 +477,7 @@ find_car_spring_constraints_and_surface_type :: proc(ground_grid: ^Ground_Grid, 
 					if oil_slick.on_fire {
 						light_car_on_fire(car);
 					}
-					
+
 					break oil_slick_loop;
 				}
 			}
@@ -505,7 +505,7 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 
 		best_normal: linalg.Vector3f32;
 		best_length := max(f32);
-		
+
 		face_normals :: [6]linalg.Vector3f32 {
 			{  1,  0,  0 },
 			{ -1,  0,  0 },
@@ -532,12 +532,12 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 				if p.z < 1 && p.z > -1 && p.y < 1 && p.y > -1 {
 					intersecting = true;
 				}
-			
+
 			case { 0, 1, 0 }, { 0, -1, 0 }:
 				if p.x < 1 && p.x > -1 && p.z < 1 && p.z > -1 {
 					intersecting = true;
 				}
-			
+
 			case { 0, 0, 1 }, { 0, 0, -1 }:
 				if p.x < 1 && p.x > -1 && p.y < 1 && p.y > -1 {
 					intersecting = true;
@@ -575,7 +575,7 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 				p := s + local_direction * t;
 
 				if p.x * p.x + p.z * p.z >= 1 do break top_bot;
-				
+
 				local_normal = { 0, -y, 0 };
 				length = t;
 				break;
@@ -610,7 +610,7 @@ spring_intersects_hull :: proc(origin, direction: linalg.Vector3f32, hull: ^Coll
 			local_normal = { p.x, 0, p.z };
 			length = t;
 		}
-	
+
 	case .Sphere:
 		unreachable();
 
@@ -726,7 +726,7 @@ explode_rigid_body :: proc(scene: ^Scene, lookup: Entity_Lookup, rigid_body: ^Ri
 		entity_grid_insert(&scene.entity_grid, shrapnel_lookup, shrapnel_rigid_body);
 
 		append(additional_awake_entities, shrapnel_lookup);
-		
+
 		dir := linalg.normalize(shrapnel_rigid_body.position - rigid_body.position);
 		shrapnel_rigid_body.velocity = dir * 30;
 	}
@@ -815,7 +815,7 @@ explode_rigid_body :: proc(scene: ^Scene, lookup: Entity_Lookup, rigid_body: ^Ri
 					if intersection_length <= 0 || intersection_length > ray_length {
 						continue;
 					}
-					
+
 					if config.explosion_helpers {
 						geometry, _ := create_geometry("explosion helper", .KeepRender);
 						geometry_make_line_helper_origin_vector(geometry, origin, segment);
@@ -827,7 +827,7 @@ explode_rigid_body :: proc(scene: ^Scene, lookup: Entity_Lookup, rigid_body: ^Ri
 
 					oil_slick_entity, oil_slick_entity_lookup := create_entity("oil slick", oil_slick_asset.geometry_lookup, Oil_Slick_Entity);
 					oil_slick_entity.scene_associated = true;
-					
+
 					orientation := linalg.quaternion_between_two_vector3(linalg.VECTOR3F32_Y_AXIS, ground_triangle.normal);
 
 					oil_slick_entity.position = intersection_point;
@@ -835,7 +835,7 @@ explode_rigid_body :: proc(scene: ^Scene, lookup: Entity_Lookup, rigid_body: ^Ri
 					oil_slick_entity.on_fire = true;
 					oil_slick_entity.desired_fire_particles = 13;
 					update_entity_transform(oil_slick_entity);
-					
+
 					hull_indices_copy := slice.clone_to_dynamic(oil_slick_asset.hull_indices[:]);
 					hull_positions_copy := slice.clone_to_dynamic(oil_slick_asset.hull_positions[:]);
 					hull := init_collision_hull(oil_slick_asset.hull_local_position, oil_slick_asset.hull_local_orientation, oil_slick_asset.hull_local_size, .Mesh, hull_indices_copy, hull_positions_copy);

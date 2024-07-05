@@ -19,7 +19,7 @@ init_shock_particles :: proc(rigid_body: ^Rigid_Body_Entity) {
 	for _ in 0..<50 {
 		particle: Particle;
 		particle.size = SHOCK_PARTICLE_SIZE;
-		
+
 		append(&rigid_body.particles, particle);
 	}
 }
@@ -51,7 +51,7 @@ update_shock_entity_particles :: proc(shock_entities: []Entity_Lookup, dt: f32) 
 			rigid_body.emissive_pulse_duration = math.mod_f32(rigid_body.emissive_pulse_duration + dt, SHOCK_BARREL_EMISSIVE_PULSE_FREQ);
 		}
 
-		for particle in &rigid_body.particles {
+		for &particle in rigid_body.particles {
 			dist := linalg.abs(particle.position - rigid_body.position);
 
 			if dist.x > SHOCK_PARTICLE_MAX_OFFSET || dist.y > SHOCK_PARTICLE_MAX_OFFSET || dist.z > SHOCK_PARTICLE_MAX_OFFSET {
@@ -114,7 +114,7 @@ update_fire_entity_particles :: proc(fire_entities: []Entity_Lookup, dt: f32) {
 	for lookup in fire_entities {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
-		for particle in &rigid_body.particles {
+		for &particle in rigid_body.particles {
 			if particle.time_alive >= particle.life_time {
 				reset_fire_particle(rigid_body, &particle);
 			}
@@ -158,7 +158,7 @@ draw_shock_entity_particles ::  proc(vulkan: ^Vulkan, shock_entities: []Entity_L
 	for lookup in shock_entities {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
-		for particle in &rigid_body.particles {
+		for &particle in rigid_body.particles {
 			draw_particle(vulkan, &particle);
 		}
 	}
@@ -168,7 +168,7 @@ draw_fire_entity_particles :: proc(vulkan: ^Vulkan, fire_entities: []Entity_Look
 	for lookup in fire_entities {
 		rigid_body := get_entity(lookup).variant.(^Rigid_Body_Entity);
 
-		for particle in &rigid_body.particles {
+		for &particle in rigid_body.particles {
 			draw_particle(vulkan, &particle);
 		}
 	}
@@ -206,7 +206,7 @@ update_status_effect_cloud_particles :: proc(clouds: []Entity_Lookup, dt: f32) {
 			if len(cloud.particles) < SHOCK_DESIRED_PARTICLES {
 				desired_particles_so_far := min(cast(int) math.ceil(cloud.ramp_up_duration * SHOCK_RAMP_UP_PARTICLES_PER_SECOND), SHOCK_DESIRED_PARTICLES);
 				particles_to_add := desired_particles_so_far - len(cloud.particles);
-				
+
 				cloud.ramp_up_duration += dt;
 
 				for _ in 0..<particles_to_add {
@@ -217,13 +217,13 @@ update_status_effect_cloud_particles :: proc(clouds: []Entity_Lookup, dt: f32) {
 				}
 			}
 
-			for particle in &cloud.particles {
+			for &particle in cloud.particles {
 				local_dist := math2.matrix4_transform_point(hull.inv_global_transform, particle.position);
 
 				if linalg.length2(local_dist) > 1.2 * 1.2 {
 					reset_shock_particle(hull.global_transform, &particle);
 				}
-				
+
 				update_shock_particle(linalg.Vector3f32 {0, 0, 0}, &particle, dt);
 			}
 		}
@@ -234,7 +234,7 @@ draw_status_effect_clouds :: proc(vulkan: ^Vulkan, clouds: []Entity_Lookup) {
 	for lookup in clouds {
 		cloud := get_entity(lookup).variant.(^Cloud_Entity);
 
-		for particle in &cloud.particles {
+		for &particle in cloud.particles {
 			draw_particle(vulkan, &particle);
 		}
 	}
@@ -260,7 +260,7 @@ update_on_fire_oil_slicks :: proc(oil_slick_lookups: []Entity_Lookup, dt: f32) {
 		rho := rand.float32() * 1.2;
 		x := math.sqrt(rho) * math.cos(phi);
 		z := math.sqrt(rho) * math.sin(phi);
-		
+
 		extent := math2.box_extent(entity.collision_hulls[0].local_bounds);
 		local_position := linalg.Vector3f32 { x * extent.x, 0, z * extent.z };
 		particle.position = math2.matrix4_transform_point(entity.transform, local_position);
@@ -294,7 +294,7 @@ update_on_fire_oil_slicks :: proc(oil_slick_lookups: []Entity_Lookup, dt: f32) {
 			}
 		}
 
-		for particle in &oil_slick.fire_particles {
+		for &particle in oil_slick.fire_particles {
 			if particle.time_alive > particle.life_time {
 				reset_particle(oil_slick, &particle);
 			}
@@ -308,7 +308,7 @@ draw_on_fire_oil_slicks :: proc(vulkan: ^Vulkan, oil_slick_lookups: []Entity_Loo
 	for lookup in oil_slick_lookups {
 		oil_slick := get_entity(lookup).variant.(^Oil_Slick_Entity);
 
-		for particle in &oil_slick.fire_particles {
+		for &particle in oil_slick.fire_particles {
 			draw_particle(vulkan, &particle);
 		}
 	}
@@ -327,7 +327,7 @@ reset_boost_jet_particle :: proc(particle: ^Particle, hull_transform: linalg.Mat
 
 init_boost_jet_particles :: proc(boost_jet: ^Boost_Jet_Entity) {
 	hull_transform := boost_jet.collision_hulls[0].global_transform;
-	
+
 	for _ in 0..<150 {
 		particle: Particle;
 		particle.size = 0.1;
@@ -340,13 +340,13 @@ init_boost_jet_particles :: proc(boost_jet: ^Boost_Jet_Entity) {
 
 update_boost_jet_particles :: proc(boost_jet_lookups: []Entity_Lookup, dt: f32) {
 	SPEED :: 20;
-	
+
 	for lookup in boost_jet_lookups {
 		boost_jet := get_entity(lookup).variant.(^Boost_Jet_Entity);
 		hull_transform := boost_jet.collision_hulls[0].global_transform;
 		forward := linalg.normalize(math2.matrix4_forward(boost_jet.transform));
 
-		for particle in &boost_jet.particles {
+		for &particle in boost_jet.particles {
 			if particle.time_alive > particle.life_time {
 				reset_boost_jet_particle(&particle, hull_transform);
 			}
@@ -361,7 +361,7 @@ draw_boost_jet_particles :: proc(vulkan: ^Vulkan, boost_jet_lookups: []Entity_Lo
 	for lookup in boost_jet_lookups {
 		boost_jet := get_entity(lookup).variant.(^Boost_Jet_Entity);
 
-		for particle in &boost_jet.particles {
+		for &particle in boost_jet.particles {
 			draw_particle(vulkan, &particle);
 		}
 	}

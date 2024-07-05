@@ -1,7 +1,7 @@
 package main;
 
+import "base:runtime";
 import "core:fmt";
-import "core:runtime";
 import "core:strings";
 import "vendor:glfw";
 import vk "vendor:vulkan";
@@ -43,10 +43,10 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> Vulkan_Context {
 		vk.EnumerateInstanceExtensionProperties(nil, &available_instance_extensions_count, raw_data(available_instance_extensions));
 
 		instance_extension: for required_extension in REQUIRED_DEBUG_INSTANCE_EXTENSIONS {
-			for available_extension in &available_instance_extensions {
+			for &available_extension in available_instance_extensions {
 				if required_extension == cstring(&available_extension.extensionName[0]) do continue instance_extension;
 			}
-			
+
 			fmt.panicf("Required device extension %q not available\n", required_extension);
 		}
 	}
@@ -60,10 +60,10 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> Vulkan_Context {
 		vk.EnumerateInstanceLayerProperties(&available_layers_count, raw_data(available_layers));
 
 		layer: for required_layer in REQUIRED_DEBUG_LAYERS {
-			for available_layer in &available_layers {
+			for &available_layer in available_layers {
 				if required_layer == cstring(&available_layer.layerName[0]) do continue layer;
 			}
-			
+
 			fmt.panicf("Required layer %q not available\n", required_layer);
 		}
 	}
@@ -143,10 +143,10 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> Vulkan_Context {
 			vk.EnumerateDeviceExtensionProperties(device, nil, &available_extensions_count, raw_data(available_extensions));
 
 			device_extension: for required_extension in REQUIRED_DEVICE_EXTENSIONS {
-				for available_extension in &available_extensions {
+				for &available_extension in available_extensions {
 					if required_extension == cstring(&available_extension.extensionName[0]) do continue device_extension;
 				}
-				
+
 				fmt.panicf("Required device extension %q not available\n", required_extension);
 			}
 
@@ -200,7 +200,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> Vulkan_Context {
 			vk.GetPhysicalDeviceProperties(device, &properties);
 			name := strings.string_from_null_terminated_ptr(raw_data(&properties.deviceName), vk.MAX_PHYSICAL_DEVICE_NAME_SIZE);
 			fmt.printf("Using %v\n", name);
-			
+
 			break;
 		}
 
@@ -219,7 +219,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> Vulkan_Context {
 			queueCount = 1,
 			pQueuePriorities = &queue_priority,
 		};
-		
+
 		append(&queue_create_infos, graphics_queue_create_info);
 
 		if graphics_queue_family != present_queue_family {
@@ -229,7 +229,7 @@ init_vulkan_context :: proc(window: glfw.WindowHandle) -> Vulkan_Context {
 				queueCount = 1,
 				pQueuePriorities = &queue_priority,
 			};
-			
+
 			append(&queue_create_infos, present_queue_create_info);
 		}
 

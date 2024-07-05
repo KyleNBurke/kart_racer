@@ -67,7 +67,7 @@ box_union_4 :: proc(b1, b2, b3, b4: Box3f32) -> Box3f32 {
 	return Box3f32 {min, max};
 }
 
-@(test, private)
+@test
 test_box_contains :: proc(t: ^testing.T) {
 	a := Box3f32 {linalg.Vector3f32 {-3.0, 2.0, 0.0}, linalg.Vector3f32 {1.0, 5.0, 3.0}};
 	b := Box3f32 {linalg.Vector3f32 {-2.0, 3.0, 1.0}, linalg.Vector3f32 {0.0, 4.0, 3.0}};

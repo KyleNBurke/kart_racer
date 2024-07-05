@@ -69,7 +69,7 @@ update_entity_hull_transforms_and_bounds :: proc(entity: ^Entity, orientation: l
 	entity_min: linalg.Vector3f32 = VEC3_INF;
 	entity_max: linalg.Vector3f32 = VEC3_NEG_INF;
 
-	for hull in &entity.collision_hulls {
+	for &hull in entity.collision_hulls {
 		global_orientation := orientation * hull.local_orientation;
 		hull.inv_global_orientation = linalg.quaternion_inverse(global_orientation);
 
@@ -138,7 +138,7 @@ update_entity_hull_helpers :: proc(hull_helpers: ^Hull_Helpers) {
 
 		for &hull in entity.collision_hulls {
 			geometry_lookup: Geometry_Lookup;
-			
+
 			switch hull.kind {
 			case .Box:
 				geometry_lookup = hull_helpers.box_helper_geo_lookup;
@@ -186,7 +186,7 @@ ray_intersects_hull :: proc(hull: ^Collision_Hull, origin, direction: linalg.Vec
 
 		best_normal: linalg.Vector3f32;
 		best_length := max(f32);
-		
+
 		face_normals :: [6]linalg.Vector3f32 {
 			{  1,  0,  0 },
 			{ -1,  0,  0 },
@@ -213,12 +213,12 @@ ray_intersects_hull :: proc(hull: ^Collision_Hull, origin, direction: linalg.Vec
 				if p.z < 1 && p.z > -1 && p.y < 1 && p.y > -1 {
 					intersecting = true;
 				}
-			
+
 			case { 0, 1, 0 }, { 0, -1, 0 }:
 				if p.x < 1 && p.x > -1 && p.z < 1 && p.z > -1 {
 					intersecting = true;
 				}
-			
+
 			case { 0, 0, 1 }, { 0, 0, -1 }:
 				if p.x < 1 && p.x > -1 && p.y < 1 && p.y > -1 {
 					intersecting = true;
@@ -256,7 +256,7 @@ ray_intersects_hull :: proc(hull: ^Collision_Hull, origin, direction: linalg.Vec
 				p := s + local_direction * t;
 
 				if p.x * p.x + p.z * p.z >= 1 do break top_bot;
-				
+
 				local_contact_normal = { 0, -y, 0 };
 				contact_length = t;
 				break;
@@ -291,7 +291,7 @@ ray_intersects_hull :: proc(hull: ^Collision_Hull, origin, direction: linalg.Vec
 			local_contact_normal = { p.x, 0, p.z };
 			contact_length = t;
 		}
-	
+
 	case .Sphere:
 		unreachable();
 

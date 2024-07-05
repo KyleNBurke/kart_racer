@@ -87,7 +87,7 @@ init :: proc(game: ^Game) {
 
 	init_window(&game.window);
 	init_vulkan(&game.vulkan, game.window);
-	
+
 	camera_aspect := f32(game.vulkan.extent.width) / f32(game.vulkan.extent.height);
 	game.camera = init_camera(camera_aspect, 75.0, game.window);
 	game.gamepad.deadzone_radius = 0.25;
@@ -264,7 +264,7 @@ debug_cleanup :: proc(game: ^Game) {
 	cleanup_islands(&scene.islands);
 	cleanup_runtime_assets(&game.runtime_assets);
 	ai_debug_cleanup(&scene.ai);
-	
+
 	cleanup_entities_geos();
 
 	// Cleanup scene should do all this and hold all theses variables too.

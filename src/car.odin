@@ -35,7 +35,7 @@ shock_car :: proc(car: ^Car_Entity) {
 			particle: Particle;
 			particle.size = SHOCK_PARTICLE_SIZE;
 			reset_shock_particle(car, &particle);
-	
+
 			append(&car.shock_particles, particle);
 		}
 	}
@@ -87,7 +87,7 @@ update_car_status_effects_and_particles :: proc(car: ^Car_Entity, camera_trans: 
 		car_left    := math2.matrix4_left(car.transform);
 		car_up      := math2.matrix4_up(car.transform);
 		car_forward := math2.matrix4_forward(car.transform);
-		
+
 		dist := particle.position - car.position;
 
 		x_dist := linalg.dot(car_left, dist);
@@ -156,11 +156,11 @@ reset_fire_particle :: proc(car: ^Car_Entity, particle: ^Particle) {
 }
 
 draw_car_status_effects :: proc(vulkan: ^Vulkan, car: ^Car_Entity) {
-	for particle in &car.shock_particles {
+	for &particle in car.shock_particles {
 		draw_particle(vulkan, &particle);
 	}
 
-	for particle in &car.fire_particles {
+	for &particle in &car.fire_particles {
 		draw_particle(vulkan, &particle);
 	}
 }
@@ -208,7 +208,7 @@ set_player_inputs :: proc(gamepad: ^Gamepad, window: glfw.WindowHandle, player: 
 
 		player.input_steer_multiplier = steer_multiplier;
 	}
-	
+
 	player.input_handbreak = false;
 
 	if glfw.GetKey(window, glfw.KEY_SPACE) == glfw.PRESS || gamepad_button_held(gamepad, glfw.GAMEPAD_BUTTON_A) {
@@ -254,7 +254,7 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 		}
 
 		handbraking := false;
-		
+
 		if car.handbrake_duration <= 0.3 {
 			car.handbrake_duration += dt;
 			handbraking = true;
@@ -287,7 +287,7 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 			car.current_steer_angle = 0;
 			ang_vel := linalg.dot(car_ang_vel, car.surface_normal);
 			ang_accel: f32;
-			
+
 			if car.input_steer_multiplier == 0 {
 				ang_accel = -clamp(ang_vel, -ANG_FRIC * dt, ANG_FRIC * dt);
 			} else {
@@ -339,7 +339,7 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 
 				tire_forward := math2.vector3_rotate(car_forward, car_up, car.current_steer_angle);
 				tire_surface_left := linalg.normalize(linalg.cross(front_surface_normal, tire_forward));
-				
+
 				tire_vel := car_vel + linalg.cross(car_ang_vel, car_forward * SPRING_BODY_POINT_Z);
 				tire_surface_left_vel := linalg.dot(tire_surface_left, tire_vel);
 				tire_fric := tire_surface_left_vel / 2;
@@ -352,7 +352,7 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 
 			if back_surface_normal != 0 {
 				tire_surface_left := linalg.normalize(linalg.cross(back_surface_normal, car_forward));
-				
+
 				tire_vel := car_vel + linalg.cross(car_ang_vel, -car_forward * SPRING_BODY_POINT_Z);
 				tire_surface_left_vel := linalg.dot(tire_surface_left, tire_vel);
 				tire_fric := tire_surface_left_vel / 2;
@@ -418,7 +418,7 @@ move_car :: proc(car: ^Car_Entity, dt: f32) {
 
 		// Air controls
 		pitch_multiplier := gamepad_stick_adjusted_pos(gamepad, 1);
-		
+
 		if glfw.GetKey(window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS {
 			if glfw.GetKey(window, glfw.KEY_W) == glfw.PRESS do pitch_multiplier += 1;
 			if glfw.GetKey(window, glfw.KEY_S) == glfw.PRESS do pitch_multiplier -= 1;
@@ -460,7 +460,7 @@ position_and_orient_car_wheels :: proc(player_lookups: []Entity_Lookup, dt: f32)
 
 			body_euler_y, body_euler_z, _ := linalg.euler_angles_yzx_from_quaternion(car.orientation);
 			wheel_euler_y: f32;
-			
+
 			if wheel_index == 0 || wheel_index == 1 {
 				wheel_euler_y = body_euler_y + car.current_steer_angle;
 			} else {

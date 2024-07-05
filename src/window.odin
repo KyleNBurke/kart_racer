@@ -1,7 +1,7 @@
 package main;
 
+import "base:runtime";
 import "core:c";
-import "core:runtime";
 import "vendor:glfw";
 
 Callback_State :: struct {
@@ -19,7 +19,7 @@ init_window :: proc(window: ^glfw.WindowHandle) {
 	if config.window_state == .Maximized {
 		glfw.WindowHint(glfw.MAXIMIZED, 1);
 	}
-	
+
 	window_width := cast(c.int) config.window_width;
 	window_height := cast(c.int) config.window_height;
 	window^ = glfw.CreateWindow(window_width, window_height, "Kart Guys", nil, nil);
@@ -62,7 +62,7 @@ maximized_callback : glfw.WindowMaximizeProc : proc "c" (window: glfw.WindowHand
 }
 
 content_scale_callback : glfw.WindowContentScaleProc : proc "c" (window: glfw.WindowHandle, xscale, yscale: f32) {
-	
+
 }
 
 key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode, action, mods: c.int) {
@@ -74,20 +74,20 @@ key_callback : glfw.KeyProc : proc "c" (window: glfw.WindowHandle, key, scancode
 		switch key {
 		case glfw.KEY_ESCAPE:
 			glfw.SetWindowShouldClose(window, true);
-		
+
 		case glfw.KEY_F5:
 			game.single_stepping = !game.single_stepping;
-		
+
 		case glfw.KEY_F6:
 			game.step = true;
-		
+
 		case glfw.KEY_R:
 			// #todo: Since this gets called in a separate thread, weird stuff could happen if for example, the car
 			// is in the middle of constraint resolution and it depends on the car's position for correctness. Instead,
 			// we should probably flip a boolean requesting the car's position be reset and do it in the main loop.
 			// This is really just some debug shit so for now I don't really care.
 			respawn_player(game.scene.player, game.scene.spawn_position, game.scene.spawn_orientation);
-		
+
 		case glfw.KEY_G:
 			lookup := game.scene.all_players[1];
 			car := get_entity(lookup).variant.(^Car_Entity);

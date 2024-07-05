@@ -24,7 +24,7 @@ entity_grid_reset :: proc(using grid: ^Entity_Grid, half_size: f32) {
 
 		delete(col);
 	}
-	
+
 	cell_count := half_cell_count * 2;
 
 	resize(&cells, cell_count);
@@ -117,8 +117,8 @@ entity_grid_find_nearby_entities :: proc(grid: ^Entity_Grid, bounds: math2.Box3f
 }
 
 entity_grid_cleanup :: proc(grid: ^Entity_Grid) {
-	for col in &grid.cells {
-		for row in &col {
+	for &col in grid.cells {
+		for &row in col {
 			delete(row);
 		}
 

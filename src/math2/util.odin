@@ -25,14 +25,14 @@ vector3_tangents :: proc(v: linalg.Vector3f32) -> (t1, t2: linalg.Vector3f32) {
 	} else {
 		t1 = linalg.normalize(linalg.Vector3f32 {0, v.z, -v.y});
 	}
-	
+
 	t2 = linalg.cross(v, t1);
 
 	return;
 }
 
 quaternion_mul_f32 :: proc(q: linalg.Quaternionf32, f: f32) -> linalg.Quaternionf32 {
-	return quaternion(q.w * f, q.x * f, q.y * f, q.z * f);
+	return quaternion(w = q.w * f, x = q.x * f, y = q.y * f, z = q.z * f);
 }
 
 // https://gamedev.stackexchange.com/a/50545/122527
@@ -68,7 +68,7 @@ matrix4_transform_direction :: proc(m: linalg.Matrix4f32, d: linalg.Vector3f32) 
 }
 
 integrate_angular_velocity :: proc(vel: linalg.Vector3f32, ori: linalg.Quaternionf32, dt: f32) -> linalg.Quaternionf32 {
-	w := cast(linalg.Quaternionf32) quaternion(0, vel.x, vel.y, vel.z)
+	w := cast(linalg.Quaternionf32) quaternion(w = 0, x = vel.x, y = vel.y, z = vel.z)
 	return linalg.normalize(ori + quaternion_mul_f32(w * ori, 0.5 * dt));
 }
 
@@ -151,7 +151,7 @@ ray_intersects_triangle :: proc(origin, direction: linalg.Vector3f32, a, b, c: l
 	if det < 0 {
 		return 0;
 	}
-	
+
 	t := origin - a;
 	u := linalg.dot(p, t);
 
@@ -194,19 +194,19 @@ vector3_max :: proc(vecs: ..linalg.Vector3f32) -> linalg.Vector3f32 {
 	return linalg.Vector3f32 { x, y, z };
 }
 
-@(test, private)
+@test
 test_matrix3_transform_direction :: proc(t: ^testing.T) {
 	m := linalg.Matrix3f32 {
 		4.0, 2.0, 8.0,
 		7.0, 1.0, 9.0,
 		0.0, 2.0, 6.0,
 	};
-	
+
 	d := linalg.Vector3f32 {1.0, 1.0, 1.0};
 	testing.expect_value(t, matrix3_transform_direction(m, d), linalg.Vector3f32 {14.0, 17.0, 8.0});
 }
 
-@(test, private)
+@test
 test_matrix4_transform_point :: proc(t: ^testing.T) {
 	m := linalg.Matrix4f32 {
 		4.0, 2.0, 8.0, 5.0,
@@ -214,12 +214,12 @@ test_matrix4_transform_point :: proc(t: ^testing.T) {
 		0.0, 2.0, 6.0, 3.0,
 		7.0, 8.0, 5.0, 3.0,
 	};
-	
+
 	p := linalg.Vector3f32 {1.0, 1.0, 1.0};
 	testing.expect_value(t, matrix4_transform_point(m, p), linalg.Vector3f32 {19.0, 21.0, 11.0});
 }
 
-@(test, private)
+@test
 test_matrix4_transform_direction :: proc(t: ^testing.T) {
 	m := linalg.Matrix4f32 {
 		4.0, 2.0, 8.0, 5.0,
@@ -227,7 +227,7 @@ test_matrix4_transform_direction :: proc(t: ^testing.T) {
 		0.0, 2.0, 6.0, 3.0,
 		7.0, 8.0, 5.0, 3.0,
 	};
-	
+
 	p := linalg.Vector3f32 {1.0, 1.0, 1.0};
 	testing.expect_value(t, matrix4_transform_direction(m, p), linalg.Vector3f32 {14.0, 17.0, 8.0});
 }

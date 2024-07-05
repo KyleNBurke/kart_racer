@@ -17,7 +17,7 @@ PARTICLE_INSTANCE_ELEMENT_SIZE :: 32;
 INSTANCE_BUFFER_INDICES_ATTRIBUTES_BLOCK_SIZE :: 5_000_000;
 INSTANCE_BUFFER_MESH_INSTANCE_BLOCK_SIZE :: MESH_INSTANCE_ELEMENT_SIZE * 1_000;
 INSTANCE_BUFFER_EMISSIVE_COLOR_ARRAY_SIZE :: 2000;
-INSTANCE_BUFFER_PARTICLE_INSTANCE_BLOCK_SIZE :: PARTICLE_INSTANCE_ELEMENT_SIZE * 1_000; 
+INSTANCE_BUFFER_PARTICLE_INSTANCE_BLOCK_SIZE :: PARTICLE_INSTANCE_ELEMENT_SIZE * 1_000;
 
 TEXT_PUSH_CONSTANTS_SIZE :: 16;
 
@@ -59,7 +59,7 @@ Swapchain_Frame :: struct {
 Frame_Resources :: struct {
 	descriptor_set_layout: vk.DescriptorSetLayout,
 	descriptor_sets: [IFFC]vk.DescriptorSet,
-	
+
 	// This buffer holds per frame data like the projection and view matrices.
 	per_frame_buffers: [IFFC]vk.Buffer,
 	per_frame_buffers_memory: [IFFC]vk.DeviceMemory,
@@ -91,11 +91,11 @@ Bloom_Frame_Buffer :: struct {
 	color_image: vk.Image,
 	color_memory: vk.DeviceMemory,
 	color_image_view: vk.ImageView,
-	
+
 	depth_image: vk.Image,
 	depth_memory: vk.DeviceMemory,
 	depth_image_view: vk.ImageView,
-	
+
 	framebuffer: vk.Framebuffer,
 }
 
@@ -140,7 +140,7 @@ Render_Particle :: struct #align(4) {
 
 init_vulkan :: proc(using vulkan: ^Vulkan, window: glfw.WindowHandle) {
 	framebuffer_width, framebuffer_height := glfw.GetFramebufferSize(window);
-	
+
 	vulkan_context = init_vulkan_context(window);
 	using vulkan_context;
 
@@ -158,13 +158,13 @@ init_vulkan :: proc(using vulkan: ^Vulkan, window: glfw.WindowHandle) {
 	fences = create_fences(logical_device);
 	primary_command_buffers = create_primary_command_buffers(logical_device, command_pool);
 	secondary_command_buffers := create_secondary_command_buffers(logical_device, command_pool);
-	
+
 	frame_descriptor_set_layout, frame_descriptor_sets := create_frame_descriptor_sets(logical_device, descriptor_pool);
 	per_frame_buffers, per_frame_buffers_memory := create_per_frame_buffers(physical_device, logical_device);
 	update_frame_descriptor_sets(logical_device, frame_descriptor_sets, per_frame_buffers);
 	per_instance_buffer_info := calculate_per_instance_buffer_info(physical_device);
 	per_instance_buffers, per_instance_buffers_memory := create_per_instance_buffers(physical_device, logical_device, per_instance_buffer_info.total_size);
-	
+
 	frame_resources = Frame_Resources {
 		descriptor_set_layout = frame_descriptor_set_layout,
 		descriptor_sets = frame_descriptor_sets,
@@ -196,7 +196,7 @@ init_vulkan :: proc(using vulkan: ^Vulkan, window: glfw.WindowHandle) {
 	update_particle_descriptor_sets(logical_device, particle_instance_descriptor_sets, per_instance_buffers, per_instance_buffer_info.particle_instance_block_offset);
 	particle_descriptor_set_layouts := [2]vk.DescriptorSetLayout { frame_descriptor_set_layout, particle_instance_descriptor_set_layout };
 	particle_pipeline_layout := create_pipeline_layout(logical_device, particle_descriptor_set_layouts[:]);
-	
+
 	pipelines := create_pipelines(
 		logical_device,
 		render_pass, bloom_offscreen_render_pass,
@@ -254,7 +254,7 @@ vulkan_cleanup :: proc(using vulkan: ^Vulkan) {
 	vk.DestroyPipelineLayout(logical_device, bloom_resources.color_pipeline_layout, nil);
 	vk.DestroyDescriptorSetLayout(logical_device, bloom_resources.descriptor_set_layout, nil);
 	vk.DestroyRenderPass(logical_device, bloom_resources.offscreen_render_pass, nil);
-	
+
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_two_sided_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.lambert_pipeline, nil);
 	vk.DestroyPipeline(logical_device, mesh_resources.basic_pipeline, nil);
@@ -777,9 +777,9 @@ create_semaphores :: proc(logical_device: vk.Device) -> [IFFC]vk.Semaphore {
 	create_info := vk.SemaphoreCreateInfo {
 		sType = .SEMAPHORE_CREATE_INFO,
 	};
-	
+
 	semaphores: [IFFC]vk.Semaphore;
-	for semaphore in &semaphores {
+	for &semaphore in semaphores {
 		r := vk.CreateSemaphore(logical_device, &create_info, nil, &semaphore);
 		assert(r == .SUCCESS);
 	}
@@ -794,7 +794,7 @@ create_fences :: proc(logical_device: vk.Device) -> [IFFC]vk.Fence {
 	};
 
 	fences: [IFFC]vk.Fence;
-	for fence in &fences {
+	for &fence in fences {
 		r := vk.CreateFence(logical_device, &create_info, nil, &fence);
 		assert(r == .SUCCESS);
 	}
@@ -825,7 +825,7 @@ create_secondary_command_buffers :: proc(logical_device: vk.Device, command_pool
 	// This is the number of pipelines we need to create secondary command buffers for. It must match the number of
 	// fields in the Secondary_Command_Buffers struct for the transmute to work.
 	COUNT :: 6;
-	
+
 	allocate_info := vk.CommandBufferAllocateInfo {
 		sType = .COMMAND_BUFFER_ALLOCATE_INFO,
 		commandPool = command_pool,
@@ -883,7 +883,7 @@ create_per_frame_buffers :: proc(physical_device: vk.PhysicalDevice, logical_dev
 		buffers[i] = buffer;
 		buffers_memory[i] = memory;
 	}
-	
+
 	return buffers, buffers_memory;
 }
 
@@ -923,7 +923,7 @@ create_allocate_and_bind_buffer_memory :: proc(physical_device: vk.PhysicalDevic
 update_frame_descriptor_sets :: proc(logical_device: vk.Device, descriptor_sets: [IFFC]vk.DescriptorSet, buffers: [IFFC]vk.Buffer) {
 	descriptor_buffer_infos: [IFFC]vk.DescriptorBufferInfo;
 	write_descriptor_sets: [IFFC]vk.WriteDescriptorSet;
-	
+
 	for i in 0..<IFFC {
 		descriptor_buffer_infos[i] = vk.DescriptorBufferInfo {
 			buffer = buffers[i],
@@ -954,7 +954,7 @@ create_per_instance_buffers :: proc(physical_device: vk.PhysicalDevice, logical_
 		buffers[i] = buffer;
 		buffers_memory[i] = memory;
 	}
-	
+
 	return buffers, buffers_memory;
 }
 
@@ -1027,7 +1027,7 @@ create_mesh_descriptor_sets :: proc(logical_device: vk.Device, descriptor_pool: 
 update_mesh_instance_descriptor_sets :: proc(logical_device: vk.Device, descriptor_sets: [IFFC]vk.DescriptorSet, buffers: [IFFC]vk.Buffer, instance_block_offset: int) {
 	descriptor_buffer_infos: [IFFC]vk.DescriptorBufferInfo;
 	write_descriptor_sets: [IFFC]vk.WriteDescriptorSet;
-	
+
 	for i in 0..<IFFC {
 		descriptor_buffer_infos[i] = vk.DescriptorBufferInfo {
 			buffer = buffers[i],
@@ -1172,7 +1172,7 @@ create_emissive_color_descriptor_sets :: proc(logical_device: vk.Device, descrip
 update_emissive_color_descriptor_sets :: proc(ld: vk.Device, descriptor_sets: [IFFC]vk.DescriptorSet, buffers: [IFFC]vk.Buffer, array_offset: int) {
 	descriptor_buffer_infos: [IFFC]vk.DescriptorBufferInfo;
 	write_descriptor_sets: [IFFC]vk.WriteDescriptorSet;
-	
+
 	for i in 0..<IFFC {
 		descriptor_buffer_infos[i] = vk.DescriptorBufferInfo {
 			buffer = buffers[i],
@@ -1232,7 +1232,7 @@ create_particle_descriptor_sets :: proc(logical_device: vk.Device, descriptor_po
 update_particle_descriptor_sets :: proc(logical_device: vk.Device, descriptor_sets: [IFFC]vk.DescriptorSet, buffers: [IFFC]vk.Buffer, particle_instance_block_offset: int) {
 	descriptor_buffer_infos: [IFFC]vk.DescriptorBufferInfo;
 	write_descriptor_sets: [IFFC]vk.WriteDescriptorSet;
-	
+
 	for i in 0..<IFFC {
 		descriptor_buffer_infos[i] = vk.DescriptorBufferInfo {
 			buffer = buffers[i],

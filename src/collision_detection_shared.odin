@@ -179,13 +179,13 @@ expand_polytope :: proc(polytope: ^Polytope, v: linalg.Vector3f32, marker: Maybe
 			develop_unique_edges(&edges, face.a, face.b);
 			develop_unique_edges(&edges, face.b, face.c);
 			develop_unique_edges(&edges, face.c, face.a);
-			
+
 			unordered_remove(&polytope.faces, i);
 		}
 	}
 
 	append(&polytope.vertices, v);
-	
+
 	if marker, ok := marker.?; ok {
 		append(&polytope.markers, marker);
 	}
@@ -198,7 +198,7 @@ expand_polytope :: proc(polytope: ^Polytope, v: linalg.Vector3f32, marker: Maybe
 
 		a := polytope.vertices[a_index];
 		b := polytope.vertices[b_index];
-		
+
 		ab := b - a;
 		av := v - a;
 		normal := linalg.normalize(linalg.cross(ab, av));
@@ -224,7 +224,7 @@ develop_unique_edges :: proc(edges: ^[dynamic][2]int, a_index, b_index: int) {
 find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: linalg.Vector3f32) -> (plane_normal: linalg.Vector3f32, polygon: [dynamic]linalg.Vector3f32) {
 	d := math2.quaternion_transform_direction(hull.inv_global_orientation, collision_normal);
 	polygon = make([dynamic]linalg.Vector3f32, context.temp_allocator);
-	
+
 	switch hull.kind {
 		case .Box:
 			if abs(d.x) >= abs(d.y) && abs(d.x) >= abs(d.z) {
@@ -301,7 +301,7 @@ find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: l
 				}
 
 				plane_normal = linalg.Vector3f32 {0, y, 0};
-				
+
 				POINT_COUNT :: 4;
 				ANGLE_INCREMENT := math.TAU / f32(POINT_COUNT);
 
@@ -309,29 +309,29 @@ find_plane_normal_and_polygon :: proc(hull: ^Collision_Hull, collision_normal: l
 					angle := angle_dir * f32(i) * ANGLE_INCREMENT;
 					x := math.cos(angle);
 					z := math.sin(angle);
-					
+
 					append(&polygon, linalg.Vector3f32 {x, y, z});
 				}
 			} else {
 				// The direction is pointing sideways
 				xz := linalg.normalize(linalg.Vector2f32 {d_norm.x, d_norm.z});
 				plane_normal = linalg.Vector3f32 {xz.x, 0, xz.y};
-				
+
 				append(&polygon,
 					linalg.Vector3f32 {xz.x,  1, xz.y},
 					linalg.Vector3f32 {xz.x, -1, xz.y});
 			}
-		
+
 		case .Sphere:
 			unreachable();
-		
+
 		case .Mesh:
 			unimplemented();
 	}
 
 	plane_normal = linalg.normalize(math2.matrix4_transform_direction(hull.global_transform, plane_normal));
 
-	for point in &polygon {
+	for &point in polygon {
 		point = math2.matrix4_transform_point(hull.global_transform, point);
 	}
 
@@ -357,7 +357,7 @@ clip :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon, inc_polygon: [dyn
 
 			d0 := linalg.dot(normal, inc_a) - offset;
 			d1 := linalg.dot(normal, inc_b) - offset;
-			
+
 			if d0 <= 0.0 {
 				append(&new_points, inc_a);
 			}
@@ -416,7 +416,7 @@ line_clip_poly_is_ref :: proc(ref_plane_normal: linalg.Vector3f32, ref_polygon: 
 
 	inc_a := line_a;
 	inc_b := line_b;
-	
+
 	for ref_a, ref_index_a in ref_polygon {
 		ref_index_b := (ref_index_a + 1) % len(ref_polygon);
 		ref_b := ref_polygon[ref_index_b];
@@ -511,7 +511,7 @@ line_clip_line_is_ref :: proc(ref_normal, line_a, line_b: linalg.Vector3f32, inc
 			projection := inc_a + ref_normal * -depth_a;
 			small_array.append(&contacts, Contact { inc_a, projection });
 		}
-	
+
 		if depth_b < 0 {
 			projection := inc_b + ref_normal * -depth_b;
 			small_array.append(&contacts, Contact { inc_b, projection });
