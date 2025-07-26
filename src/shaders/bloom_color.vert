@@ -17,7 +17,7 @@ struct InstanceData {
 	vec3 color;
 };
 
-layout(set = 2, binding = 0, std140) buffer InstanceDataBlock {
+layout(set = 2, binding = 0, std140) readonly buffer InstanceDataBlock {
 	InstanceData instanceDataArray[];
 };
 

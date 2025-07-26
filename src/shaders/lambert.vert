@@ -11,7 +11,7 @@ layout(set = 0, binding = 0, std140) uniform FrameData {
 	mat4 camera_mat;
 };
 
-layout(set = 1, binding = 0, std140) buffer InstanceData {
+layout(set = 1, binding = 0, std140) readonly buffer InstanceData {
 	mat4 modelMat[];
 };
 

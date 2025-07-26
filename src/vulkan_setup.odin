@@ -1072,7 +1072,7 @@ create_bloom_frame_buffer :: proc(ld: vk.Device, physical_device: vk.PhysicalDev
 		arrayLayers = 1,
 		samples = { ._1 },
 		tiling = .OPTIMAL,
-		usage = { .COLOR_ATTACHMENT | .SAMPLED },
+		usage = { .COLOR_ATTACHMENT, .SAMPLED },
 	};
 
 	color_image: vk.Image;
