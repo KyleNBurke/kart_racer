@@ -15,6 +15,6 @@ In detail, the collisions are handled by
 5. finding the contact points of the collision manifold using Sutherland–Hodgman clipping algorithm and finally,
 6. applying sequential impulses iteratively to separate the colliding bodies.
 
-Click the image below for a demo of the AI.
+Click the image below for a demo of the opponent driving AI.
 
 [![YouTube Video](https://img.youtube.com/vi/1k3zN1yOzWg/0.jpg)](https://www.youtube.com/watch?v=1k3zN1yOzWg)
